@@ -1,0 +1,197 @@
+{
+  "story": "US-48.1",
+  "title": "The kit's own fixture — Build Mill's work item page",
+  "screens": [
+    {
+      "name": "Work item — Overview",
+      "route": "/issues/[id]",
+      "shell": "app",
+      "states": ["populated"],
+      "sidebar": {
+        "brand": "Build Mill",
+        "items": [
+          { "label": "Things to Do" },
+          { "label": "Work Items", "active": true },
+          { "label": "Releases" },
+          { "label": "Tests" },
+          { "label": "Team" },
+          { "label": "Machines" },
+          { "label": "Settings" }
+        ]
+      },
+      "topbar": [
+        { "component": "text", "text": "Build Mill / Work Items / US-4.2" },
+        { "component": "avatar", "initials": "KN" }
+      ],
+      "regions": [
+        {
+          "component": "page-header",
+          "title": "US-4.2 — A manager can filter the queue",
+          "description": "Story · Epic 4 · in feature US-4.1",
+          "actions": [
+            { "component": "button", "label": "Draw this story", "variant": "outline" },
+            { "component": "button", "label": "Dispatch", "variant": "default" }
+          ],
+          "ac": 1,
+          "note": "The primary action is the dispatch; drawing sits beside it, not inside a menu."
+        },
+        {
+          "component": "row",
+          "children": [
+            { "component": "status-badge", "label": "planned", "tone": "info" },
+            { "component": "badge", "label": "story", "variant": "secondary" },
+            { "component": "text", "text": "Assigned to Agent 3", "muted": true }
+          ]
+        },
+        {
+          "component": "tabs",
+          "items": ["Overview", "Wireframe", "Plan", "Runs", "Comments"],
+          "active": "Overview"
+        },
+        {
+          "component": "grid",
+          "columns": 2,
+          "children": [
+            {
+              "component": "card",
+              "title": "Story",
+              "children": [
+                {
+                  "component": "text",
+                  "text": "As a manager, I can filter the queue by project and agent, so that a busy pool tells me what is mine."
+                },
+                { "component": "separator" },
+                { "component": "text", "text": "Acceptance criteria", "muted": true },
+                {
+                  "component": "text",
+                  "text": "1. The filter is in the page header, not in a card."
+                },
+                {
+                  "component": "text",
+                  "text": "2. Clearing it restores the full queue without a reload."
+                }
+              ]
+            },
+            {
+              "component": "card",
+              "title": "Cost",
+              "description": "What this item has spent so far",
+              "action": { "component": "button", "label": "Breakdown", "variant": "ghost", "size": "sm" },
+              "children": [
+                { "component": "text", "text": "$4.18" },
+                { "component": "text", "text": "3 runs · plan, plan, code", "muted": true }
+              ]
+            }
+          ]
+        },
+        {
+          "component": "card",
+          "title": "Runs",
+          "children": [
+            {
+              "component": "table",
+              "columns": ["Kind", "Agent", "Status", "Finished"],
+              "rows": [
+                [
+                  "plan",
+                  "Agent 3",
+                  { "component": "status-badge", "label": "succeeded", "tone": "success" },
+                  "2 hours ago"
+                ],
+                [
+                  "wireframe",
+                  "Agent 1",
+                  { "component": "status-badge", "label": "succeeded", "tone": "success" },
+                  "yesterday"
+                ],
+                [
+                  "plan",
+                  "Agent 1",
+                  { "component": "status-badge", "label": "failed", "tone": "danger" },
+                  "yesterday"
+                ]
+              ],
+              "empty": "This item has never been dispatched",
+              "ac": 2
+            }
+          ]
+        }
+      ],
+      "note": "The fixture exists so a kit change can be judged against a screen that really exists."
+    },
+    {
+      "name": "Work item — Wireframe tab",
+      "route": "/issues/[id]?tab=wireframe",
+      "shell": "app",
+      "states": ["populated", "empty", "loading", "error"],
+      "sidebar": {
+        "brand": "Build Mill",
+        "items": [{ "label": "Work Items", "active": true }]
+      },
+      "regions": [
+        {
+          "component": "page-header",
+          "title": "Wireframe",
+          "description": "Drawn by Agent 1 · version 2",
+          "actions": [
+            { "component": "button", "label": "Redo", "variant": "outline", "size": "sm" },
+            { "component": "button", "label": "Open full screen", "variant": "secondary", "size": "sm" }
+          ],
+          "not": ["empty"]
+        },
+        {
+          "component": "empty-state",
+          "title": "This story has not been drawn",
+          "description": "An agent can sketch the screen before the plan is written.",
+          "action": { "component": "button", "label": "Draw this story" },
+          "only": ["empty"]
+        },
+        {
+          "component": "card",
+          "only": ["populated"],
+          "children": [
+            { "component": "text", "text": "[ the wireframe renders here, in a sandboxed frame ]", "muted": true }
+          ],
+          "ac": 3
+        },
+        {
+          "component": "card",
+          "only": ["loading"],
+          "children": [{ "component": "skeleton", "lines": 4 }]
+        },
+        {
+          "component": "toast",
+          "only": ["error"],
+          "tone": "destructive",
+          "title": "The wireframe could not be written to the repository",
+          "description": "The artifact is saved. Sync the wireframes to retry."
+        }
+      ]
+    },
+    {
+      "name": "Draw every story — confirm",
+      "route": "/issues/[featureId]",
+      "shell": "dialog",
+      "states": ["populated"],
+      "regions": [
+        {
+          "component": "dialog",
+          "title": "Draw every story in this feature?",
+          "description": "6 stories will be dispatched. 2 are skipped: one is already drawn, one is abandoned.",
+          "children": [
+            {
+              "component": "text",
+              "text": "Each story is a separately metered agent run.",
+              "muted": true
+            }
+          ],
+          "footer": [
+            { "component": "button", "label": "Cancel", "variant": "ghost" },
+            { "component": "button", "label": "Dispatch 6 runs", "variant": "default" }
+          ],
+          "ac": 4
+        }
+      ]
+    }
+  ]
+}

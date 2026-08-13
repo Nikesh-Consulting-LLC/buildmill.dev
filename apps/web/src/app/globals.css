@@ -1,0 +1,310 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-create-foreground: var(--create-foreground);
+  --color-create: var(--create);
+  --color-success-foreground: var(--success-foreground);
+  --color-success: var(--success);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+@theme {
+  --animate-belt: belt 0.9s linear infinite;
+  /* US-87.11: an indeterminate FILL, not a sweep. The old value was
+     `global-progress 1.1s ease-in-out infinite`, a translate from -100% —
+     fully off-screen left — which meant a 150ms navigation showed nothing at
+     all once Phase 87 made navigation fast. A fill is readable at any
+     duration: ~50% across by 400ms, then creeping while the work continues.
+     It deliberately stops at 90%; the component runs it out to 100% when the
+     work actually finishes, so the bar never claims to be done early. */
+  --animate-global-progress: global-progress 3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  --animate-loader-flow: loader-flow 1.8s linear infinite;
+  --animate-loader-glow: loader-glow 2.4s ease-in-out infinite;
+
+  @keyframes belt {
+    to {
+      stroke-dashoffset: -12;
+    }
+  }
+
+  @keyframes global-progress {
+    0% {
+      width: 0%;
+    }
+    40% {
+      width: 65%;
+    }
+    100% {
+      width: 90%;
+    }
+  }
+
+  @keyframes loader-flow {
+    from {
+      transform: translateX(-140px);
+    }
+    to {
+      transform: translateX(236px);
+    }
+  }
+
+  @keyframes loader-glow {
+    0%,
+    100% {
+      opacity: 0.5;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  /* Phase 64: the one accent for "create a new X" actions, app-wide —
+     matches the buildmill.dev logo's orange. */
+  --create: oklch(0.705 0.191 42);
+  --create-foreground: oklch(0.99 0 0);
+  /* US-64.x: the one-click "green light" approve actions on Things to Do —
+     distinct from --primary/--create so an approve action always reads the
+     same way regardless of what the default button color happens to be. */
+  --success: oklch(0.6 0.16 145);
+  --success-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --create: oklch(0.665 0.191 42);
+  --create-foreground: oklch(0.99 0 0);
+  --success: oklch(0.64 0.16 145);
+  --success-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* US-87.4: long lists render what is on screen.
+ *
+ * `content-visibility: auto` lets the browser skip layout, paint and
+ * rasterization for a row that is off-screen, and `contain-intrinsic-size`
+ * gives it a placeholder height so the scrollbar stays honest and does not
+ * jump as rows are realized.
+ *
+ * This is deliberately NOT JS windowing. The rows here are a nested tree
+ * (project → epic → feature → story) with collapse state and inline actions,
+ * and flattening it into a virtualizer's row model is exactly where grouping,
+ * keyboard navigation and deep-link scrolling break. Containment keeps every
+ * row a real DOM node — so in-page find, anchors, and screen readers all keep
+ * working — and still removes the cost that actually makes a long list janky.
+ *
+ * The reconciliation cost React pays per row remains; US-87.3's 200-row page
+ * is what bounds that, and the search box has debounced at 300 ms since
+ * US-2.11, so neither grows with the workspace. */
+/* US-87.11: content arrives, it does not pop.
+ *
+ * Timing is deliberately asymmetric, per Next's view-transitions guide: the
+ * old content leaves fast so it stops competing for attention, and the new
+ * content arrives more gently, delayed until the exit has finished. Symmetric
+ * timing reads as a dissolve — two things fighting over the same space.
+ *
+ * `skeleton-out` / `content-in` pair a `loading.tsx` fallback with the real
+ * content; `content-out` / `content-in` carry a plain route change. */
+:root {
+  --vt-exit: 150ms;
+  --vt-enter: 210ms;
+}
+
+::view-transition-old(.skeleton-out),
+::view-transition-old(.content-out) {
+  animation: var(--vt-exit) ease-out both vt-fade reverse;
+}
+
+::view-transition-new(.content-in) {
+  animation:
+    var(--vt-enter) ease-in var(--vt-exit) both vt-fade,
+    320ms ease-out both vt-rise;
+}
+
+@keyframes vt-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes vt-rise {
+  from {
+    transform: translateY(6px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* Motion is optional. Under reduce, the transition still happens — the
+ * content just swaps without travelling, which is the point of the setting:
+ * no vestibular motion, but no loss of the change being visible either. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
+/* US-87.12: a live change announces itself.
+ *
+ * A realtime update is deliberately silent at the page level — the global
+ * progress bar must keep meaning "your click landed" (see `refreshSilently`
+ * in lib/router-with-progress.ts). The signal instead belongs to the row that
+ * actually moved. The tint arrives instantly and decays, so the eye is drawn
+ * to the change and then released; a slow fade-in would be missed entirely.
+ *
+ * The storm rule that stops twenty rows firing at once lives in
+ * lib/recent-changes.ts — this is only the paint. */
+[data-changed] {
+  animation: row-changed 1.5s ease-out both;
+}
+
+@keyframes row-changed {
+  0% {
+    background-color: color-mix(in oklch, var(--primary) 22%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Still marked, just not animated: the tint holds briefly and the element's
+   * own transition returns it, so the information survives without motion. */
+  [data-changed] {
+    animation: none;
+    background-color: color-mix(in oklch, var(--primary) 12%, transparent);
+  }
+}
+
+@utility list-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 36px;
+}
+
+@utility list-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 84px;
+}

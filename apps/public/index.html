@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Build Mill — AI software delivery with a human in the loop</title>
+  <meta name="description" content="Build Mill turns user stories into pull requests with AI, and keeps a human manager in the loop to review and merge. Ship software faster, without giving up control." />
+  <link rel="icon" type="image/png" href="/assets/buildmill-icon.png" />
+
+  <!-- Open Graph / social -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Build Mill — AI software delivery with a human in the loop" />
+  <meta property="og:description" content="Define a user story. An AI provider turns it into a pull request. You review and merge." />
+  <meta property="og:url" content="https://buildmill.dev" />
+  <meta property="og:image" content="/assets/buildmill-logo.png" />
+  <meta name="theme-color" content="#14273f" />
+
+  <style>
+    :root {
+      --navy: #14273f;
+      --navy-800: #1b3453;
+      --green: #6f9d6c;
+      --green-600: #5c8a59;
+      --ink: #14273f;
+      --muted: #5b6b7c;
+      --bg: #ffffff;
+      --bg-soft: #f4f6f8;
+      --border: #e3e8ee;
+      --card: #ffffff;
+      --shadow: 0 1px 2px rgba(20, 39, 63, .06), 0 12px 32px -12px rgba(20, 39, 63, .18);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ink: #eef2f6;
+        --muted: #9db0c2;
+        --bg: #0e1a2b;
+        --bg-soft: #122238;
+        --border: #23374f;
+        --card: #14263c;
+        --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 18px 40px -16px rgba(0, 0, 0, .6);
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    html { -webkit-text-size-adjust: 100%; }
+
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 600px at 50% -280px, rgba(111, 157, 108, .16), transparent 60%),
+        var(--bg);
+      line-height: 1.6;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    a { color: inherit; }
+
+    .wrap {
+      width: 100%;
+      max-width: 1040px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Header */
+    header {
+      padding: 22px 0;
+    }
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      text-decoration: none;
+    }
+    .brand img { height: 34px; width: auto; display: block; }
+    .nav-cta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 15px;
+      line-height: 1;
+      padding: 12px 20px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      text-decoration: none;
+      cursor: pointer;
+      transition: transform .06s ease, background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
+      white-space: nowrap;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary {
+      background: var(--green);
+      color: #0f1f14;
+      box-shadow: 0 8px 20px -10px rgba(111, 157, 108, .8);
+    }
+    .btn-primary:hover { background: var(--green-600); }
+    .btn-ghost {
+      background: transparent;
+      color: var(--ink);
+      border-color: var(--border);
+    }
+    .btn-ghost:hover { border-color: var(--green); color: var(--green-600); }
+
+    /* Hero */
+    main { flex: 1 0 auto; }
+    .hero {
+      text-align: center;
+      padding: 40px 0 24px;
+    }
+    .hero-logo {
+      width: min(280px, 62vw);
+      height: auto;
+      margin: 8px auto 26px;
+      display: block;
+      filter: drop-shadow(0 16px 30px rgba(20, 39, 63, .16));
+    }
+    @media (prefers-color-scheme: dark) {
+      .hero-logo { filter: none; }
+    }
+    .eyebrow {
+      display: inline-block;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      color: var(--green-600);
+      background: color-mix(in srgb, var(--green) 14%, transparent);
+      border: 1px solid color-mix(in srgb, var(--green) 34%, transparent);
+      padding: 5px 12px;
+      border-radius: 999px;
+      margin-bottom: 22px;
+    }
+    h1 {
+      font-size: clamp(30px, 6vw, 52px);
+      line-height: 1.08;
+      letter-spacing: -0.025em;
+      margin: 0 auto 18px;
+      max-width: 15ch;
+      font-weight: 800;
+    }
+    h1 .accent { color: var(--green); }
+    .lede {
+      font-size: clamp(16px, 2.4vw, 20px);
+      color: var(--muted);
+      max-width: 60ch;
+      margin: 0 auto 30px;
+    }
+    .cta-row {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .cta-row .btn { padding: 14px 26px; font-size: 16px; }
+
+    /* How it works */
+    .how {
+      padding: 48px 0 12px;
+    }
+    .how h2 {
+      text-align: center;
+      font-size: clamp(20px, 3vw, 26px);
+      letter-spacing: -0.02em;
+      margin: 0 0 6px;
+    }
+    .how .sub {
+      text-align: center;
+      color: var(--muted);
+      margin: 0 auto 34px;
+      max-width: 52ch;
+    }
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+    @media (max-width: 720px) {
+      .steps { grid-template-columns: 1fr; }
+    }
+    .step {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px 22px;
+      box-shadow: var(--shadow);
+    }
+    .step .n {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 9px;
+      background: var(--navy);
+      color: #fff;
+      font-weight: 700;
+      font-size: 15px;
+      margin-bottom: 14px;
+    }
+    @media (prefers-color-scheme: dark) {
+      .step .n { background: var(--green); color: #0f1f14; }
+    }
+    .step h3 { margin: 0 0 6px; font-size: 17px; letter-spacing: -0.01em; }
+    .step p { margin: 0; color: var(--muted); font-size: 15px; }
+
+    /* Closing CTA */
+    .closer {
+      text-align: center;
+      padding: 56px 0 20px;
+    }
+    .closer h2 {
+      font-size: clamp(22px, 3.4vw, 30px);
+      letter-spacing: -0.02em;
+      margin: 0 0 10px;
+    }
+    .closer p { color: var(--muted); margin: 0 auto 24px; max-width: 48ch; }
+
+    /* Footer */
+    footer {
+      flex-shrink: 0;
+      border-top: 1px solid var(--border);
+      margin-top: 40px;
+      padding: 26px 0;
+    }
+    .foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .foot a { text-decoration: none; }
+    .foot a:hover { color: var(--green-600); }
+    .foot-links { display: flex; gap: 20px; flex-wrap: wrap; }
+
+    @media (max-width: 480px) {
+      .nav .btn-ghost { display: none; } /* keep header lean on small screens */
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap nav">
+      <a class="brand" href="/" aria-label="Build Mill home">
+        <img src="/assets/buildmill-wordmark.png" alt="Build Mill" />
+      </a>
+      <nav class="nav-cta">
+        <a class="btn btn-ghost" href="https://app.buildmill.dev/login">Log in</a>
+        <a class="btn btn-primary" href="https://app.buildmill.dev/signup">Sign up</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero wrap">
+      <img class="hero-logo" src="/assets/buildmill-logo.png" alt="Build Mill logo" />
+      <span class="eyebrow">AI software delivery · human in the loop</span>
+      <h1>Ship software with AI, <span class="accent">without losing control</span></h1>
+      <p class="lede">
+        Build Mill turns a user story into a pull request. Define what you want,
+        an AI provider does the work, and a human manager reviews and merges — every change,
+        on your terms.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://app.buildmill.dev/signup">Get started free</a>
+        <a class="btn btn-ghost" href="https://app.buildmill.dev/login">Log in</a>
+      </div>
+    </section>
+
+    <section class="how wrap">
+      <h2>How it works</h2>
+      <p class="sub">A delivery pipeline you steer — three steps from idea to merged code.</p>
+      <div class="steps">
+        <div class="step">
+          <div class="n">1</div>
+          <h3>Define</h3>
+          <p>Write a user story with acceptance criteria. That story is the single source of truth for the work.</p>
+        </div>
+        <div class="step">
+          <div class="n">2</div>
+          <h3>Build</h3>
+          <p>An AI provider picks up the story, does the work against your repo, and opens a pull request.</p>
+        </div>
+        <div class="step">
+          <div class="n">3</div>
+          <h3>Review &amp; merge</h3>
+          <p>You review the PR like any other, request changes, and merge when it's right. GitHub stays the source of truth.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="closer wrap">
+      <h2>Put your backlog to work.</h2>
+      <p>Create an account and turn your first story into a pull request.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://app.buildmill.dev/signup">Sign up</a>
+        <a class="btn btn-ghost" href="https://app.buildmill.dev/login">Log in</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap foot">
+      <span>© <span id="year">2026</span> Build Mill</span>
+      <div class="foot-links">
+        <a href="https://app.buildmill.dev/login">Log in</a>
+        <a href="https://app.buildmill.dev/signup">Sign up</a>
+        <a href="https://app.buildmill.dev">Open app</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Keep the copyright year current without a build step.
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>

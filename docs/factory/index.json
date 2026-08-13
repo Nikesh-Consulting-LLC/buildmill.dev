@@ -1,0 +1,30 @@
+[
+  {
+    "id": "BUG-1.1",
+    "issue_id": "6c431050-c7a7-46f7-9a71-dbfa1ff9f7b2",
+    "type": "story",
+    "title": "HTTP Error when Trying to delete an item from Deployment",
+    "parent": null,
+    "epic": 1,
+    "order": 1,
+    "has_plan": true,
+    "has_test_plan": true,
+    "merge_commit": "cf72aa9cc47baf6420861cbc2e64b4a30eb6e888",
+    "generated_at": "2026-07-29T01:02:57+00:00",
+    "path": "docs/factory/bug-1.1/bug-1.1.md"
+  },
+  {
+    "id": "CHORE-1.2",
+    "issue_id": "9706f393-3a53-4785-866c-1d996e31131a",
+    "type": "story",
+    "title": "Agent dropdown",
+    "parent": null,
+    "epic": 1,
+    "order": 2,
+    "has_plan": true,
+    "has_test_plan": true,
+    "merge_commit": null,
+    "generated_at": "2026-07-29T01:02:57+00:00",
+    "path": "docs/factory/chore-1.2/chore-1.2.md"
+  }
+]

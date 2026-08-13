@@ -1,0 +1,14 @@
+node_modules/
+apps/web/VERSION
+scripts/copy_prod_to_uat.py
+.env
+.env.local
+.env*.local
+supabase.txt
+*.tsbuildinfo
+.next/
+out/
+dist/
+__pycache__/
+.venv/
+scripts/.migrate.env

@@ -1,0 +1,845 @@
+/* Build Mill wireframe kit — US-48.1
+ *
+ * The stylesheet every wireframe in docs/wireframes/ renders through. It is
+ * committed into the target repository once and linked relatively by every
+ * page, so a kit change restyles every wireframe without re-running an agent.
+ *
+ * It styles ONE token contract: the shadcn custom-property names the app's own
+ * globals.css defines. tokens.css (generated per project) supplies the values;
+ * this file never hardcodes a colour. Anything that must be a literal here is
+ * a wireframe affordance — the annotation rail, the state chrome — and is
+ * derived from the tokens with color-mix.
+ *
+ * No imports, no fonts fetched, no build step. A page opened with file:// must
+ * render fully.
+ */
+
+/* --------------------------------------------------------------------------
+ * Reset and page frame
+ * ----------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--wf-font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+figure,
+blockquote,
+dl,
+dd {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* The page's own chrome: the bar that says this is a wireframe, not the app. */
+
+.wf-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.wf-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklab, var(--muted) 60%, var(--background));
+  font-size: 12px;
+  color: var(--muted-foreground);
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+
+.wf-bar__id {
+  font-family: var(--wf-font-mono);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.wf-bar__title {
+  color: var(--foreground);
+}
+
+.wf-bar__spacer {
+  margin-left: auto;
+}
+
+.wf-bar button {
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--foreground);
+  border-radius: calc(var(--radius) * 0.6);
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.wf-bar button:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.wf-bar button[aria-pressed='true'] {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+
+.wf-screens {
+  flex: 1;
+  padding: 24px 16px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+
+/* A screen: one titled frame, optionally repeated per state. */
+
+.wf-screen {
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.wf-screen__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.wf-screen__name {
+  font-size: 15px;
+  font-weight: 600;
+  font-family: var(--wf-font-heading);
+}
+
+.wf-screen__route {
+  font-family: var(--wf-font-mono);
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
+.wf-screen__state {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.wf-screen__frame {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--background);
+}
+
+.wf-screen__note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
+/* --------------------------------------------------------------------------
+ * App shell — sidebar + top bar + content
+ * ----------------------------------------------------------------------- */
+
+.wf-shell {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 560px;
+}
+
+.wf-shell--bare {
+  grid-template-columns: 1fr;
+}
+
+.wf-sidebar {
+  background: var(--sidebar);
+  color: var(--sidebar-foreground);
+  border-right: 1px solid var(--sidebar-border);
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wf-sidebar__brand {
+  font-weight: 600;
+  padding: 6px 8px 12px;
+  font-family: var(--wf-font-heading);
+}
+
+.wf-navitem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: calc(var(--radius) * 0.6);
+  color: var(--sidebar-foreground);
+  font-size: 13px;
+}
+
+.wf-navitem[data-active='true'] {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-accent-foreground);
+  font-weight: 500;
+}
+
+.wf-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.wf-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+  min-height: 52px;
+}
+
+.wf-topbar__spacer {
+  margin-left: auto;
+}
+
+.wf-content {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* Page header — title, description, actions. */
+
+.wf-pageheader {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.wf-pageheader__text {
+  min-width: 0;
+}
+
+.wf-pageheader__title {
+  font-size: 20px;
+  font-weight: 600;
+  font-family: var(--wf-font-heading);
+  letter-spacing: -0.01em;
+}
+
+.wf-pageheader__description {
+  color: var(--muted-foreground);
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.wf-pageheader__actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.wf-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.wf-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(var(--wf-cols, 2), minmax(0, 1fr));
+}
+
+@media (max-width: 760px) {
+  .wf-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .wf-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .wf-sidebar {
+    display: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * Components — named for the files in apps/web/src/components/ui/
+ * ----------------------------------------------------------------------- */
+
+/* card.tsx */
+.wf-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--card-foreground);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.wf-card__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.wf-card__title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.wf-card__description {
+  color: var(--muted-foreground);
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.wf-card__action {
+  margin-left: auto;
+}
+
+/* button.tsx — the app's variants */
+.wf-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: calc(var(--radius) * 0.8);
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.wf-button[data-variant='default'] {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.wf-button[data-variant='secondary'] {
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+}
+
+.wf-button[data-variant='outline'] {
+  border-color: var(--border);
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.wf-button[data-variant='ghost'] {
+  background: transparent;
+  color: var(--foreground);
+}
+
+.wf-button[data-variant='destructive'] {
+  background: var(--destructive);
+  color: var(--primary-foreground);
+}
+
+.wf-button[data-variant='link'] {
+  background: transparent;
+  color: var(--foreground);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding: 0;
+  height: auto;
+}
+
+.wf-button[data-size='sm'] {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.wf-button[data-size='lg'] {
+  height: 38px;
+  padding: 0 18px;
+}
+
+.wf-button[data-size='icon'] {
+  width: 32px;
+  padding: 0;
+}
+
+.wf-button[data-disabled='true'] {
+  opacity: 0.5;
+}
+
+/* badge.tsx */
+.wf-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+.wf-badge[data-variant='default'] {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: transparent;
+}
+
+.wf-badge[data-variant='secondary'] {
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  border-color: transparent;
+}
+
+.wf-badge[data-variant='destructive'] {
+  background: var(--destructive);
+  color: var(--primary-foreground);
+  border-color: transparent;
+}
+
+/* status-badge.tsx — a dot plus a word, the app's own pattern */
+.wf-statusbadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 9px 1px 7px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--background);
+}
+
+.wf-statusbadge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--muted-foreground);
+}
+
+.wf-statusbadge[data-tone='running']::before,
+.wf-statusbadge[data-tone='info']::before {
+  background: var(--chart-2);
+}
+
+.wf-statusbadge[data-tone='success']::before {
+  background: var(--chart-4);
+}
+
+.wf-statusbadge[data-tone='warning']::before {
+  background: var(--chart-3);
+}
+
+.wf-statusbadge[data-tone='danger']::before {
+  background: var(--destructive);
+}
+
+/* table.tsx */
+.wf-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.wf-table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.wf-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+  vertical-align: middle;
+}
+
+.wf-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.wf-table__wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+/* input.tsx / textarea.tsx / select.tsx / label.tsx / checkbox.tsx */
+.wf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  flex: 1 1 200px;
+}
+
+.wf-label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.wf-input,
+.wf-textarea,
+.wf-select {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid var(--input);
+  border-radius: calc(var(--radius) * 0.8);
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 13px;
+}
+
+.wf-input[data-placeholder='true'],
+.wf-select[data-placeholder='true'] {
+  color: var(--muted-foreground);
+}
+
+.wf-textarea {
+  min-height: 76px;
+  align-items: flex-start;
+  white-space: pre-wrap;
+}
+
+.wf-select {
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.wf-select::after {
+  content: '⌄';
+  color: var(--muted-foreground);
+  line-height: 1;
+  margin-top: -4px;
+}
+
+.wf-hint {
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+
+.wf-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.wf-checkbox::before {
+  content: '';
+  width: 15px;
+  height: 15px;
+  border: 1px solid var(--input);
+  border-radius: 4px;
+  background: var(--background);
+  flex: none;
+}
+
+.wf-checkbox[data-checked='true']::before {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+/* tabs.tsx */
+.wf-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.wf-tab {
+  padding: 7px 12px;
+  font-size: 13px;
+  color: var(--muted-foreground);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.wf-tab[data-active='true'] {
+  color: var(--foreground);
+  font-weight: 500;
+  border-bottom-color: var(--foreground);
+}
+
+/* dialog.tsx / confirm-dialog.tsx */
+.wf-dialog {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  padding: 20px;
+  max-width: 460px;
+  margin: 24px auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 12px 32px -12px color-mix(in oklab, var(--foreground) 35%, transparent);
+}
+
+.wf-dialog__scrim {
+  background: color-mix(in oklab, var(--foreground) 12%, transparent);
+  padding: 8px;
+}
+
+.wf-dialog__title {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.wf-dialog__description {
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+
+.wf-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* empty-state.tsx */
+.wf-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 40px 20px;
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--muted-foreground);
+}
+
+.wf-empty__title {
+  color: var(--foreground);
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.wf-empty__action {
+  margin-top: 8px;
+}
+
+/* toast.tsx */
+.wf-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  padding: 10px 14px;
+  max-width: 380px;
+  box-shadow: 0 8px 24px -12px color-mix(in oklab, var(--foreground) 40%, transparent);
+}
+
+.wf-toast[data-tone='destructive'] {
+  border-color: var(--destructive);
+}
+
+.wf-toast__title {
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.wf-toast__description {
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+/* avatar.tsx */
+.wf-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 500;
+  flex: none;
+}
+
+/* separator.tsx */
+.wf-separator {
+  height: 1px;
+  background: var(--border);
+  border: 0;
+  margin: 4px 0;
+}
+
+.wf-separator[data-orientation='vertical'] {
+  width: 1px;
+  height: auto;
+  align-self: stretch;
+  margin: 0 4px;
+}
+
+/* skeleton.tsx */
+.wf-skeleton {
+  background: var(--muted);
+  border-radius: calc(var(--radius) * 0.6);
+  height: 14px;
+  width: 100%;
+  display: block;
+}
+
+/* dropdown-menu.tsx */
+.wf-menu {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  padding: 4px;
+  min-width: 180px;
+  display: inline-flex;
+  flex-direction: column;
+  box-shadow: 0 8px 24px -12px color-mix(in oklab, var(--foreground) 40%, transparent);
+}
+
+.wf-menu__item {
+  padding: 6px 8px;
+  border-radius: calc(var(--radius) * 0.5);
+  font-size: 13px;
+}
+
+.wf-menu__item[data-active='true'] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+/* A link — the index's navigation, and nothing else. */
+.wf-link {
+  color: var(--foreground);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: color-mix(in oklab, var(--foreground) 35%, transparent);
+}
+
+.wf-link:hover {
+  text-decoration-color: var(--foreground);
+}
+
+/* Plain text block — prose inside a screen. */
+.wf-text {
+  font-size: 13px;
+  color: var(--foreground);
+}
+
+.wf-text[data-muted='true'] {
+  color: var(--muted-foreground);
+}
+
+/* --------------------------------------------------------------------------
+ * Annotations — the acceptance criteria a region satisfies
+ * ----------------------------------------------------------------------- */
+
+.wf-annotated {
+  position: relative;
+  outline: 1px dashed color-mix(in oklab, var(--chart-2) 60%, transparent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+.wf-note {
+  display: block;
+  margin: 6px 0 2px;
+  padding-left: 8px;
+  border-left: 2px solid color-mix(in oklab, var(--chart-2) 70%, transparent);
+  font-size: 11.5px;
+  color: var(--muted-foreground);
+}
+
+.wf-note__ac {
+  font-weight: 600;
+  color: var(--foreground);
+  font-family: var(--wf-font-mono);
+  font-size: 11px;
+  margin-right: 6px;
+}
+
+/* The clean read: annotations off. */
+.wf-clean .wf-note {
+  display: none;
+}
+
+.wf-clean .wf-annotated {
+  outline: 0;
+}
+
+/* --------------------------------------------------------------------------
+ * The renderer's own error surface. A malformed declaration says so on the
+ * page rather than rendering nothing — an agent's mistake must be visible to
+ * the manager reading the wireframe, not silent.
+ * ----------------------------------------------------------------------- */
+
+.wf-error {
+  border: 1px solid var(--destructive);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  color: var(--destructive);
+  font-size: 12px;
+  font-family: var(--wf-font-mono);
+  white-space: pre-wrap;
+}
