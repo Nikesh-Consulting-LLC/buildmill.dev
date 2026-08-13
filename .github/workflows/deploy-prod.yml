@@ -1,0 +1,91 @@
+name: Deploy to Production
+
+# Fires when a PR merges into `prod` (or any other push that lands commits on
+# `prod`). Deploys apps/web and apps/api to the GCP VM (gcp-vm-rebee) at
+# /opt/buildmill.dev, matching the existing nexdb-web/nexdb-api setup on
+# that host (systemd services behind a Cloudflare Tunnel — see GCP-setup.md).
+on:
+  push:
+    branches: [prod]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          # Full history + tags so `git describe` can name the build (US-51.1).
+          fetch-depth: 0
+
+      - name: Stamp build version
+        run: |
+          # --match: only factory version tags (YYYY.MM.DD.N) may name a
+          # build, never the rolling uat-latest tag (see uat-release.yml).
+          git describe --tags --match "20*" --always > apps/web/VERSION
+          echo "version: $(cat apps/web/VERSION)"
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.GCP_VM_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.GCP_VM_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Rsync source to VM
+        run: |
+          rsync -az --delete \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='node_modules' \
+            --exclude='apps/web/.next' \
+            --exclude='apps/web/.env.local' \
+            --exclude='apps/api/.venv' \
+            --exclude='apps/api/.env' \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
+            ./ "${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }}:/opt/buildmill.dev/"
+
+      - name: Build and restart services
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }}" '
+            set -e
+            cd /opt/buildmill.dev
+            npm install --no-audit --no-fund
+            npm run build
+            # python -m pip, not .venv/bin/pip: the venv predates the folder
+            # rename, so its console-script shebangs pin the old absolute path.
+            apps/api/.venv/bin/python -m pip install --quiet -r apps/api/requirements.txt
+            # web + api use the passwordless-sudo combo the VM already allows.
+            sudo systemctl restart factory-web factory-api
+            # apps/public is a zero-dependency static site: rsync already updated
+            # index.html/assets in place, and the persistent systemd service serves
+            # them from disk, so a restart is only needed when server.js itself
+            # changes. Best-effort (-n never prompts) so a not-yet-widened sudoers
+            # cannot fail the deploy; widen it per GCP-setup.md for auto-restart.
+            sudo -n systemctl restart factory-public 2>/dev/null \
+              || echo "note: factory-public not restarted (sudoers not widened); static site keeps running"
+            # 60s window: cold uvicorn/node starts after a big build have
+            # blown the old 15s budget while the service was actually fine.
+            for i in $(seq 1 30); do
+              curl -sf -o /dev/null http://127.0.0.1:3050 && web_ok=1 && break
+              sleep 2
+            done
+            for i in $(seq 1 30); do
+              curl -sf -o /dev/null http://127.0.0.1:3060/docs && api_ok=1 && break
+              sleep 2
+            done
+            for i in $(seq 1 30); do
+              curl -sf -o /dev/null http://127.0.0.1:3040 && public_ok=1 && break
+              sleep 2
+            done
+            # status is readable without sudo; sudo here dies on the password
+            # prompt and masks the real failure.
+            [ "$web_ok" = "1" ] || (echo "web health check failed" && systemctl status factory-web --no-pager && exit 1)
+            [ "$api_ok" = "1" ] || (echo "api health check failed" && systemctl status factory-api --no-pager && exit 1)
+            [ "$public_ok" = "1" ] || (echo "public health check failed" && systemctl status factory-public --no-pager && exit 1)
+          '

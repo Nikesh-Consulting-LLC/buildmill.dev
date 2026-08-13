@@ -1,0 +1,43 @@
+name: UAT Release
+
+# Fires on every push to `uat`, alongside the UAT deploy. Maintains one
+# rolling prerelease in the GitHub Releases section — tag `uat-latest`,
+# titled "UAT <date>" — pointing at the commit that just went out. Factory
+# releases (YYYY.MM.DD.N tags) are untouched, and the deploy workflows'
+# `git describe --match "20*"` deliberately ignores this tag so it can
+# never become the version shown under the logo.
+on:
+  push:
+    branches: [uat]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: uat-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          # Full history + tags so `git describe` can name the build.
+          fetch-depth: 0
+
+      - name: Refresh the rolling UAT release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(git describe --tags --match "20*" --always)
+          today=$(date -u +%Y-%m-%d)
+          # Rolling: replace the previous UAT release and its tag wholesale.
+          # `|| true` covers the very first run, when neither exists yet.
+          gh release delete uat-latest --cleanup-tag --yes || true
+          gh release create uat-latest \
+            --target "$GITHUB_SHA" \
+            --title "UAT $today" \
+            --prerelease \
+            --notes "Build \`$version\` (\`${GITHUB_SHA:0:7}\`) deployed to UAT on $today (UTC). Rolling release — replaced on every push to \`uat\`."

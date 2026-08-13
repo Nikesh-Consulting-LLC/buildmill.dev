@@ -1,0 +1,79 @@
+name: Deploy to UAT
+
+# Fires when a PR merges into `uat` (or any other push that lands commits on
+# `uat`). Deploys apps/web and apps/api to the GCP VM at
+# /opt/uat.buildmill.dev, mirroring deploy-prod.yml but on the UAT ports
+# (3051/3061) behind app_uat.buildmill.dev / api_uat.buildmill.dev.
+on:
+  push:
+    branches: [uat]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-uat
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          # Full history + tags so `git describe` can name the build (US-51.1).
+          fetch-depth: 0
+
+      - name: Stamp build version
+        run: |
+          # --match: only factory version tags (YYYY.MM.DD.N) may name a
+          # build; the rolling uat-latest tag races this checkout and must
+          # never win.
+          git describe --tags --match "20*" --always > apps/web/VERSION
+          echo "version: $(cat apps/web/VERSION)"
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.GCP_VM_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.GCP_VM_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Rsync source to VM
+        run: |
+          rsync -az --delete \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='node_modules' \
+            --exclude='apps/web/.next' \
+            --exclude='apps/web/.env.local' \
+            --exclude='apps/api/.venv' \
+            --exclude='apps/api/.env' \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
+            ./ "${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }}:/opt/uat.buildmill.dev/"
+
+      - name: Build and restart services
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }}" '
+            set -e
+            cd /opt/uat.buildmill.dev
+            npm install --no-audit --no-fund
+            npm run build
+            # python -m pip, mirroring deploy-prod.yml: immune to venv
+            # console-script shebangs pinning a moved/copied absolute path.
+            apps/api/.venv/bin/python -m pip install --quiet -r apps/api/requirements.txt
+            sudo systemctl restart factory-web-uat factory-api-uat
+            # 60s window: cold uvicorn/node starts after a big build have
+            # blown the old 15s budget while the service was actually fine.
+            for i in $(seq 1 30); do
+              curl -sf -o /dev/null http://127.0.0.1:3051 && web_ok=1 && break
+              sleep 2
+            done
+            for i in $(seq 1 30); do
+              curl -sf -o /dev/null http://127.0.0.1:3061/docs && api_ok=1 && break
+              sleep 2
+            done
+            # status is readable without sudo; sudo here dies on the password
+            # prompt and masks the real failure.
+            [ "$web_ok" = "1" ] || (echo "web health check failed" && systemctl status factory-web-uat --no-pager && exit 1)
+            [ "$api_ok" = "1" ] || (echo "api health check failed" && systemctl status factory-api-uat --no-pager && exit 1)
+          '
