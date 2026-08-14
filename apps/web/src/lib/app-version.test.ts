@@ -51,11 +51,11 @@ test("a build sitting on the tag shows no drift", () => {
   assert.equal(appVersion("version=2026.08.14.1\ncommit=abc1234"), "2026.08.14.1");
 });
 
-test("an untagged build shows only when it was built", () => {
+test("an untagged build shows only the date it was built", () => {
   // `git describe --always` with no matching tag — the state this repository
   // is in today, so it is the case that matters most. UAT: a bare sha is
-  // noise in a footer; the time is what a reader can act on, and the sha
-  // stays one hover away.
+  // noise in a footer, and so is the minute (manager's note 2026-08-14) —
+  // `Aug 14, 2026`, nothing else. Sha and exact time stay one hover away.
   const raw = [
     "version=0230b43",
     "commit=0230b43727fed5c0bfd3ab4c40e98d4c9ce2b6b8",
@@ -69,6 +69,8 @@ test("an untagged build shows only when it was built", () => {
   const shown = appVersion(raw);
   assert.ok(!/commit/.test(shown), `showed a sha: ${shown}`);
   assert.ok(!/\d{4}\.\d{2}\.\d{2}\.\d/.test(shown), "claimed a version");
+  assert.match(shown, /^[A-Z][a-z]{2} \d{1,2}, \d{4}$/);
+  assert.ok(!/\d:\d/.test(shown), `showed a time of day: ${shown}`);
   assert.match(
     versionDetail(raw) ?? "",
     /0230b43727fed5c0bfd3ab4c40e98d4c9ce2b6b8/

@@ -10,7 +10,7 @@
 // bar on a phone (us-92.1).
 
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Hourglass } from "lucide-react";
 
 import { StatusBadge } from "@/components/status-badge";
 import { TypeBadge, type IssueType } from "@/components/type-badge";
@@ -81,6 +81,12 @@ export function WorkbenchTabs({
           <div className="min-w-0 divide-y rounded-lg border">
             {queued.slice(0, 5).map((i) => (
               <div key={i.id} className="flex min-w-0 items-center gap-2 px-3 py-2">
+                {/* The In Progress rows turn a gear; a queued row waits. Same
+                    spot, same weight, no motion. */}
+                <Hourglass
+                  aria-hidden
+                  className="size-3.5 shrink-0 text-muted-foreground/60"
+                />
                 <TypeBadge type={i.type as IssueType} />
                 {i.displayId && (
                   <span className="shrink-0 font-mono text-xs text-muted-foreground">

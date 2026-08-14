@@ -85,28 +85,31 @@ export function parseStamp(raw: string | undefined | null): BuildStamp {
   return { ...EMPTY, version: named.tag, drift: named.drift };
 }
 
-/** `14 Aug 09:12` — short, local, and enough to answer "is this today's". */
+/** `Aug 14, 2026` — the date alone. The manager's note (2026-08-14): a
+ *  footer answers "which day's build", not "which minute's"; the exact UTC
+ *  timestamp stays one hover away in `versionDetail`. Pinned to en-US so the
+ *  server-rendered footer reads the same on every machine. */
 export function formatBuiltAt(iso: string | null): string | null {
   if (!iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleString(undefined, {
-    day: "numeric",
+  return d.toLocaleDateString("en-US", {
     month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
+    day: "numeric",
+    year: "numeric",
   });
 }
 
 /**
  * The compact line under the logo.
  *
- * Tagged: `2026.08.14.1 +3 · 14 Aug 09:12`. Untagged: just `14 Aug 09:12` —
+ * Tagged: `2026.08.14.1 +3 · Aug 14, 2026`. Untagged: just `Aug 14, 2026` —
  * amended after UAT, because a bare sha is noise to the person reading a
  * footer: it answers "which build" only for someone already holding a list
- * of shas, while the timestamp answers "is this today's" for everyone. The
- * sha is still one hover away in `versionDetail`, so nothing is lost for the
- * case that needs it. `dev` when there is no stamp at all.
+ * of shas, while the build date answers "is this today's" for everyone. The
+ * sha and the exact time are still one hover away in `versionDetail`, so
+ * nothing is lost for the case that needs them. `dev` when there is no
+ * stamp at all.
  */
 export function appVersion(raw?: string | null): string {
   const stamp = parseStamp(
