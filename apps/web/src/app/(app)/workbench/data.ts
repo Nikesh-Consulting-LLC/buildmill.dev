@@ -1880,7 +1880,7 @@ export async function loadThingsToDo(
 // US-87.1 / US-87.2: the shell's two entry points.
 // ---------------------------------------------------------------------------
 
-/** US-87.1: the Things-to-Do dataset, once per request. `/dashboard` renders
+/** US-87.1: the Things-to-Do dataset, once per request. `/workbench` renders
  * inside the app shell, and both used to call `loadWaiting` — eight org-wide
  * queries, run twice for one page. `React.cache` is per-render-pass, so the
  * two share one execution and two different requests never do. */

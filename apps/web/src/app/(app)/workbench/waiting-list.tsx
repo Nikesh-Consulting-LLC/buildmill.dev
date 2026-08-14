@@ -377,7 +377,7 @@ export function WaitingList({
                           <span className="font-mono">{row.feature.displayId}</span>
                         )}
                         <Link
-                          href={`/issues/${row.feature.id}?from=dashboard`}
+                          href={`/issues/${row.feature.id}?from=workbench`}
                           className="truncate font-medium text-foreground hover:underline"
                         >
                           {row.feature.title}
@@ -417,7 +417,7 @@ export function WaitingList({
                           )}
                         </span>
                         <Link
-                          href={`/issues/${item.id}?from=dashboard`}
+                          href={`/issues/${item.id}?from=workbench`}
                           className="font-medium hover:underline"
                         >
                           {item.title}
@@ -555,7 +555,7 @@ export function WaitingList({
                                 </span>
                               )}
                               <Link
-                                href={`/issues/${row.feature.id}?from=dashboard`}
+                                href={`/issues/${row.feature.id}?from=workbench`}
                                 className="truncate font-medium text-foreground hover:underline"
                               >
                                 {row.feature.title}
@@ -612,7 +612,7 @@ export function WaitingList({
                               </span>
                             )}
                             <Link
-                              href={`/issues/${item.id}?from=dashboard`}
+                              href={`/issues/${item.id}?from=workbench`}
                               className="min-w-0 truncate font-medium hover:underline"
                             >
                               {item.title}

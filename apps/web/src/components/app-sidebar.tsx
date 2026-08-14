@@ -234,7 +234,7 @@ export function AppSidebar({
             );
           }
 
-          const showBadge = href === "/dashboard" && badgeCount > 0;
+          const showBadge = href === "/workbench" && badgeCount > 0;
           return (
             <Link
               key={href}

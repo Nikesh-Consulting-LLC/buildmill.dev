@@ -13,7 +13,7 @@ export default function AppNotFound() {
       body="Whatever lived at this address may have been deleted, or the link is stale."
       actions={
         <>
-          <Button render={<Link href="/dashboard" />}>
+          <Button render={<Link href="/workbench" />}>
             Back to Things to Do
           </Button>
           <GoBackButton />

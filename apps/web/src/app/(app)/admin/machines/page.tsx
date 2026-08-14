@@ -39,7 +39,7 @@ export default async function AdminMachinesPage() {
     .eq("is_platform_admin", true)
     .limit(1)
     .maybeSingle();
-  if (!platformOrg) redirect("/dashboard");
+  if (!platformOrg) redirect("/workbench");
   const orgId = platformOrg.id as string;
 
   const { data: servers } = await supabase

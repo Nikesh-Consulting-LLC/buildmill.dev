@@ -88,7 +88,7 @@ export function ParkedRunsCard({ items }: { items: ParkedRun[] }) {
         <div className="min-w-0 flex-1">
           {run.issueId ? (
             <Link
-              href={`/issues/${run.issueId}?from=dashboard`}
+              href={`/issues/${run.issueId}?from=workbench`}
               className="block truncate font-medium hover:underline"
             >
               {run.issueTitle}

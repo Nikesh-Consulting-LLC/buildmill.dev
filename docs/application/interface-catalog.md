@@ -18,7 +18,7 @@ of its own.
 
 | Route | What the manager does here | What it writes |
 |---|---|---|
-| `/` , `/dashboard` | "Things to Do" — every pending review, clarification, and waiting item across the org's projects, filterable by project; `/` is a bare redirect here | Nothing directly — links out to the actions that do |
+| `/` , `/workbench` | The **Workbench** (renamed from Workdesk/"Things to Do", route from `/dashboard`, 2026-08-14) — what agents hold now, the first five of the queue, release state, and every item waiting on a decision, filterable by project; `/` is a bare redirect here and `/dashboard` 301s to `/workbench` | Nothing directly — links out to the actions that do |
 | `/activity` | Org-wide activity feed, a read model over the `activity_feed` view | Nothing — read-only |
 | `/help` | The operator handbook — architecture map, lifecycle flowchart, setup guides | Nothing — read-only |
 
@@ -46,7 +46,7 @@ of its own.
 
 | Route | What the manager does here | What it writes |
 |---|---|---|
-| `/review` | Retired standalone queue — redirects to `/dashboard` | Nothing |
+| `/review` | Retired standalone queue — redirects to `/workbench` | Nothing |
 | `/review/[issueId]` | The review panel: diff and story side by side, gate results inline — approve/reject a run, approve/send-back a plan or PRD, log a merge-override | `POST /runs/{id}/approve`, `/reject`; `/issues/{id}/plan/approve`, `/plan/send-back`, `/prd/approve`, `/prd/send-back`, `/merge-override` |
 
 **Tests**
