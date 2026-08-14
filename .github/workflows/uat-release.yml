@@ -31,7 +31,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          version=$(git describe --tags --match "20*" --always)
+          # US-91.16: the same stamp the deploy writes, so the notes and the
+          # footer can never name different builds.
+          version=$(git describe --tags --match "20*" --always 2>/dev/null || true)
+          version=${version:-"(untagged)"}
           today=$(date -u +%Y-%m-%d)
           # Rolling: replace the previous UAT release and its tag wholesale.
           # `|| true` covers the very first run, when neither exists yet.

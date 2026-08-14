@@ -35,6 +35,15 @@ type DeploymentCard = {
   environment: string | null;
   website_url: string | null;
   lastStatus: string | null;
+  /** US-91.9: what is SERVING right now — the release whose build this
+   *  deployment's live run carries. Null when the live run belongs to no
+   *  release (a branch deploy, an uploaded zip, a manual override), in which
+   *  case `liveCommit` names it instead. Never borrowed from the newest
+   *  release: what is live is a fact about the deployment. */
+  liveVersion: string | null;
+  liveReleaseId: string | null;
+  /** Short sha (or zip filename) of an off-release build. */
+  liveCommit: string | null;
 };
 
 export default async function ProjectsPage({
@@ -185,7 +194,9 @@ export default async function ProjectsPage({
     // Deployments + last-run status per deployment.
     const { data: deps } = await supabase
       .from("deployments")
-      .select("id, project_id, name, environment, website_url")
+      // US-91.9: current_run_id is the run this deployment is serving — the
+      // same row the deployment detail page reads, so the two cannot disagree.
+      .select("id, project_id, name, environment, website_url, current_run_id")
       .in("project_id", projectIds)
       .order("created_at", { ascending: true });
     const depIds = (deps ?? []).map((d) => d.id);
@@ -201,14 +212,64 @@ export default async function ProjectsPage({
           lastStatus.set(r.deployment_id, r.status);
       }
     }
+
+    // US-91.9: the live build per deployment — two batched reads for the whole
+    // page (the runs being served, then the releases they belong to), never
+    // one per project and never one per deployment.
+    const liveByDeployment = new Map<
+      string,
+      { version: string | null; releaseId: string | null; commit: string | null }
+    >();
+    const currentRunIds = (deps ?? [])
+      .map((d) => d.current_run_id)
+      .filter((id): id is string => !!id);
+    if (currentRunIds.length) {
+      const { data: liveRuns } = await supabase
+        .from("deployment_runs")
+        .select("id, deployment_id, release_id, commit_sha, zip_filename")
+        .in("id", currentRunIds);
+      const releaseIds = [
+        ...new Set(
+          (liveRuns ?? [])
+            .map((r) => r.release_id)
+            .filter((id): id is string => !!id)
+        ),
+      ];
+      const versionById = new Map<string, string>();
+      if (releaseIds.length) {
+        const { data: rels } = await supabase
+          .from("releases")
+          .select("id, version")
+          .in("id", releaseIds);
+        for (const r of rels ?? []) versionById.set(r.id, r.version);
+      }
+      for (const r of liveRuns ?? []) {
+        const version = r.release_id
+          ? (versionById.get(r.release_id) ?? null)
+          : null;
+        liveByDeployment.set(r.deployment_id, {
+          version,
+          releaseId: version ? r.release_id : null,
+          // AC4: an off-release deploy says so. Borrowing the last release's
+          // version here would be the worst possible lie on this card.
+          commit: version
+            ? null
+            : (r.commit_sha?.slice(0, 7) ?? r.zip_filename ?? null),
+        });
+      }
+    }
     for (const d of deps ?? []) {
       const arr = deploymentsByProject.get(d.project_id) ?? [];
+      const live = liveByDeployment.get(d.id);
       arr.push({
         id: d.id,
         name: d.name,
         environment: d.environment,
         website_url: d.website_url,
         lastStatus: lastStatus.get(d.id) ?? null,
+        liveVersion: live?.version ?? null,
+        liveReleaseId: live?.releaseId ?? null,
+        liveCommit: live?.commit ?? null,
       });
       deploymentsByProject.set(d.project_id, arr);
     }
@@ -367,6 +428,27 @@ export default async function ProjectsPage({
                                     {d.website_url}
                                   </span>
                                 )}
+                                {/* US-91.9: which build is live. The version
+                                    links to its release; an off-release build
+                                    is named as a commit, never dressed up as
+                                    a version. */}
+                                {d.liveVersion ? (
+                                  <span className="truncate font-mono text-[11px] tabular-nums text-muted-foreground">
+                                    <Link
+                                      href={`/projects/${p.id}/releases/${d.liveReleaseId}`}
+                                      className="underline-offset-4 hover:underline"
+                                    >
+                                      {d.liveVersion}
+                                    </Link>
+                                  </span>
+                                ) : d.liveCommit ? (
+                                  <span
+                                    className="truncate font-mono text-[11px] text-muted-foreground"
+                                    title="Deployed outside a release — no version names this build"
+                                  >
+                                    off-release · {d.liveCommit}
+                                  </span>
+                                ) : null}
                                 <span className="flex items-center gap-1 text-muted-foreground">
                                   <span
                                     className={cn(

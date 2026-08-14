@@ -33,6 +33,10 @@ export type ViewIssue = {
   sub_no: number | null;
   /** US-7.1: advisory complexity estimate (null = not scored). */
   complexity: string | null;
+  /** US-91.14: what this item has cost across ALL of its runs — a stored
+   *  rollup (`issues.cost_usd`), not a per-row sum: the hub loads 200 items
+   *  at a time and summing runs per row would be 200 queries. */
+  cost_usd?: number | null;
   body?: string | null;
   acceptance_criteria?: unknown;
 };
@@ -42,6 +46,8 @@ export type ViewIssue = {
 export type IssuesLayout = "outline" | "board" | "table";
 
 export const ISSUES_LAYOUT_KEY = "sf-issues-view-mode";
+/** US-91.5: the status checkbox set, remembered beside the layout. */
+export const ISSUES_STATUS_KEY = "sf-issues-status-filter";
 
 export const ISSUES_LAYOUTS: { id: IssuesLayout; label: string }[] = [
   { id: "outline", label: "Outline" },
@@ -122,7 +128,7 @@ export function formatIssueWhen(iso: string) {
  * (migration 036) that the server's own `applyIssueSearch` searches — so the
  * two sides run the same predicate rather than two approximations of it. */
 export const VIEW_ISSUE_SELECT =
-  "id, title, status, type, updated_at, github_issue_number, github_issue_url, project_id, parent_id, epic_id, item_no, sub_no, complexity, epics(title, number)";
+  "id, title, status, type, updated_at, github_issue_number, github_issue_url, project_id, parent_id, epic_id, item_no, sub_no, complexity, cost_usd, epics(title, number)";
 
 /** US-87.3: one page of work items. The hub used to fetch every item in the
  * workspace with no limit; this bounds it, and `Load more` walks forward. */
@@ -159,6 +165,8 @@ export function mapIssueRow(row: Record<string, unknown>): ViewIssue {
     item_no: (row.item_no as number | null) ?? null,
     sub_no: (row.sub_no as number | null) ?? null,
     complexity: (row.complexity as string | null) ?? null,
+    // US-91.14: the stored per-item cost rollup.
+    cost_usd: (row.cost_usd as number | null) ?? null,
     body: (row.body as string | null) ?? null,
     acceptance_criteria: row.acceptance_criteria,
   };

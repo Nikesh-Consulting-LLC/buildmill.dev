@@ -4311,7 +4311,15 @@ def notify_org_managers(
     settings: Settings, org_id: str, notif_type: str, payload: dict[str, Any]
 ) -> int:
     """Best-effort in-app notification to the org's human managers (US-9.12
-    channel). Returns how many were notified."""
+    channel). Returns how many were notified.
+
+    US-91.15: a new `notif_type` needs a renderer in
+    `apps/web/src/lib/notification-copy.ts` (and a case in its test), or the
+    bell shows its raw name. The payload keys that surface are `worker`,
+    `deployment`, `message`, `run_id`, `issue_id` and `principal_id` — a
+    notification carrying none of them cannot say what happened or go
+    anywhere.
+    """
     with _connect(settings) as conn:
         cur = conn.execute(
             """

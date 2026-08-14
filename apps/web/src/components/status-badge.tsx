@@ -171,6 +171,13 @@ const UNKNOWN_STATUS = {
   className: "bg-muted text-muted-foreground border-transparent",
 };
 
+/** US-91.5: the words a status is shown as, for anything that needs the label
+ *  without the pill — the Work Items status filter says which statuses it is
+ *  hiding, and must say it in the same words the pills use. */
+export function statusLabel(status: string): string {
+  return STATUS_STYLES[status as IssueStatus]?.label ?? status;
+}
+
 export function StatusBadge({
   status,
   className,

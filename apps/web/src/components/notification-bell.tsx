@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "@/lib/router-with-progress";
-import { Bell, Check } from "lucide-react";
+import { Bell, Check, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import {
@@ -10,6 +10,12 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  describeNotification,
+  groupNotifications,
+  notificationHref,
+  type NotificationGroup,
+} from "@/lib/notification-copy";
 
 export type NotificationRow = {
   id: string;
@@ -19,17 +25,10 @@ export type NotificationRow = {
   created_at: string;
 };
 
-const TYPE_VERB: Record<string, string> = {
-  assigned: "assigned you",
-  review_requested: "asked you to review",
-  blocked: "is blocked",
-};
-
-function deepLink(n: NotificationRow): string | null {
-  const issueId = n.payload.issue_id as string | undefined;
-  if (!issueId) return null;
-  return n.type === "review_requested" ? `/review/${issueId}` : `/issues/${issueId}`;
-}
+// US-91.15: the copy and the destinations live in `@/lib/notification-copy`,
+// beside a test that pins every type the API actually writes. What used to be
+// here was a verb map for three types nothing produces, and a deep link that
+// required an `issue_id` the real payloads do not carry.
 
 function relTime(iso: string) {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -50,7 +49,11 @@ export function NotificationBell({
 }) {
   const router = useRouter();
   const [items, setItems] = useState<NotificationRow[]>(initial);
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const unread = items.filter((n) => !n.read_at).length;
+  // US-91.15: the bell's job is to say something is wrong once, not seven
+  // times. Repeats of the same fault from the same agent collapse to a count.
+  const groups = groupNotifications(items);
 
   useEffect(() => {
     setItems(initial);
@@ -101,10 +104,22 @@ export function NotificationBell({
       .in("id", ids);
   }
 
-  async function open(n: NotificationRow) {
-    if (!n.read_at) await markRead([n.id]);
-    const href = deepLink(n);
-    if (href) router.push(href);
+  /** A row with somewhere to go navigates; a row without one expands in
+   *  place. Clicking is never a silent no-op that only marks it read. */
+  async function open(group: NotificationGroup<NotificationRow>) {
+    const unread = group.all.filter((n) => !n.read_at).map((n) => n.id);
+    if (unread.length) await markRead(unread);
+    const href = notificationHref(group.head);
+    if (href) {
+      router.push(href);
+      return;
+    }
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(group.head.id)) next.delete(group.head.id);
+      else next.add(group.head.id);
+      return next;
+    });
   }
 
   return (
@@ -144,27 +159,78 @@ export function NotificationBell({
               You&apos;re all caught up.
             </p>
           ) : (
-            items.map((n) => (
-              <button
-                key={n.id}
-                type="button"
-                onClick={() => open(n)}
-                className={cn(
-                  "flex w-full flex-col gap-0.5 border-b px-3 py-2 text-left text-sm last:border-b-0 hover:bg-accent/60",
-                  !n.read_at && "bg-primary/5",
-                )}
-              >
-                <span className="flex items-center gap-1.5">
-                  {!n.read_at && <span className="size-1.5 shrink-0 rounded-full bg-primary" />}
-                  <span className="truncate">
-                    <span className="font-medium">{TYPE_VERB[n.type] ?? n.type}</span>
-                    {": "}
-                    {(n.payload.title as string) || "a work item"}
-                  </span>
-                </span>
-                <span className="pl-3 text-xs text-muted-foreground">{relTime(n.created_at)}</span>
-              </button>
-            ))
+            groups.map((group) => {
+              const n = group.head;
+              const view = describeNotification(n);
+              const href = notificationHref(n);
+              const isOpen = expanded.has(n.id);
+              return (
+                <div key={n.id} className="border-b last:border-b-0">
+                  <button
+                    type="button"
+                    onClick={() => open(group)}
+                    className={cn(
+                      "flex w-full flex-col gap-0.5 px-3 py-2 text-left text-sm hover:bg-accent/60",
+                      group.unread > 0 && "bg-primary/5",
+                    )}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      {group.unread > 0 && (
+                        <span className="size-1.5 shrink-0 rounded-full bg-primary" />
+                      )}
+                      <span className="min-w-0 flex-1 truncate">
+                        <span className="font-medium">{view.subject}</span>
+                        {view.summary ? ` ${view.summary}` : ""}
+                      </span>
+                      {group.all.length > 1 && (
+                        <span
+                          className="shrink-0 rounded-full bg-muted px-1.5 text-[10px] font-semibold tabular-nums text-muted-foreground"
+                          title={`${group.all.length} of these`}
+                        >
+                          ×{group.all.length}
+                        </span>
+                      )}
+                      {!href && (
+                        <ChevronRight
+                          className={cn(
+                            "size-3.5 shrink-0 text-muted-foreground transition-transform",
+                            isOpen && "rotate-90",
+                          )}
+                        />
+                      )}
+                    </span>
+                    {view.detail && (
+                      <span
+                        className="line-clamp-2 pl-3 text-xs text-muted-foreground"
+                        title={view.detail}
+                      >
+                        {view.detail}
+                      </span>
+                    )}
+                    <span className="pl-3 text-xs text-muted-foreground">
+                      {relTime(n.created_at)}
+                      {group.all.length > 1 &&
+                        ` · oldest ${relTime(group.all[group.all.length - 1].created_at)}`}
+                    </span>
+                  </button>
+                  {isOpen && !href && (
+                    <div className="grid gap-1 bg-muted/40 px-3 pb-2 pl-6">
+                      {group.all.map((one) => (
+                        <span
+                          key={one.id}
+                          className="text-xs text-muted-foreground"
+                        >
+                          {relTime(one.created_at)}
+                          {describeNotification(one).detail
+                            ? ` — ${describeNotification(one).detail}`
+                            : ""}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
       </DropdownMenuContent>

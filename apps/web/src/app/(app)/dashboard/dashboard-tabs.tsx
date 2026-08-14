@@ -27,7 +27,9 @@ import { TypeBadge, type IssueType } from "@/components/type-badge";
 import { AgentText } from "@/components/agent-text";
 import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
+import { money } from "@/lib/budget";
 import { RequeueButton } from "./requeue-button";
+import { InProgressSection } from "./in-progress-section";
 import { WaitingList } from "./waiting-list";
 import { formatDuration, formatMinutes } from "./duration";
 import type { GuidelineRecommendation } from "./guideline-recommendations-group";
@@ -87,6 +89,7 @@ export function DashboardTabs({
   refreshes,
   agentItems,
   featureRuns,
+  interactiveByPrincipal,
   completedItems,
   releaseRows,
   deployRows,
@@ -99,6 +102,8 @@ export function DashboardTabs({
   agentItems: AgentItem[];
   /** US-86.2: live feature-owned runs, keyed by feature issue id. */
   featureRuns: Record<string, FeatureRunInfo>;
+  /** US-91.3: which claiming agents run the `interactive` module. */
+  interactiveByPrincipal: Record<string, boolean>;
   completedItems: CompletedItem[];
   releaseRows: ReleaseRow[];
   deployRows: DeployRow[];
@@ -131,9 +136,15 @@ export function DashboardTabs({
       {/* The list is w-fit by default, so on a narrow window the last tabs are
           clipped and unreachable. Let the bar itself scroll instead. */}
       <TabsList className="h-9 max-w-full overflow-x-auto">
+        {/* US-91.1: named for the act, not the state. Every row on this tab
+            ends in one of two clicks — dispatch it, or approve it and let it
+            dispatch — so "Dispatch" says what the tab is for, and lets
+            us-91.2's In Progress section sit on it without contradiction.
+            The URL key stays `waiting`: renaming it would break saved links
+            to buy nothing. */}
         <TabsTrigger value="waiting" className="h-7">
           <ClipboardCheck className="size-3.5" />
-          Waiting on you
+          Dispatch
           <TabCount n={waitingCount} />
         </TabsTrigger>
         <TabsTrigger value="factory" className="h-7">
@@ -153,7 +164,14 @@ export function DashboardTabs({
         </TabsTrigger>
       </TabsList>
 
-      <TabsContent value="waiting">
+      <TabsContent value="waiting" className="grid gap-5">
+        {/* US-91.2: what is already being worked on, above the decision about
+            sending more in. */}
+        <InProgressSection
+          items={agentItems}
+          featureRuns={featureRuns}
+          interactiveByPrincipal={interactiveByPrincipal}
+        />
         <WaitingList
           groups={groups}
           recommendations={recommendations}
@@ -567,6 +585,9 @@ function CompletedTable({ items }: { items: CompletedItem[] }) {
             <TableHead className="w-full max-w-0">Work item</TableHead>
             <TableHead className="w-40">Milestone</TableHead>
             <TableHead className="w-36">Agent</TableHead>
+            {/* US-91.14: what this run cost. A $0.30 story and a $14 story
+                that both read "Code submitted" are not the same event. */}
+            <TableHead className="hidden w-24 lg:table-cell">Cost</TableHead>
             <TableHead className="hidden w-24 lg:table-cell">Duration</TableHead>
             <TableHead className="hidden w-24 lg:table-cell">Finished</TableHead>
           </TableRow>
@@ -580,7 +601,9 @@ function CompletedTable({ items }: { items: CompletedItem[] }) {
                   type={i.type}
                   displayId={i.displayId}
                   title={i.title}
-                  subline={`${formatDuration(i.durationMs)} · ${i.age}`}
+                  subline={`${formatDuration(i.durationMs)} · ${i.age}${
+                    i.costUsd != null ? ` · ${money(i.costUsd)}` : ""
+                  }`}
                 />
               </TableCell>
               <TableCell>
@@ -590,6 +613,9 @@ function CompletedTable({ items }: { items: CompletedItem[] }) {
               </TableCell>
               <TableCell className="truncate text-xs">
                 {i.workerName || <span className="text-muted-foreground">—</span>}
+              </TableCell>
+              <TableCell className={cn(NUM, "hidden lg:table-cell")}>
+                {i.costUsd != null ? money(i.costUsd) : "—"}
               </TableCell>
               <TableCell className={cn(NUM, "hidden lg:table-cell")}>
                 {formatDuration(i.durationMs)}

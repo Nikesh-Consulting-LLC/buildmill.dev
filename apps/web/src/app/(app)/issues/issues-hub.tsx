@@ -7,9 +7,12 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
-import { type IssueStatus } from "@/components/status-badge";
 import { type IssueType } from "@/components/type-badge";
 import { setGlobalProjects } from "@/lib/global-project-filter-action";
+import {
+  defaultStatusSelection,
+  parseStoredSelection,
+} from "@/lib/issue-status-filter";
 import { AbandonedIssueList } from "./abandoned-issue-list";
 import { IssueSearchInput } from "./issue-search-input";
 import {
@@ -23,6 +26,8 @@ import { hubIssuesQuery, hubAbandonedQuery } from "./hub-query";
 import {
   HUB_PAGE_SIZE,
   ISSUES_LAYOUT_KEY,
+  ISSUES_STATUS_KEY,
+  ISSUE_STATUS_ORDER,
   mapIssueRow,
   parseIssuesLayout,
   type HubEpic,
@@ -141,12 +146,32 @@ export function IssuesHub({
   // Shared toolbar state, one compact row on the hub.
   const [layout, setLayout] = useState<IssuesLayout>("outline");
   const [typeFilter, setTypeFilter] = useState<IssueType | null>(null);
-  const [statusFilter, setStatusFilter] = useState<IssueStatus | null>(null);
+  // US-91.5: a set, not a single choice — and merged/done start unchecked, so
+  // the hub opens on live work instead of a wall of finished items.
+  const [statusFilter, setStatusFilter] = useState<ReadonlySet<string>>(() =>
+    defaultStatusSelection(ISSUE_STATUS_ORDER)
+  );
   const [, startTransition] = useTransition();
 
   useEffect(() => {
     setLayout(parseIssuesLayout(window.localStorage.getItem(ISSUES_LAYOUT_KEY)));
+    const stored = parseStoredSelection(
+      window.localStorage.getItem(ISSUES_STATUS_KEY),
+      ISSUE_STATUS_ORDER
+    );
+    if (stored) setStatusFilter(stored);
   }, []);
+
+  // The manager sets it once; it holds across navigation and reload the same
+  // way the layout preference does.
+  function changeStatusFilter(next: ReadonlySet<string>) {
+    setStatusFilter(next);
+    try {
+      window.localStorage.setItem(ISSUES_STATUS_KEY, JSON.stringify([...next]));
+    } catch {
+      // A preference that cannot be stored is not a reason to refuse the filter.
+    }
+  }
 
   // A deep-linked project narrows the global filter itself, not just this
   // view — so leaving Work Items for another page keeps the same scope.
@@ -210,7 +235,7 @@ export function IssuesHub({
         {!showAbandoned && (
           <div className="flex flex-wrap items-center gap-1.5">
             <TypeFilters value={typeFilter} onChange={setTypeFilter} />
-            <StatusFilter value={statusFilter} onChange={setStatusFilter} />
+            <StatusFilter value={statusFilter} onChange={changeStatusFilter} />
           </div>
         )}
       </div>

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowDown, ArrowUp, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { money } from "@/lib/budget";
 import { StatusBadge, type IssueStatus } from "@/components/status-badge";
 import { TypeBadge, type IssueType } from "@/components/type-badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -244,6 +245,13 @@ export function IssueTableView({
               {showProjectColumn && (
                 <th className="px-3 py-2 font-medium">Project</th>
               )}
+              {/* US-91.14: what it cost. */}
+              <th
+                className="px-3 py-2 text-right font-medium"
+                title="Everything this item has cost, across every run against it — failed, cancelled and superseded attempts included. Not the price of the merge."
+              >
+                Cost
+              </th>
               <SortableTh
                 label="Updated"
                 active={sort === "updated"}
@@ -414,6 +422,14 @@ function GroupBlock({
                 {projectName(i.project_id)}
               </td>
             )}
+            <td
+              className="whitespace-nowrap px-3 py-2 text-right align-middle font-mono text-xs tabular-nums text-muted-foreground"
+              title="Everything this item has cost, across every run against it — failed, cancelled and superseded attempts included. Not the price of the merge."
+            >
+              {/* Null is "nothing has run yet"; a real zero is "$0.00". They
+                  are different facts and must look different. */}
+              {i.cost_usd == null ? "—" : money(Number(i.cost_usd))}
+            </td>
             <td className="whitespace-nowrap px-3 py-2 align-middle text-xs text-muted-foreground">
               {formatIssueWhen(i.updated_at)}
             </td>

@@ -6,8 +6,10 @@ import { buildSnippets } from "../settings/worker-connect";
 import { PageHeader } from "@/components/page-header";
 import {
   TeamView,
+  type AgentEffort,
   type MachineOption,
   type MemberRow,
+  type TeamKpis,
   type WorkerRow,
 } from "./team-view";
 
@@ -234,6 +236,64 @@ export default async function TeamPage({
     if (pid && c.id) runningRunByPrincipal[pid] = c.id as string;
   }
 
+  // US-91.12: the three numbers on top, and each agent's own totals — read
+  // from the us-91.11 rollup, so the page's cost does not grow with the number
+  // of runs the workspace has ever done. One query for the window, one count
+  // for each live figure.
+  const WINDOW_DAYS = 30;
+  const windowStart = new Date(Date.now() - WINDOW_DAYS * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  const [{ data: effortRows }, completedCount, queuedCount] = await Promise.all([
+    supabase
+      .from("agent_effort_daily")
+      .select(
+        "worker_id, work_seconds, issues_completed, lines_added, lines_removed, tokens_in, tokens_out, cost_usd"
+      )
+      .eq("org_id", orgId)
+      .gte("day", windowStart),
+    supabase
+      .from("issues")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .eq("status", "merged")
+      .gte("status_changed_at", `${windowStart}T00:00:00Z`),
+    supabase
+      .from("issues")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .in("status", ["queued", "running"]),
+  ]);
+
+  const effortByPrincipal: Record<string, AgentEffort> = {};
+  let totalWorkSeconds = 0;
+  for (const row of effortRows ?? []) {
+    totalWorkSeconds += Number(row.work_seconds ?? 0);
+    const pid = workerToPrincipal.get(row.worker_id as string);
+    if (!pid) continue;
+    const acc = (effortByPrincipal[pid] ??= {
+      workSeconds: 0,
+      issuesCompleted: 0,
+      linesAdded: 0,
+      linesRemoved: 0,
+      tokens: 0,
+      costUsd: 0,
+    });
+    acc.workSeconds += Number(row.work_seconds ?? 0);
+    acc.issuesCompleted += Number(row.issues_completed ?? 0);
+    acc.linesAdded += Number(row.lines_added ?? 0);
+    acc.linesRemoved += Number(row.lines_removed ?? 0);
+    acc.tokens += Number(row.tokens_in ?? 0) + Number(row.tokens_out ?? 0);
+    acc.costUsd += Number(row.cost_usd ?? 0);
+  }
+
+  const kpis: TeamKpis = {
+    windowDays: WINDOW_DAYS,
+    completed: completedCount.count ?? 0,
+    queued: queuedCount.count ?? 0,
+    workSeconds: totalWorkSeconds,
+  };
+
   // US-35.1: the machines an agent can be given a seat on, for the Add-agent
   // picker. Only provisioned ones: a registered-but-not-provisioned machine has
   // no supervisor to run an agent, so offering it would be offering a failure.
@@ -293,6 +353,8 @@ export default async function TeamPage({
         maxAgents={org?.max_agents ?? 3}
         claudeBillingByPrincipal={claudeBillingByPrincipal}
         moduleByPrincipal={moduleByPrincipal}
+        effortByPrincipal={effortByPrincipal}
+        kpis={kpis}
         runningRunByPrincipal={runningRunByPrincipal}
         canManageOrg={can("manage_org")}
         myPrincipalId={myPrincipal?.id ?? null}

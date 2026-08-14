@@ -25,10 +25,20 @@ jobs:
 
       - name: Stamp build version
         run: |
+          # US-91.16: the stamp carries the two facts that are always true —
+          # the commit and when it was built — and lets a version ride along
+          # when a tag exists to supply one. `git describe` alone is a fact
+          # about TAGS: it goes stale without looking stale, and with no tag
+          # it answers a bare sha that reads like a version.
           # --match: only factory version tags (YYYY.MM.DD.N) may name a
           # build, never the rolling uat-latest tag (see uat-release.yml).
-          git describe --tags --match "20*" --always > apps/web/VERSION
-          echo "version: $(cat apps/web/VERSION)"
+          {
+            echo "version=$(git describe --tags --match '20*' --always 2>/dev/null || true)"
+            echo "commit=${GITHUB_SHA}"
+            echo "ref=${GITHUB_REF_NAME}"
+            echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > apps/web/VERSION
+          cat apps/web/VERSION
 
       - name: Set up SSH
         run: |

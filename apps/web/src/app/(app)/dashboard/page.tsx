@@ -38,6 +38,7 @@ export default async function ThingsToDoPage() {
     releaseRows,
     agentItems,
     featureRuns,
+    interactiveByPrincipal,
     deployRows,
     completedItems,
     stalledQueue,
@@ -210,6 +211,7 @@ export default async function ThingsToDoPage() {
           refreshes={fRefreshes}
           agentItems={fAgent}
           featureRuns={featureRuns}
+          interactiveByPrincipal={interactiveByPrincipal}
           completedItems={fCompleted}
           releaseRows={fReleases}
           deployRows={fDeploy}

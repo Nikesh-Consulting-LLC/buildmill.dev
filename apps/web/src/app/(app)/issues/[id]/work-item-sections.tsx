@@ -10,6 +10,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { formatChangeSummary, sumMetrics } from "@/lib/change-metrics";
+import { money } from "@/lib/budget";
+import { formatWorkSeconds } from "@/lib/work-seconds";
 import { ComplexityDetail } from "@/components/complexity-badge";
 import { DocumentsPanel } from "@/components/documents-panel";
 import type { DocumentRow } from "@/lib/documents";
@@ -113,6 +115,11 @@ type RunLike = {
   pushed_head_sha: string | null;
   /** US-27.10: why a cancelled run was retired. */
   cancel_reason?: string | null;
+  /** US-91.11: seconds the agent actually held this run. Read, never
+   *  recomputed from timestamps — so this page and Team cannot disagree. */
+  work_seconds?: number | null;
+  /** US-91.14: what this run cost. */
+  cost_usd?: number | null;
   workers?: { name: string } | { name: string }[] | null;
 };
 
@@ -432,6 +439,11 @@ export function RunsSection({ data }: { data: WorkItemViewData }) {
     : undefined;
   const w = active?.workers;
   const issueTotal = sumMetrics(runs as never[]);
+  // US-91.12 AC5 / US-91.14: what the item cost in time and money, summed over
+  // EVERY run against it — failed and superseded attempts included, because
+  // that is what it cost.
+  const totalSeconds = runs.reduce((n, r) => n + (r.work_seconds ?? 0), 0);
+  const totalCost = runs.reduce((n, r) => n + (r.cost_usd ?? 0), 0);
 
   // US-3.4: a claimed code run whose branch has factory-remote pushes.
   const latest = runs[0];
@@ -561,7 +573,9 @@ export function RunsSection({ data }: { data: WorkItemViewData }) {
             </CardTitle>
             <CardDescription>
               {issueTotal
-                ? `Work item total: +${issueTotal.lines_added} −${issueTotal.lines_removed} lines · ${issueTotal.files_changed} files across ${runs.length} run${runs.length === 1 ? "" : "s"}`
+                ? `Work item total: +${issueTotal.lines_added} −${issueTotal.lines_removed} lines · ${issueTotal.files_changed} files across ${runs.length} run${runs.length === 1 ? "" : "s"}${
+                    totalSeconds ? ` · ${formatWorkSeconds(totalSeconds)}` : ""
+                  }${totalCost ? ` · ${money(totalCost)}` : ""}`
                 : data.featureRun
                   ? "This story's own runs produced no code — its code came from the feature's run above."
                   : "No metrics computed yet."}

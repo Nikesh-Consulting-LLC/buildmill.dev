@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "@/lib/router-with-progress";
 import {
   Archive,
   ArchiveRestore,
   Bot,
+  ChevronRight,
   FlaskConical,
   Loader2,
   User,
@@ -16,6 +17,14 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { EmptyState } from "@/components/empty-state";
 import { BulkDeleteBar } from "@/components/bulk-delete-bar";
 import { FilterPill, FILTER_PILL_ANY as ANY } from "@/components/filter-pill";
@@ -46,6 +55,10 @@ export type TestCaseRow = {
 
 export type SuiteOption = { id: string; name: string };
 
+/** US-91.6: rows on screen at once. Selection survives paging, so this bounds
+ *  what is rendered, not what can be acted on. */
+const PAGE_SIZE = 50;
+
 export function TestLibrary({
   orgId,
   projectId,
@@ -72,6 +85,11 @@ export function TestLibrary({
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [automating, setAutomating] = useState(false);
   const [automateError, setAutomateError] = useState<string | null>(null);
+  // US-91.6: the card list was ~90px per case — twenty cases was a page and a
+  // half of scrolling and a few hundred was unusable. One row per case, prose
+  // behind a disclosure, and a bounded window.
+  const [page, setPage] = useState(0);
+  const [openCase, setOpenCase] = useState<ReadonlySet<string>>(new Set());
 
   const issueTitle = useMemo(
     () => new Map(issues.map((t) => [t.id, t.title])),
@@ -90,15 +108,30 @@ export function TestLibrary({
     [suites]
   );
 
-  const visible = testCases.filter(
-    (c) =>
-      (status === ANY || c.status === status) &&
-      (type === ANY || c.test_types.includes(type)) &&
-      (environment === ANY || c.environments.includes(environment)) &&
-      (source === ANY || c.source === source) &&
-      (issue === ANY || c.issue_id === issue) &&
-      (execution === ANY || c.execution === execution)
+  const visible = useMemo(
+    () =>
+      testCases.filter(
+        (c) =>
+          (status === ANY || c.status === status) &&
+          (type === ANY || c.test_types.includes(type)) &&
+          (environment === ANY || c.environments.includes(environment)) &&
+          (source === ANY || c.source === source) &&
+          (issue === ANY || c.issue_id === issue) &&
+          (execution === ANY || c.execution === execution)
+      ),
+    [testCases, status, type, environment, source, issue, execution]
   );
+
+  // US-91.6 AC4: filters own the set, paging owns the window — a filter change
+  // returns to page 1, and every count below describes the FILTERED total.
+  useEffect(() => {
+    setPage(0);
+  }, [status, type, environment, source, issue, execution]);
+
+  const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const current = Math.min(page, pageCount - 1);
+  const from = current * PAGE_SIZE;
+  const paged = visible.slice(from, from + PAGE_SIZE);
 
   async function setCaseStatus(id: string, next: "active" | "abandoned") {
     setBusyId(id);
@@ -109,10 +142,15 @@ export function TestLibrary({
   }
 
   // Deletion only ever targets currently visible selected rows (US-2.26).
+  // US-91.6 AC5/AC6: "visible" is the filtered set — a selection made on page
+  // 1 survives paging to page 2 and back, and the bulk bar keeps counting it.
+  // "Select all" is deliberately scoped to the CURRENT PAGE and says so: this
+  // bar deletes test cases and their run history, so it must never include
+  // rows the manager never saw.
   const selectedVisible = visible.filter((c) => selected.has(c.id));
   const allSelected =
-    visible.length > 0 && visible.every((c) => selected.has(c.id));
-  const someSelected = visible.some((c) => selected.has(c.id));
+    paged.length > 0 && paged.every((c) => selected.has(c.id));
+  const someSelected = paged.some((c) => selected.has(c.id));
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
@@ -248,19 +286,22 @@ export function TestLibrary({
         )}
       </div>
 
-      {visible.length > 0 && (
+      {paged.length > 0 && (
         <label className="flex w-fit cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
           <Checkbox
             checked={allSelected}
             indeterminate={someSelected && !allSelected}
             onCheckedChange={() =>
-              setSelected(
-                allSelected ? new Set() : new Set(visible.map((c) => c.id))
-              )
+              setSelected((prev) => {
+                const next = new Set(prev);
+                if (allSelected) for (const c of paged) next.delete(c.id);
+                else for (const c of paged) next.add(c.id);
+                return next;
+              })
             }
-            aria-label="Select all visible test cases"
+            aria-label="Select every test case on this page"
           />
-          Select all
+          Select all on this page ({paged.length})
         </label>
       )}
 
@@ -305,127 +346,235 @@ export function TestLibrary({
           description="Create one, loosen the filters, or let a run contribute some."
         />
       ) : (
-        <ul className="grid gap-3">
-          {visible.map((c) => (
-            <li
-              key={c.id}
-              className={cn(
-                "rounded-lg border p-4",
-                c.status === "abandoned" && "opacity-60"
-              )}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <Checkbox
-                  className="mt-1"
-                  checked={selected.has(c.id)}
-                  onCheckedChange={() => toggleSelected(c.id)}
-                  aria-label={`Select ${c.title}`}
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium">{c.title}</p>
-                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1">
-                      {c.source === "agent" ? (
-                        <Bot className="size-3.5" />
-                      ) : (
-                        <User className="size-3.5" />
-                      )}
-                      {c.source}
-                    </span>
-                    {c.execution === "automated" && (
-                      <Badge
-                        variant="secondary"
-                        title={c.spec_ref ?? undefined}
-                        className="gap-1"
+        <>
+          <div className="min-w-0 rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-8" />
+                  <TableHead className="w-8" />
+                  <TableHead className="w-full max-w-0">Test case</TableHead>
+                  <TableHead className="w-20">Source</TableHead>
+                  <TableHead className="w-36">Execution</TableHead>
+                  <TableHead className="hidden w-56 lg:table-cell">
+                    Type &amp; environment
+                  </TableHead>
+                  <TableHead className="hidden w-48 lg:table-cell">
+                    Work item
+                  </TableHead>
+                  <TableHead className="w-20" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paged.map((c) => {
+                  const isOpen = openCase.has(c.id);
+                  const hasProse = !!(c.steps || c.expected_result);
+                  return (
+                    <Fragment key={c.id}>
+                      <TableRow
+                        className={cn(c.status === "abandoned" && "opacity-60")}
                       >
-                        <Zap className="size-3" />
-                        {c.suite_id
-                          ? (suiteName.get(c.suite_id) ?? "automated")
-                          : "automated"}
-                      </Badge>
-                    )}
-                    {c.always_on_uat && (
-                      <Badge variant="outline" title="Attached to every release's UAT test set">
-                        every UAT
-                      </Badge>
-                    )}
-                    {c.test_types.map((t) => (
-                      <Badge key={t} variant="secondary">
-                        {t}
-                      </Badge>
-                    ))}
-                    {c.environments.map((e) => (
-                      <Badge key={e} variant="outline">
-                        {e}
-                      </Badge>
-                    ))}
-                    {c.issue_id && issueTitle.get(c.issue_id) && (
-                      <span className="truncate">
-                        · issue: {issueTitle.get(c.issue_id)}
-                      </span>
-                    )}
-                    {c.status === "abandoned" && (
-                      <Badge variant="outline">abandoned</Badge>
-                    )}
-                  </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <TestCaseDialog
-                    orgId={orgId}
-                    projectId={projectId}
-                    issues={issues}
-                    modules={modules}
-                    testCase={c}
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    disabled={busyId === c.id}
-                    title={
-                      c.status === "active"
-                        ? "Abandon — hide from lists and new runs, keep history"
-                        : "Restore to active"
-                    }
-                    onClick={() =>
-                      setCaseStatus(
-                        c.id,
-                        c.status === "active" ? "abandoned" : "active"
-                      )
-                    }
-                  >
-                    {c.status === "active" ? (
-                      <Archive className="size-4" />
-                    ) : (
-                      <ArchiveRestore className="size-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-              {(c.steps || c.expected_result) && (
-                <details className="mt-2">
-                  <summary className="cursor-pointer select-none text-xs text-muted-foreground">
-                    Steps & expected result
-                  </summary>
-                  <div className="mt-2 grid gap-2 text-sm">
-                    {c.steps && (
-                      <pre className="rounded-md bg-muted/50 p-3 text-xs leading-5 whitespace-pre-wrap">
-                        {c.steps}
-                      </pre>
-                    )}
-                    {c.expected_result && (
-                      <p className="text-muted-foreground">
-                        <span className="font-medium text-foreground">
-                          Expected:{" "}
-                        </span>
-                        {c.expected_result}
-                      </p>
-                    )}
-                  </div>
-                </details>
-              )}
-            </li>
-          ))}
-        </ul>
+                        <TableCell>
+                          <Checkbox
+                            checked={selected.has(c.id)}
+                            onCheckedChange={() => toggleSelected(c.id)}
+                            aria-label={`Select ${c.title}`}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {/* US-91.6 AC2: the prose is one click away — nothing
+                              readable before became unreachable. */}
+                          {hasProse && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="size-6 p-0"
+                              onClick={() =>
+                                setOpenCase((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(c.id)) next.delete(c.id);
+                                  else next.add(c.id);
+                                  return next;
+                                })
+                              }
+                              aria-expanded={isOpen}
+                              aria-label={`${isOpen ? "Hide" : "Show"} steps for ${c.title}`}
+                            >
+                              <ChevronRight
+                                className={cn(
+                                  "size-3.5 transition-transform",
+                                  isOpen && "rotate-90"
+                                )}
+                              />
+                            </Button>
+                          )}
+                        </TableCell>
+                        <TableCell className="w-full max-w-0 min-w-0">
+                          <span className="flex min-w-0 flex-col">
+                            <span className="truncate font-medium">
+                              {c.title}
+                            </span>
+                            {/* The columns hidden below `lg` say their piece
+                                here instead of vanishing. */}
+                            <span className="truncate text-xs text-muted-foreground lg:hidden">
+                              {[...c.test_types, ...c.environments].join(" · ")}
+                              {c.issue_id && issueTitle.get(c.issue_id)
+                                ? ` · ${issueTitle.get(c.issue_id)}`
+                                : ""}
+                            </span>
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          <span className="inline-flex items-center gap-1 text-muted-foreground">
+                            {c.source === "agent" ? (
+                              <Bot className="size-3.5" />
+                            ) : (
+                              <User className="size-3.5" />
+                            )}
+                            {c.source}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="flex flex-wrap items-center gap-1">
+                            {c.execution === "automated" ? (
+                              <Badge
+                                variant="secondary"
+                                title={c.spec_ref ?? undefined}
+                                className="gap-1"
+                              >
+                                <Zap className="size-3" />
+                                {c.suite_id
+                                  ? (suiteName.get(c.suite_id) ?? "automated")
+                                  : "automated"}
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                manual
+                              </span>
+                            )}
+                            {c.always_on_uat && (
+                              <Badge
+                                variant="outline"
+                                title="Attached to every release's UAT test set"
+                              >
+                                every UAT
+                              </Badge>
+                            )}
+                          </span>
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          <span className="flex flex-wrap items-center gap-1">
+                            {c.test_types.map((t) => (
+                              <Badge key={t} variant="secondary">
+                                {t}
+                              </Badge>
+                            ))}
+                            {c.environments.map((e) => (
+                              <Badge key={e} variant="outline">
+                                {e}
+                              </Badge>
+                            ))}
+                            {c.status === "abandoned" && (
+                              <Badge variant="outline">abandoned</Badge>
+                            )}
+                          </span>
+                        </TableCell>
+                        <TableCell className="hidden max-w-48 truncate text-xs text-muted-foreground lg:table-cell">
+                          {(c.issue_id && issueTitle.get(c.issue_id)) || "—"}
+                        </TableCell>
+                        <TableCell>
+                          <span className="flex items-center justify-end gap-1">
+                            <TestCaseDialog
+                              orgId={orgId}
+                              projectId={projectId}
+                              issues={issues}
+                              modules={modules}
+                              testCase={c}
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              disabled={busyId === c.id}
+                              title={
+                                c.status === "active"
+                                  ? "Abandon — hide from lists and new runs, keep history"
+                                  : "Restore to active"
+                              }
+                              onClick={() =>
+                                setCaseStatus(
+                                  c.id,
+                                  c.status === "active" ? "abandoned" : "active"
+                                )
+                              }
+                            >
+                              {c.status === "active" ? (
+                                <Archive className="size-4" />
+                              ) : (
+                                <ArchiveRestore className="size-4" />
+                              )}
+                            </Button>
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                      {isOpen && hasProse && (
+                        <TableRow className="hover:bg-transparent">
+                          <TableCell />
+                          <TableCell />
+                          <TableCell
+                            colSpan={6}
+                            className="pt-0 whitespace-normal"
+                          >
+                            <div className="grid gap-2 text-sm">
+                              {c.steps && (
+                                <pre className="rounded-md bg-muted/50 p-3 text-xs leading-5 whitespace-pre-wrap">
+                                  {c.steps}
+                                </pre>
+                              )}
+                              {c.expected_result && (
+                                <p className="text-muted-foreground">
+                                  <span className="font-medium text-foreground">
+                                    Expected:{" "}
+                                  </span>
+                                  {c.expected_result}
+                                </p>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+          {visible.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {from + 1}–{Math.min(from + PAGE_SIZE, visible.length)} of{" "}
+                {visible.length}
+              </span>
+              <span className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={current === 0}
+                  onClick={() => setPage(current - 1)}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={current >= pageCount - 1}
+                  onClick={() => setPage(current + 1)}
+                >
+                  Next
+                </Button>
+              </span>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

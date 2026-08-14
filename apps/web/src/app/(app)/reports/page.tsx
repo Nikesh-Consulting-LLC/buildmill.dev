@@ -44,7 +44,9 @@ export default async function ReportsPage({
     .order("created_at", { ascending: true });
   const projects = (projectRows ?? []) as HubProject[];
 
-  const REPORTS_TITLE = "Reports";
+  // US-91.7: the nav says Bug Reports; a page title that disagrees is how a
+  // manager wonders whether they clicked the wrong thing.
+  const REPORTS_TITLE = "Bug Reports";
   const REPORTS_DESCRIPTION =
     "What deployed apps have reported — crashes they caught themselves and issues their users submitted. Promote the real bugs; ignore the rest.";
 
