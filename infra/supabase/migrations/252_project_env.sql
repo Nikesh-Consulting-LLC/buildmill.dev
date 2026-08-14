@@ -1,4 +1,19 @@
--- 249_project_env (US-89.2): the environment is defined once.
+-- 252_project_env (US-89.2): the environment is defined once.
+--
+-- Numbered 249 when built (2026-08-13, branch `us-89-zero-secret-workspace`)
+-- and renumbered to 252 on merge: phase 87's 249_org_pending_count.sql took
+-- the same number on a parallel branch.
+--
+-- ALREADY LIVE on both projects — do NOT re-apply. Verified 2026-08-13:
+-- the table, its 4 indexes, 4 RLS policies and touch trigger exist on prod
+-- (wdudmfhhqxrqzoyhuzwx) and dev (nncquokoblcfcqyajzmk) alike.
+--
+-- The ledger row is recorded under the OLD name `249_project_env` on both,
+-- because it was applied through Supabase's own migration path, which stores
+-- the name verbatim rather than prefix-stripped the way scripts/migrate.py
+-- does. That mismatch is not repaired here (rewriting applied history is
+-- worse than recording it); migrate.py normalizes both sides when it checks,
+-- so the skip-if-applied guard still holds for this file.
 --
 -- One place per project answering "what does an agent get when it works
 -- here?" — the Supabase login of the app under development, a SQL

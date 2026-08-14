@@ -1,7 +1,7 @@
 """US-89.2: the environment is defined once.
 
 One place per project answering "what does an agent get when it works
-here?". Rows live in `project_env` (migration 249, plain values inline);
+here?". Rows live in `project_env` (migration 252, plain values inline);
 secret VALUES follow the us-1.28 server-credential pattern — written
 browser → api → the private `data` Storage bucket, readable by the
 service role only, surfaced to humans as `Set · <fingerprint>` and never
