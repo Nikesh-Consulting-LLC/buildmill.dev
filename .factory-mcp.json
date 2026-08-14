@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "factory": {
+      "type": "http",
+      "url": "https://api.buildmill.dev/mcp",
+      "headers": {
+        "X-Worker-Token": "sfw_03f200284bdfb0d42e02986ab3ea55eda40f6ef335037691"
+      }
+    }
+  }
+}
