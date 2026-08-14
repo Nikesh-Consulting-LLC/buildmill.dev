@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Build Mill — AI software delivery with a human in the loop</title>
-  <meta name="description" content="Build Mill turns user stories into pull requests with AI, and keeps a human manager in the loop to review and merge. Ship software faster, without giving up control." />
+  <title>Build Mill — the AI software factory with a human at every gate</title>
+  <meta name="description" content="Build Mill is an AI software factory with a human at every gate: an AI agent plans the work, writes the code, and opens the pull request — and nothing merges, and nothing ships, without you." />
   <link rel="icon" type="image/png" href="/assets/buildmill-icon.png" />
 
   <!-- Open Graph / social -->
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="Build Mill — AI software delivery with a human in the loop" />
-  <meta property="og:description" content="Define a user story. An AI provider turns it into a pull request. You review and merge." />
+  <meta property="og:title" content="Build Mill — the AI software factory with a human at every gate" />
+  <meta property="og:description" content="An AI agent plans the work, writes the code, and opens the pull request — and nothing merges, and nothing ships, without you." />
   <meta property="og:url" content="https://buildmill.dev" />
   <meta property="og:image" content="/assets/buildmill-logo.png" />
   <meta name="theme-color" content="#14273f" />
@@ -21,12 +21,15 @@
       --navy-800: #1b3453;
       --green: #6f9d6c;
       --green-600: #5c8a59;
+      --green-ink: #0f1f14;
       --ink: #14273f;
       --muted: #5b6b7c;
+      --faint: #8b99a9;
       --bg: #ffffff;
       --bg-soft: #f4f6f8;
       --border: #e3e8ee;
       --card: #ffffff;
+      --rail: #d7dee6;
       --shadow: 0 1px 2px rgba(20, 39, 63, .06), 0 12px 32px -12px rgba(20, 39, 63, .18);
     }
 
@@ -34,292 +37,604 @@
       :root {
         --ink: #eef2f6;
         --muted: #9db0c2;
+        --faint: #6e8095;
         --bg: #0e1a2b;
         --bg-soft: #122238;
         --border: #23374f;
         --card: #14263c;
+        --rail: #2a4059;
         --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 18px 40px -16px rgba(0, 0, 0, .6);
       }
     }
 
     * { box-sizing: border-box; }
-
-    html { -webkit-text-size-adjust: 100%; }
+    html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
     body {
       margin: 0;
       font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       color: var(--ink);
-      background:
-        radial-gradient(1200px 600px at 50% -280px, rgba(111, 157, 108, .16), transparent 60%),
-        var(--bg);
+      background: var(--bg);
       line-height: 1.6;
-      min-height: 100dvh;
-      display: flex;
-      flex-direction: column;
     }
 
     a { color: inherit; }
+    .wrap { width: 100%; max-width: 1060px; margin: 0 auto; padding: 0 24px; }
 
-    .wrap {
-      width: 100%;
-      max-width: 1040px;
-      margin: 0 auto;
-      padding: 0 24px;
+    /* ---------- Nav ---------- */
+    .topbar {
+      position: sticky; top: 0; z-index: 50;
+      background: color-mix(in srgb, var(--bg) 82%, transparent);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
     }
+    .nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; }
+    .brand { display: flex; align-items: center; text-decoration: none; }
+    .brand img { height: 26px; width: auto; display: block; }
+    @media (prefers-color-scheme: dark) {
+      /* the wordmark is navy type; flatten it to white on dark backgrounds */
+      .brand img { filter: brightness(0) invert(1); }
+    }
+    .nav-links { display: flex; gap: 26px; font-size: 14.5px; font-weight: 550; color: var(--muted); }
+    .nav-links a { text-decoration: none; }
+    .nav-links a:hover { color: var(--green-600); }
+    .nav-cta { display: flex; align-items: center; gap: 8px; }
+    @media (max-width: 860px) { .nav-links { display: none; } }
 
-    /* Header */
-    header {
-      padding: 22px 0;
-    }
-    .nav {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-    }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-weight: 700;
-      letter-spacing: -0.01em;
-      text-decoration: none;
-    }
-    .brand img { height: 34px; width: auto; display: block; }
-    .nav-cta {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    /* Buttons */
+    /* ---------- Buttons ---------- */
     .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      font-weight: 600;
-      font-size: 15px;
-      line-height: 1;
-      padding: 12px 20px;
-      border-radius: 10px;
-      border: 1px solid transparent;
-      text-decoration: none;
-      cursor: pointer;
-      transition: transform .06s ease, background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
-      white-space: nowrap;
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      font-weight: 650; font-size: 15px; line-height: 1;
+      padding: 12px 20px; border-radius: 10px; border: 1px solid transparent;
+      text-decoration: none; cursor: pointer; white-space: nowrap;
+      transition: transform .06s ease, background-color .15s ease, border-color .15s ease;
     }
     .btn:active { transform: translateY(1px); }
-    .btn-primary {
-      background: var(--green);
-      color: #0f1f14;
-      box-shadow: 0 8px 20px -10px rgba(111, 157, 108, .8);
-    }
+    .btn-primary { background: var(--green); color: var(--green-ink); box-shadow: 0 8px 20px -10px rgba(111, 157, 108, .8); }
     .btn-primary:hover { background: var(--green-600); }
-    .btn-ghost {
-      background: transparent;
-      color: var(--ink);
-      border-color: var(--border);
-    }
+    .btn-ghost { background: transparent; color: var(--ink); border-color: var(--border); }
     .btn-ghost:hover { border-color: var(--green); color: var(--green-600); }
+    @media (max-width: 480px) { .topbar .btn-ghost { display: none; } }
+    /* fingers, not cursors: keep every tap target at 44px minimum */
+    @media (pointer: coarse) {
+      .btn { min-height: 44px; }
+      .foot-links a { display: inline-block; padding: 11px 4px; }
+    }
 
-    /* Hero */
-    main { flex: 1 0 auto; }
+    /* ---------- Hero ---------- */
     .hero {
       text-align: center;
-      padding: 40px 0 24px;
+      padding: 76px 0 30px;
+      background:
+        radial-gradient(1100px 560px at 50% -260px, color-mix(in srgb, var(--green) 17%, transparent), transparent 62%);
     }
-    .hero-logo {
-      width: min(280px, 62vw);
-      height: auto;
-      margin: 8px auto 26px;
-      display: block;
-      filter: drop-shadow(0 16px 30px rgba(20, 39, 63, .16));
-    }
-    @media (prefers-color-scheme: dark) {
-      .hero-logo { filter: none; }
+    .hero-mark {
+      height: 64px; width: auto; display: block; margin: 0 auto 24px;
+      background: #ffffff; padding: 13px; border-radius: 22px;
+      border: 1px solid var(--border); box-shadow: var(--shadow);
+      box-sizing: content-box;
     }
     .eyebrow {
-      display: inline-block;
-      font-size: 13px;
-      font-weight: 600;
-      letter-spacing: .04em;
-      text-transform: uppercase;
-      color: var(--green-600);
-      background: color-mix(in srgb, var(--green) 14%, transparent);
-      border: 1px solid color-mix(in srgb, var(--green) 34%, transparent);
-      padding: 5px 12px;
-      border-radius: 999px;
-      margin-bottom: 22px;
+      display: inline-block; font-size: 12.5px; font-weight: 650; letter-spacing: .05em;
+      text-transform: uppercase; color: var(--green-600);
+      background: color-mix(in srgb, var(--green) 13%, transparent);
+      border: 1px solid color-mix(in srgb, var(--green) 32%, transparent);
+      padding: 6px 14px; border-radius: 999px; margin-bottom: 26px;
     }
     h1 {
-      font-size: clamp(30px, 6vw, 52px);
-      line-height: 1.08;
-      letter-spacing: -0.025em;
-      margin: 0 auto 18px;
-      max-width: 15ch;
-      font-weight: 800;
+      font-size: clamp(34px, 6.4vw, 62px); line-height: 1.04; letter-spacing: -0.03em;
+      margin: 0 auto 20px; max-width: 17ch; font-weight: 800;
     }
     h1 .accent { color: var(--green); }
-    .lede {
-      font-size: clamp(16px, 2.4vw, 20px);
-      color: var(--muted);
-      max-width: 60ch;
-      margin: 0 auto 30px;
-    }
-    .cta-row {
-      display: flex;
-      gap: 12px;
-      justify-content: center;
-      flex-wrap: wrap;
-    }
-    .cta-row .btn { padding: 14px 26px; font-size: 16px; }
+    .lede { font-size: clamp(16px, 2.3vw, 20px); color: var(--muted); max-width: 62ch; margin: 0 auto 34px; }
+    .lede strong { color: var(--ink); font-weight: 650; }
+    .cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .cta-row .btn { padding: 15px 28px; font-size: 16px; }
 
-    /* How it works */
-    .how {
-      padding: 48px 0 12px;
+    /* ---------- Hero pipeline ---------- */
+    .pipeline { margin: 64px auto 10px; max-width: 860px; padding: 0 8px; }
+    .pipe-rail { position: relative; height: 3px; background: var(--rail); border-radius: 2px; margin: 0 44px; overflow: hidden; }
+    .pipe-pulse {
+      position: absolute; top: 50%; left: 0; width: 84px; height: 3px; border-radius: 2px;
+      transform: translateY(-50%);
+      background: linear-gradient(90deg, transparent, var(--green), transparent);
+      animation: travel 5.5s linear infinite;
     }
-    .how h2 {
-      text-align: center;
-      font-size: clamp(20px, 3vw, 26px);
-      letter-spacing: -0.02em;
-      margin: 0 0 6px;
+    @keyframes travel { from { left: -84px; } to { left: 100%; } }
+    .pipe-stops { display: flex; justify-content: space-between; margin-top: -12px; }
+    .stop { flex: 1; text-align: center; position: relative; }
+    .stop .dot {
+      width: 21px; height: 21px; border-radius: 50%; margin: 0 auto;
+      background: var(--bg); border: 3px solid var(--rail); position: relative; z-index: 1;
+      transition: border-color .3s ease;
     }
-    .how .sub {
-      text-align: center;
-      color: var(--muted);
-      margin: 0 auto 34px;
-      max-width: 52ch;
-    }
-    .steps {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 18px;
+    .stop .dot.lit { border-color: var(--green); box-shadow: 0 0 0 5px color-mix(in srgb, var(--green) 16%, transparent); }
+    .stop .lbl { margin-top: 10px; font-size: 13.5px; font-weight: 700; letter-spacing: -0.01em; }
+    .stop .who { font-size: 11.5px; color: var(--faint); margin-top: 1px; }
+    .stop .gate {
+      display: inline-block; margin-top: 7px; font-size: 10.5px; font-weight: 700;
+      letter-spacing: .05em; text-transform: uppercase;
+      color: var(--green-600); background: color-mix(in srgb, var(--green) 14%, transparent);
+      border: 1px solid color-mix(in srgb, var(--green) 30%, transparent);
+      padding: 2px 8px; border-radius: 999px;
     }
     @media (max-width: 720px) {
-      .steps { grid-template-columns: 1fr; }
+      .pipeline { display: none; } /* the journey section tells this story on phones */
     }
-    .step {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 24px 22px;
-      box-shadow: var(--shadow);
+    @media (prefers-reduced-motion: reduce) {
+      .pipe-pulse { animation: none; display: none; }
+      .stop .dot { border-color: var(--green); }
     }
-    .step .n {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 34px;
-      height: 34px;
-      border-radius: 9px;
-      background: var(--navy);
-      color: #fff;
-      font-weight: 700;
-      font-size: 15px;
-      margin-bottom: 14px;
-    }
-    @media (prefers-color-scheme: dark) {
-      .step .n { background: var(--green); color: #0f1f14; }
-    }
-    .step h3 { margin: 0 0 6px; font-size: 17px; letter-spacing: -0.01em; }
-    .step p { margin: 0; color: var(--muted); font-size: 15px; }
 
-    /* Closing CTA */
-    .closer {
-      text-align: center;
-      padding: 56px 0 20px;
+    /* ---------- Sections ---------- */
+    section { padding: 88px 0; }
+    section.soft { background: var(--bg-soft); }
+    .kicker {
+      font-size: 12.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+      color: var(--green-600); margin: 0 0 12px;
     }
-    .closer h2 {
-      font-size: clamp(22px, 3.4vw, 30px);
-      letter-spacing: -0.02em;
-      margin: 0 0 10px;
-    }
-    .closer p { color: var(--muted); margin: 0 auto 24px; max-width: 48ch; }
+    h2 { font-size: clamp(26px, 4vw, 38px); letter-spacing: -0.025em; line-height: 1.12; margin: 0 0 16px; font-weight: 800; }
+    .sub { color: var(--muted); max-width: 62ch; margin: 0 0 40px; font-size: clamp(15.5px, 2vw, 17.5px); }
 
-    /* Footer */
-    footer {
-      flex-shrink: 0;
-      border-top: 1px solid var(--border);
-      margin-top: 40px;
-      padding: 26px 0;
+    /* ---------- What it is ---------- */
+    .premise-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 56px; align-items: start; }
+    @media (max-width: 860px) { .premise-grid { grid-template-columns: 1fr; gap: 28px; } }
+    .premise-copy p { color: var(--muted); margin: 0 0 18px; font-size: 16.5px; }
+    .premise-copy p strong { color: var(--ink); font-weight: 650; }
+    .motto {
+      border-left: 3px solid var(--green);
+      padding: 6px 0 6px 22px; margin: 28px 0 0;
+      font-size: clamp(20px, 2.8vw, 26px); font-weight: 750; letter-spacing: -0.02em; line-height: 1.3;
     }
-    .foot {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 14px;
-      flex-wrap: wrap;
-      color: var(--muted);
-      font-size: 14px;
+    .motto .dim { color: var(--muted); font-weight: 600; }
+    .split-cards { display: grid; gap: 14px; }
+    .split-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+      padding: 20px 22px; box-shadow: var(--shadow);
     }
+    .split-card h3 { margin: 0 0 4px; font-size: 15.5px; letter-spacing: -0.01em; display: flex; align-items: center; gap: 9px; }
+    .split-card h3 svg { color: var(--green-600); flex: none; }
+    .split-card p { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+    /* ---------- Journey ---------- */
+    .journey { max-width: 780px; margin: 0 auto; }
+    .jstep { display: grid; grid-template-columns: 64px 1fr; gap: 0 26px; position: relative; padding-bottom: 44px; }
+    .jstep:last-child { padding-bottom: 0; }
+    .jstep::before {
+      content: ""; position: absolute; left: 31px; top: 50px; bottom: -6px; width: 2px;
+      background: var(--rail);
+    }
+    .jstep:last-child::before { display: none; }
+    .jnum {
+      width: 64px; height: 64px; border-radius: 18px; flex: none;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow);
+      font-weight: 800; font-size: 20px; color: var(--muted);
+      position: relative; z-index: 1;
+    }
+    .jstep.gate .jnum { background: var(--green); border-color: var(--green); color: var(--green-ink); }
+    .jbody { padding-top: 6px; }
+    .jbody h3 { margin: 0 0 6px; font-size: 19px; letter-spacing: -0.015em; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .jbody p { margin: 0; color: var(--muted); font-size: 15.5px; max-width: 58ch; }
+    .gate-tag {
+      font-size: 10.5px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase;
+      color: var(--green-600); background: color-mix(in srgb, var(--green) 14%, transparent);
+      border: 1px solid color-mix(in srgb, var(--green) 30%, transparent);
+      padding: 3px 9px; border-radius: 999px;
+    }
+    @media (max-width: 560px) {
+      .jstep { grid-template-columns: 46px 1fr; gap: 0 16px; }
+      .jnum { width: 46px; height: 46px; border-radius: 13px; font-size: 16px; }
+      .jstep::before { left: 22px; top: 44px; }
+    }
+
+    /* ---------- Features ---------- */
+    .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    @media (max-width: 900px) { .feature-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 600px) { .feature-grid { grid-template-columns: 1fr; } }
+    .feature {
+      background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+      padding: 26px 24px; box-shadow: var(--shadow);
+    }
+    .feature .ic {
+      width: 42px; height: 42px; border-radius: 12px; margin-bottom: 16px;
+      display: flex; align-items: center; justify-content: center;
+      background: color-mix(in srgb, var(--green) 14%, transparent);
+      color: var(--green-600);
+    }
+    .feature h3 { margin: 0 0 7px; font-size: 16.5px; letter-spacing: -0.01em; }
+    .feature p { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+    /* ---------- Git band ---------- */
+    .gitband {
+      display: grid; grid-template-columns: 1fr 1.05fr; gap: 48px; align-items: center;
+      margin-top: 64px;
+    }
+    @media (max-width: 860px) { .gitband { grid-template-columns: 1fr; gap: 30px; } }
+    .gitband h3 { margin: 0 0 12px; font-size: clamp(21px, 3vw, 27px); letter-spacing: -0.02em; font-weight: 800; }
+    .gitband > div > p { color: var(--muted); font-size: 15.5px; margin: 0 0 18px; }
+    .gitband > div > p strong { color: var(--ink); font-weight: 650; }
+    .gitchecks { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+    .gitchecks li { display: flex; gap: 11px; color: var(--muted); font-size: 14.5px; align-items: flex-start; }
+    .gitchecks li strong { color: var(--ink); font-weight: 650; }
+    .gitchecks .tick {
+      flex: none; width: 20px; height: 20px; margin-top: 2px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      background: color-mix(in srgb, var(--green) 16%, transparent); color: var(--green-600);
+    }
+    .term {
+      background: #0c1626; border: 1px solid #23374f; border-radius: 14px;
+      box-shadow: var(--shadow); overflow: hidden;
+    }
+    .term-head {
+      display: flex; align-items: center; gap: 7px; padding: 11px 14px;
+      border-bottom: 1px solid #1c2f47;
+    }
+    .term-head i { width: 11px; height: 11px; border-radius: 50%; background: #2a4059; }
+    .term-head span { margin-left: 8px; font-size: 12px; color: #6e8095; font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
+    .term pre {
+      margin: 0; padding: 18px 20px; overflow-x: auto;
+      font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+      font-size: 13px; line-height: 1.75; color: #c9d6e4;
+    }
+    .term .p { color: #6e8095; }        /* prompt */
+    .term .c { color: #55708c; }        /* comment */
+    .term .g { color: #8fbe8c; }        /* green */
+
+    /* ---------- Who it's for ---------- */
+    .who-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    @media (max-width: 860px) { .who-grid { grid-template-columns: 1fr; } }
+    .who-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+      padding: 28px 26px; box-shadow: var(--shadow);
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .who-card .tag { font-size: 12px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; color: var(--green-600); }
+    .who-card h3 { margin: 0; font-size: 19px; letter-spacing: -0.015em; }
+    .who-card p { margin: 0; color: var(--muted); font-size: 15px; }
+
+    /* ---------- Principles ---------- */
+    .principles { background: var(--navy); color: #eef2f6; }
+    @media (prefers-color-scheme: dark) { .principles { background: var(--bg-soft); } }
+    .principles .kicker { color: var(--green); }
+    .principles h2 { color: inherit; }
+    .principles .sub { color: #9db0c2; }
+    .rules { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    @media (max-width: 860px) { .rules { grid-template-columns: 1fr; } }
+    .rule {
+      border: 1px solid rgba(157, 176, 194, .28); border-radius: 16px; padding: 24px 24px;
+      background: rgba(255, 255, 255, .03);
+    }
+    .rule blockquote { margin: 0 0 8px; font-size: 17.5px; font-weight: 750; letter-spacing: -0.015em; line-height: 1.35; }
+    .rule blockquote::before { content: "“"; color: var(--green); }
+    .rule blockquote::after { content: "”"; color: var(--green); }
+    .rule p { margin: 0; color: #9db0c2; font-size: 14px; }
+
+    /* ---------- Closer ---------- */
+    .closer { text-align: center; }
+    .closer h2 { margin-bottom: 12px; }
+    .closer .sub { margin: 0 auto 30px; text-align: center; }
+
+    /* ---------- Footer ---------- */
+    footer { border-top: 1px solid var(--border); padding: 28px 0; }
+    .foot { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 14px; }
     .foot a { text-decoration: none; }
     .foot a:hover { color: var(--green-600); }
-    .foot-links { display: flex; gap: 20px; flex-wrap: wrap; }
+    .foot-links { display: flex; gap: 22px; flex-wrap: wrap; }
 
-    @media (max-width: 480px) {
-      .nav .btn-ghost { display: none; } /* keep header lean on small screens */
+    /* ---------- Scroll reveal ---------- */
+    .reveal { opacity: 0; transform: translateY(18px); transition: opacity .6s ease, transform .6s ease; }
+    .reveal.in { opacity: 1; transform: none; }
+    @media (prefers-reduced-motion: reduce) {
+      .reveal { opacity: 1; transform: none; transition: none; }
     }
   </style>
 </head>
 <body>
-  <header>
+
+  <!-- ============ NAV ============ -->
+  <div class="topbar">
     <div class="wrap nav">
       <a class="brand" href="/" aria-label="Build Mill home">
-        <img src="/assets/buildmill-wordmark.png" alt="Build Mill" />
+        <img src="/assets/buildmill-wordmark.png" alt="buildmill.dev" />
       </a>
-      <nav class="nav-cta">
+      <nav class="nav-links" aria-label="Sections">
+        <a href="#what">What it is</a>
+        <a href="#how">How it works</a>
+        <a href="#features">Features</a>
+        <a href="#who">Who it's for</a>
+      </nav>
+      <div class="nav-cta">
         <a class="btn btn-ghost" href="https://app.buildmill.dev/login">Log in</a>
         <a class="btn btn-primary" href="https://app.buildmill.dev/signup">Sign up</a>
-      </nav>
+      </div>
     </div>
-  </header>
+  </div>
 
   <main>
-    <section class="hero wrap">
-      <img class="hero-logo" src="/assets/buildmill-logo.png" alt="Build Mill logo" />
-      <span class="eyebrow">AI software delivery · human in the loop</span>
-      <h1>Ship software with AI, <span class="accent">without losing control</span></h1>
-      <p class="lede">
-        Build Mill turns a user story into a pull request. Define what you want,
-        an AI provider does the work, and a human manager reviews and merges — every change,
-        on your terms.
-      </p>
-      <div class="cta-row">
-        <a class="btn btn-primary" href="https://app.buildmill.dev/signup">Get started free</a>
-        <a class="btn btn-ghost" href="https://app.buildmill.dev/login">Log in</a>
-      </div>
-    </section>
+    <!-- ============ HERO ============ -->
+    <section class="hero">
+      <div class="wrap">
+        <img class="hero-mark" src="/assets/buildmill-icon.png" alt="" aria-hidden="true" />
+        <span class="eyebrow">AI software factory · human at every gate</span>
+        <h1>AI writes the code.<br /><span class="accent">You make the calls.</span></h1>
+        <p class="lede">
+          Build Mill turns user stories into shipped software. An AI agent plans the work,
+          writes the code, and opens the pull request — and <strong>nothing merges, and nothing
+          ships, without you</strong>.
+        </p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="https://app.buildmill.dev/signup">Get started free</a>
+          <a class="btn btn-ghost" href="#how">See how it works</a>
+        </div>
 
-    <section class="how wrap">
-      <h2>How it works</h2>
-      <p class="sub">A delivery pipeline you steer — three steps from idea to merged code.</p>
-      <div class="steps">
-        <div class="step">
-          <div class="n">1</div>
-          <h3>Define</h3>
-          <p>Write a user story with acceptance criteria. That story is the single source of truth for the work.</p>
-        </div>
-        <div class="step">
-          <div class="n">2</div>
-          <h3>Build</h3>
-          <p>An AI provider picks up the story, does the work against your repo, and opens a pull request.</p>
-        </div>
-        <div class="step">
-          <div class="n">3</div>
-          <h3>Review &amp; merge</h3>
-          <p>You review the PR like any other, request changes, and merge when it's right. GitHub stays the source of truth.</p>
+        <div class="pipeline" aria-hidden="true">
+          <div class="pipe-rail"><div class="pipe-pulse"></div></div>
+          <div class="pipe-stops">
+            <div class="stop"><div class="dot lit"></div><div class="lbl">Story</div><div class="who">you write it</div></div>
+            <div class="stop"><div class="dot"></div><div class="lbl">Plan</div><div class="who">agent drafts it</div><span class="gate">you approve</span></div>
+            <div class="stop"><div class="dot"></div><div class="lbl">Code</div><div class="who">agent builds it</div></div>
+            <div class="stop"><div class="dot"></div><div class="lbl">Review</div><div class="who">diff + story</div><span class="gate">you merge</span></div>
+            <div class="stop"><div class="dot"></div><div class="lbl">Release</div><div class="who">UAT first</div><span class="gate">you promote</span></div>
+          </div>
         </div>
       </div>
     </section>
 
-    <section class="closer wrap">
-      <h2>Put your backlog to work.</h2>
-      <p>Create an account and turn your first story into a pull request.</p>
-      <div class="cta-row">
-        <a class="btn btn-primary" href="https://app.buildmill.dev/signup">Sign up</a>
-        <a class="btn btn-ghost" href="https://app.buildmill.dev/login">Log in</a>
+    <!-- ============ WHAT IT IS ============ -->
+    <section id="what" class="soft">
+      <div class="wrap premise-grid">
+        <div class="premise-copy reveal">
+          <p class="kicker">What it is</p>
+          <h2>A factory, not a free&#8209;for&#8209;all</h2>
+          <p>
+            AI coding agents are fast. Unsupervised, that speed is a liability: a wall of
+            unreviewed diffs, changes nobody asked for, and no record of who decided what.
+          </p>
+          <p>
+            Build Mill puts the agents inside a factory. Work is <strong>typed and written
+            down first</strong> — features get a PRD, stories get acceptance criteria. Plans
+            are <strong>approved before code</strong>. Every change arrives as a
+            <strong>pull request you review</strong>. Shipping is a <strong>release you sign
+            off</strong> — never a side effect of a merge.
+          </p>
+          <p>
+            Your repo stays yours: GitHub remains the source of truth for code, and the
+            factory records everything else — every run, every decision, every dollar.
+          </p>
+          <div class="motto">The agent proposes.<br /><span class="dim">The manager decides.</span></div>
+        </div>
+        <div class="split-cards reveal">
+          <div class="split-card">
+            <h3>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>
+              Work starts as words
+            </h3>
+            <p>A feature begins as a PRD you approve; stories carry acceptance criteria. The story is the single source of truth for the work.</p>
+          </div>
+          <div class="split-card">
+            <h3>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-6"/></svg>
+              Every gate is yours
+            </h3>
+            <p>Plan approval, PR review, release sign-off — three explicit decisions, each recorded. Rejections carry your comment into the retry.</p>
+          </div>
+          <div class="split-card">
+            <h3>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg>
+              Two systems of record
+            </h3>
+            <p>GitHub holds the code — branches, PRs, CI. The factory holds the work — items, runs, gates, costs — queryable, never reconstructed.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ HOW IT WORKS ============ -->
+    <section id="how">
+      <div class="wrap">
+        <p class="kicker reveal">How it works</p>
+        <h2 class="reveal">One story, start to shipped</h2>
+        <p class="sub reveal">Follow a single user story through the mill. Three of these steps are yours — they're the green ones.</p>
+
+        <div class="journey">
+          <div class="jstep reveal">
+            <div class="jnum">1</div>
+            <div class="jbody">
+              <h3>You write the story</h3>
+              <p>A user story with acceptance criteria — or a feature, which starts as a PRD and splits into stories once you approve it. Bugs and chores skip the ceremony.</p>
+            </div>
+          </div>
+          <div class="jstep reveal">
+            <div class="jnum">2</div>
+            <div class="jbody">
+              <h3>An agent plans it</h3>
+              <p>Dispatch is two-phase. First a plan run: the agent reads your repo and writes an implementation plan and a test plan. No code yet.</p>
+            </div>
+          </div>
+          <div class="jstep gate reveal">
+            <div class="jnum">3</div>
+            <div class="jbody">
+              <h3>You approve the plan <span class="gate-tag">your gate</span></h3>
+              <p>Before a line is written, you've seen how it will be written. Send it back and the retry carries your feedback — the next attempt is informed, not blind.</p>
+            </div>
+          </div>
+          <div class="jstep reveal">
+            <div class="jnum">4</div>
+            <div class="jbody">
+              <h3>The agent builds it</h3>
+              <p>It claims the work, checks out your repo, implements the approved plan, runs your project's gates, and pushes a branch. The factory opens the pull request.</p>
+            </div>
+          </div>
+          <div class="jstep gate reveal">
+            <div class="jnum">5</div>
+            <div class="jbody">
+              <h3>You review and merge <span class="gate-tag">your gate</span></h3>
+              <p>The diff and the original story sit side by side, gate results inline. Approve merges. Send back returns it with your comment attached to the next run.</p>
+            </div>
+          </div>
+          <div class="jstep reveal">
+            <div class="jnum">6</div>
+            <div class="jbody">
+              <h3>A release is cut</h3>
+              <p>Pinned to a commit and versioned by date. An agent writes the release notes from the real commit range and deploys that exact build to UAT — every release, no exceptions.</p>
+            </div>
+          </div>
+          <div class="jstep gate reveal">
+            <div class="jnum">7</div>
+            <div class="jbody">
+              <h3>You sign off, and promote <span class="gate-tag">your gate</span></h3>
+              <p>The release carries its test cases; a human runs them. Sign-off unlocks only when UAT deployed and every case passed — then promotion ships the <em>same pinned build</em> to production. Never a rebuild, never automatic.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ FEATURES ============ -->
+    <section id="features" class="soft">
+      <div class="wrap">
+        <p class="kicker reveal">Features</p>
+        <h2 class="reveal">Everything between the idea and the deploy</h2>
+        <p class="sub reveal">The parts of shipping that usually live in someone's head, made explicit — and auditable.</p>
+
+        <div class="feature-grid">
+          <div class="feature reveal">
+            <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>
+            <h3>Typed work items</h3>
+            <p>Features, bugs, chores, stories. A feature gets a PRD before any engineering, splits into stories, and completes itself when the last one merges.</p>
+          </div>
+          <div class="feature reveal">
+            <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3 8-8"/><path d="M21 12v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h11"/></svg></div>
+            <h3>Plans before code</h3>
+            <p>Every item is dispatched twice: a plan run you approve, then a code run that implements exactly that plan. Surprises get caught while they're still words.</p>
+          </div>
+          <div class="feature reveal">
+            <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="12" r="3"/><path d="M6 9v6M9 6c6 0 4 6 9 6"/></svg></div>
+            <h3>Any agent can work</h3>
+            <p>The autonomous runner grinds through the queue; your own IDE agent connects over MCP and claims the same work. First come, first served, under lease.</p>
+          </div>
+          <div class="feature reveal">
+            <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg></div>
+            <h3>Releases that don't drift</h3>
+            <p>A release pins a commit, goes to UAT first, and is immutable — if UAT fails, it's rejected and superseded. A version name means one build, forever.</p>
+          </div>
+          <div class="feature reveal">
+            <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></div>
+            <h3>Everything measured</h3>
+            <p>Every run records its seconds, lines, tokens, and dollars — rolled up per agent, per item, per day. Every gate decision lands in an audit trail.</p>
+          </div>
+          <div class="feature reveal">
+            <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+            <h3>Your keys stay yours</h3>
+            <p>Coding-agent credentials never leave your machine — the cloud can't touch your repo on its own. Cloud-side LLM keys are write-only; the UI sees four characters, ever.</p>
+          </div>
+        </div>
+
+        <div class="gitband" id="git">
+          <div class="reveal">
+            <h3>And it's still just git</h3>
+            <p>
+              Build Mill isn't a walled garden. The factory exposes a <strong>real git
+              remote</strong> — clone it with whatever you already use and work
+              <strong>side by side with the agents</strong>, in the same repo, on the same
+              queue. Push your branch and the factory opens the pull request itself.
+            </p>
+            <ul class="gitchecks">
+              <li>
+                <span class="tick"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l6 6L20 6"/></svg></span>
+                <span><strong>Any client that speaks git.</strong> Terminal, VS Code, JetBrains — if it can clone and push, it can work the factory.</span>
+              </li>
+              <li>
+                <span class="tick"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l6 6L20 6"/></svg></span>
+                <span><strong>No GitHub credentials on your machine.</strong> Your factory token is the password; the org's real GitHub credential is attached server-side and never reaches you.</span>
+              </li>
+              <li>
+                <span class="tick"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l6 6L20 6"/></svg></span>
+                <span><strong>Your AI coding tools plug in too.</strong> Claude Code — or any agent that speaks MCP — connects to the factory, claims work from the same queue, and hands its branch back like any other worker.</span>
+              </li>
+              <li>
+                <span class="tick"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l6 6L20 6"/></svg></span>
+                <span><strong>The guardrails hold for humans too.</strong> The remote polices every push — your claimed branch, forward-only, no history rewrites — unless you've been explicitly granted more.</span>
+              </li>
+            </ul>
+          </div>
+          <div class="term reveal" aria-label="Terminal example">
+            <div class="term-head"><i></i><i></i><i></i><span>you@your-machine</span></div>
+            <pre><span class="p">$</span> git clone https://api.buildmill.dev/git/acme/storefront
+<span class="c">Cloning into 'storefront'…</span>
+
+<span class="p">$</span> git switch story/checkout-empty-state
+<span class="c"># edit in the IDE you already love</span>
+
+<span class="p">$</span> git push
+<span class="g">✔ push accepted — the factory opens the PR</span></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ WHO IT'S FOR ============ -->
+    <section id="who">
+      <div class="wrap">
+        <p class="kicker reveal">Who it's for</p>
+        <h2 class="reveal">Built for the person holding the merge button</h2>
+        <p class="sub reveal">If you're accountable for what ships, Build Mill gives you AI throughput without asking you to lower the bar.</p>
+
+        <div class="who-grid">
+          <div class="who-card reveal">
+            <span class="tag">The solo builder</span>
+            <h3>More projects than hands</h3>
+            <p>You run a portfolio of repos alone. Dispatch stories across all of them and spend your day where you're irreplaceable: deciding what's good enough to merge.</p>
+          </div>
+          <div class="who-card reveal">
+            <span class="tag">The engineering lead</span>
+            <h3>Throughput without the trust fall</h3>
+            <p>You want agents on the backlog, not in charge of it. Every change still crosses your desk as a PR with the story beside it — your review bar, at machine speed.</p>
+          </div>
+          <div class="who-card reveal">
+            <span class="tag">The team adopting AI</span>
+            <h3>Guardrails from day one</h3>
+            <p>Approvals, audit trails, releases with sign-off — the process questions answered before the first agent touches the repo, not after the first incident.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PRINCIPLES ============ -->
+    <section class="principles">
+      <div class="wrap">
+        <p class="kicker reveal">House rules</p>
+        <h2 class="reveal">Rules the factory can't break</h2>
+        <p class="sub reveal">Not settings. Invariants — enforced in the system, tested in the code.</p>
+        <div class="rules">
+          <div class="rule reveal">
+            <blockquote>Nothing merges on an agent's own authority.</blockquote>
+            <p>An agent can produce a branch and open a PR. Only an explicit approval from you moves it further.</p>
+          </div>
+          <div class="rule reveal">
+            <blockquote>A story never moves forward on an agent's word.</blockquote>
+            <p>Work advances on the record of which commit landed it — claim six, commit four, and four move. The system doesn't take the agent's word for it.</p>
+          </div>
+          <div class="rule reveal">
+            <blockquote>A version name means exactly one build, forever.</blockquote>
+            <p>Releases are immutable and pinned to a commit. Production gets the build UAT tested — bit for bit, or not at all.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ CLOSER ============ -->
+    <section class="closer">
+      <div class="wrap">
+        <h2 class="reveal">Put your backlog to work.</h2>
+        <p class="sub reveal">Write your first story tonight. Review the pull request in the morning.</p>
+        <div class="cta-row reveal">
+          <a class="btn btn-primary" href="https://app.buildmill.dev/signup">Get started free</a>
+          <a class="btn btn-ghost" href="https://app.buildmill.dev/login">Log in</a>
+        </div>
       </div>
     </section>
   </main>
@@ -336,8 +651,24 @@
   </footer>
 
   <script>
-    // Keep the copyright year current without a build step.
     document.getElementById("year").textContent = new Date().getFullYear();
+
+    // Scroll reveal — no-op under reduced motion (CSS already shows everything).
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+    }, { threshold: 0.12 });
+    document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+
+    // Hero pipeline: light stops in sequence (decorative only).
+    const stops = document.querySelectorAll(".pipe-stops .stop .dot");
+    if (stops.length && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      let i = 0;
+      setInterval(() => {
+        stops.forEach((d) => d.classList.remove("lit"));
+        stops[i % stops.length].classList.add("lit");
+        i++;
+      }, 1100);
+    }
   </script>
 </body>
 </html>
