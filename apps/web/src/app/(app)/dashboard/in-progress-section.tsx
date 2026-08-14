@@ -154,8 +154,8 @@ export function InProgressSection({
       {rows.length === 0 ? (
         <EmptyState
           icon={Bot}
-          title="Nothing is being worked on"
-          description="No agent is holding a run right now. Dispatch something below and it will appear here with the agent that claimed it."
+          title="Factory's idle"
+          description="Dispatch something below."
         />
       ) : (
         <div className="min-w-0 rounded-lg border">
