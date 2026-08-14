@@ -24,21 +24,21 @@ first (requested 2026-08-13), then the residue carried out of Phases 85–89:
 
 | Order | Story | Title | Status |
 |---|---|---|---|
-| 1 | [us-91.1](us-91.1-the-tab-is-named-for-what-you-do-there.md) | The tab is named for what you do there | Testing |
+| 1 | [us-91.1](us-91.1-the-tab-is-named-for-what-you-do-there.md) | The tab is named for what you do there | Completed |
 | 2 | [us-91.2](us-91.2-dispatch-opens-with-what-is-already-running.md) | Dispatch opens with what is already running | Testing |
-| 3 | [us-91.3](us-91.3-an-agent-at-work-has-a-door-to-its-cli.md) | An agent at work has a door to its CLI | Testing |
-| 4 | [us-91.4](us-91.4-things-to-do-groups-by-project.md) | Dispatch groups by project, and a project folds away | Testing |
+| 3 | [us-91.3](us-91.3-an-agent-at-work-has-a-door-to-its-cli.md) | An agent at work has a door to its CLI | Completed |
+| 4 | [us-91.4](us-91.4-things-to-do-groups-by-project.md) | Dispatch groups by project, and a project folds away | Completed |
 | 5 | [us-91.5](us-91.5-the-status-filter-is-a-set-not-a-choice.md) | The status filter is a set, not a single choice | Testing |
 | 6 | [us-91.6](us-91.6-the-test-library-is-a-table-you-can-page.md) | The test library is a table you can page through | Testing |
-| 7 | [us-91.7](us-91.7-reports-are-bug-reports-and-live-under-activity.md) | Reports are Bug Reports, and they live under Activity | Testing |
-| 8 | [us-91.8](us-91.8-the-activity-feed-pages-ten-at-a-time.md) | The activity feed pages ten at a time | Testing |
+| 7 | [us-91.7](us-91.7-reports-are-bug-reports-and-live-under-activity.md) | Reports are Bug Reports, and they live under Activity | Completed |
+| 8 | [us-91.8](us-91.8-the-activity-feed-pages-ten-at-a-time.md) | The activity feed pages ten at a time | Completed |
 | 9 | [us-91.9](us-91.9-a-project-card-says-which-build-is-live.md) | A project card says which build is live | Testing |
-| 10 | [us-91.10](us-91.10-superadmin-is-four-menus-not-one-drawer.md) | SuperAdmin is four menus, not one drawer | Testing |
-| 11 | [us-91.11](us-91.11-an-agents-work-is-measured-in-seconds.md) | An agent's work is measured in seconds | Testing |
-| 12 | [us-91.12](us-91.12-the-team-page-opens-with-three-numbers.md) | The team page opens with three numbers | Testing |
-| 13 | [us-91.13](us-91.13-a-count-on-a-coloured-button-must-be-readable.md) | A count on a coloured button must be readable | Testing |
-| 14 | [us-91.14](us-91.14-every-item-shows-what-it-cost.md) | Every item shows what it cost | Testing |
-| 15 | [us-91.15](us-91.15-a-notification-says-what-happened-and-goes-there.md) | A notification says what happened, and goes there | Testing |
+| 10 | [us-91.10](us-91.10-superadmin-is-four-menus-not-one-drawer.md) | SuperAdmin is four menus, not one drawer | Completed |
+| 11 | [us-91.11](us-91.11-an-agents-work-is-measured-in-seconds.md) | An agent's work is measured in seconds | Completed |
+| 12 | [us-91.12](us-91.12-the-team-page-opens-with-three-numbers.md) | The team page opens with three numbers | Completed |
+| 13 | [us-91.13](us-91.13-a-count-on-a-coloured-button-must-be-readable.md) | A count on a coloured button must be readable | Completed |
+| 14 | [us-91.14](us-91.14-every-item-shows-what-it-cost.md) | Every item shows what it cost | Completed |
+| 15 | [us-91.15](us-91.15-a-notification-says-what-happened-and-goes-there.md) | A notification says what happened, and goes there | Completed |
 | 16 | [us-91.16](us-91.16-the-build-stamp-names-the-build.md) | The build stamp names the build | Testing |
 | 17 | [us-91.17](us-91.17-the-workspace-picker-travels.md) | The workspace picker travels, and says when it's switching | Testing |
 | 18 | [us-91.18](us-91.18-merged-work-asks-to-be-released.md) | Merged work asks to be released | New |
