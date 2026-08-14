@@ -49,7 +49,7 @@ export function LoginForm() {
           );
           return;
         }
-        router.push("/dashboard");
+        router.push("/workbench");
         router.refresh();
       } else {
         const { data, error } = await supabase.auth.signUp({
@@ -61,7 +61,7 @@ export function LoginForm() {
           return;
         }
         if (data.session) {
-          router.push("/dashboard");
+          router.push("/workbench");
           router.refresh();
         } else {
           setNotice("Check your email to confirm your account, then sign in.");

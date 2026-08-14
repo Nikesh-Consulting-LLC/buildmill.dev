@@ -15,7 +15,7 @@ import { WebVitalsReporter } from "@/components/web-vitals-reporter";
 import { GlobalProgressBar } from "@/components/global-progress-bar";
 import { Toaster } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { getPendingCount } from "./dashboard/data";
+import { getPendingCount } from "./workbench/data";
 
 export default async function AppLayout({
   children,

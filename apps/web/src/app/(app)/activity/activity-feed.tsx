@@ -84,7 +84,7 @@ function rowHref(row: ActivityRow): string | null {
     return `/projects/${row.projectId}/audit`;
   if (row.kind === "learning" && row.projectId)
     return `/projects/${row.projectId}`;
-  if (row.kind === "guideline") return "/dashboard";
+  if (row.kind === "guideline") return "/workbench";
   if (row.kind === "tests") return "/tests";
   if (row.kind === "epic" && row.projectId) return `/projects/${row.projectId}`;
   return null;

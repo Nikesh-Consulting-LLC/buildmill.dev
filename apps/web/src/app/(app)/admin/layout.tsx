@@ -19,7 +19,7 @@ export default async function AdminLayout({
   // than leaving a stale menu item that 404s or a reachable page the nav
   // no longer shows.
   const activeOrg = await resolveActiveOrg(supabase, user.id);
-  if (!isActiveOrgPlatformAdmin(activeOrg)) redirect("/dashboard");
+  if (!isActiveOrgPlatformAdmin(activeOrg)) redirect("/workbench");
 
   return <>{children}</>;
 }

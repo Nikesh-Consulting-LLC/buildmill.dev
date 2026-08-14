@@ -80,7 +80,7 @@ export function PlanReviewActions({ issueId }: { issueId: string }) {
     // closed — and that re-render is what produced the 404. The
     // destination is a dynamic server route; navigating fetches it
     // fresh without help.
-    router.push(`/issues/${issueId}?from=dashboard`);
+    router.push(`/issues/${issueId}?from=workbench`);
 
   }
 
@@ -97,7 +97,7 @@ export function PlanReviewActions({ issueId }: { issueId: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ comment: comment.trim() }),
       });
-      router.push(`/issues/${issueId}?from=dashboard`);
+      router.push(`/issues/${issueId}?from=workbench`);
 
     } catch (e) {
       setError((e as Error).message);

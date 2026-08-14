@@ -235,7 +235,7 @@ export const PIPELINE_STAGES: HelpStage[] = [
     key: "plan",
     label: "Plan",
     actor: "agent",
-    href: "/dashboard",
+    href: "/workbench",
     linkLabel: "Things to Do",
   },
   {

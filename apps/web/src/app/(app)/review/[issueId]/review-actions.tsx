@@ -158,7 +158,7 @@ export function ReviewActions({
     // closed — and that re-render is what produced the 404. The
     // destination is a dynamic server route; navigating fetches it
     // fresh without help.
-    router.push(`/issues/${issueId}?from=dashboard`);
+    router.push(`/issues/${issueId}?from=workbench`);
 
     } catch (e) {
       setError((e as Error).message);
@@ -180,7 +180,7 @@ export function ReviewActions({
           direction: conflictDirection.trim() || undefined,
         }),
       });
-      router.push(`/issues/${issueId}?from=dashboard`);
+      router.push(`/issues/${issueId}?from=workbench`);
     } catch (e) {
       setError((e as Error).message);
       setBusy(null);
@@ -197,7 +197,7 @@ export function ReviewActions({
       await apiFetch(`/api/v1/runs/${runId}/finish-approval`, {
         method: "POST",
       });
-      router.push(`/issues/${issueId}?from=dashboard`);
+      router.push(`/issues/${issueId}?from=workbench`);
     } catch (e) {
       setError((e as Error).message);
       setBusy(null);
@@ -217,7 +217,7 @@ export function ReviewActions({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ comment: comment.trim() }),
       });
-      router.push(`/issues/${issueId}?from=dashboard`);
+      router.push(`/issues/${issueId}?from=workbench`);
 
     } catch (e) {
       setError((e as Error).message);

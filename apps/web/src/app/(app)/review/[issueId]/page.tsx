@@ -74,7 +74,7 @@ export default async function ReviewDetailPage({
   // have been deleted when in truth they just finished it. Send them to
   // the work item, where the consequence of the decision is visible.
   if (!["in-review", "plan-review", "prd-review"].includes(issue.status)) {
-    redirect(`/issues/${issue.id}?from=dashboard`);
+    redirect(`/issues/${issue.id}?from=workbench`);
   }
 
   const project = issue.projects as unknown as {
@@ -171,14 +171,14 @@ export default async function ReviewDetailPage({
     // A feature can sit in prd-review with its draft already superseded
     // (a send-back redraft in flight). Nothing to review yet — send the
     // manager back to the work item rather than showing an empty gate.
-    if (!prd) redirect(`/issues/${issue.id}?panel=prd&from=dashboard`);
+    if (!prd) redirect(`/issues/${issue.id}?panel=prd&from=workbench`);
 
     return (
       <div className="flex w-full flex-col gap-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <Link
-              href="/dashboard"
+              href="/workbench"
               className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
             >
               <ArrowLeft className="size-3" />
@@ -236,7 +236,7 @@ export default async function ReviewDetailPage({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <Link
-              href="/dashboard"
+              href="/workbench"
               className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
             >
               <ArrowLeft className="size-3" />
@@ -320,7 +320,7 @@ export default async function ReviewDetailPage({
 
   // US-14.3: same rule — at a code gate with no succeeded run to show,
   // the work item is the honest destination, not a 404.
-  if (!run) redirect(`/issues/${issue.id}?from=dashboard`);
+  if (!run) redirect(`/issues/${issue.id}?from=workbench`);
 
   // US-13.11: an in-flight verification run disables re-dispatch.
   const { data: activeTestRuns } = await supabase
@@ -467,7 +467,7 @@ export default async function ReviewDetailPage({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <Link
-            href="/dashboard"
+            href="/workbench"
             className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="size-3" />

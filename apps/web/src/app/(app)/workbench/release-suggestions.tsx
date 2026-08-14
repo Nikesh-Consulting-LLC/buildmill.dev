@@ -51,7 +51,7 @@ function ItemRows({
             </span>
           )}
           <Link
-            href={`/issues/${i.id}?from=dashboard`}
+            href={`/issues/${i.id}?from=workbench`}
             className="min-w-0 truncate hover:underline"
           >
             {i.title}

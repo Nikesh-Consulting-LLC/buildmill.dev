@@ -518,7 +518,7 @@ export default async function IssueDetailPage({
   // US-25.5: back goes where you CAME FROM, not where the item lives. The
   // origin rides in the URL (`?from=`) rather than document.referrer, so it
   // survives a reload and a shared link. `from` is either a known shortcut
-  // ("work-items", "dashboard") or an arbitrary path — any caller can send
+  // ("work-items", "workbench") or an arbitrary path — any caller can send
   // the user back to the exact page they left, paired with `?fromLabel=` for
   // the link text, instead of every new caller needing a code change here.
   // A story opened cold (no `from`) falls back to its parent feature — the
@@ -527,8 +527,11 @@ export default async function IssueDetailPage({
   const breadcrumb =
     from === "work-items"
       ? { href: "/issues", label: "Work Items" }
-      : from === "dashboard"
-        ? { href: "/dashboard", label: "Things to Do" }
+      : // "dashboard" is the pre-rename value — links in old tabs, bookmarks
+        // and agent instructions still carry it, and they should land the
+        // same place the new name does.
+        from === "workbench" || from === "dashboard"
+        ? { href: "/workbench", label: "Workbench" }
         : from && from.startsWith("/")
           ? { href: from, label: fromLabel || "Back" }
           : parent

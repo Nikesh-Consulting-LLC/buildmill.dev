@@ -38,7 +38,7 @@ export default function AppError({
       actions={
         <>
           {retry && <Button onClick={() => retry()}>Try again</Button>}
-          <Button variant="outline" render={<Link href="/dashboard" />}>
+          <Button variant="outline" render={<Link href="/workbench" />}>
             Back to Things to Do
           </Button>
         </>

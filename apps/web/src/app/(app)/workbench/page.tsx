@@ -16,7 +16,7 @@ import { ClarificationsCard } from "./clarifications-card";
 import { ParkedRunsCard } from "./parked-runs-card";
 import { IncidentsCard } from "./incidents-card";
 import { MobilePreamble } from "./mobile-preamble";
-import { DashboardTabs } from "./dashboard-tabs";
+import { WorkbenchTabs } from "./workbench-tabs";
 import { loadThingsToDo } from "./data";
 
 export default async function ThingsToDoPage() {
@@ -111,7 +111,7 @@ export default async function ThingsToDoPage() {
   return (
     <div className="flex w-full flex-col gap-6">
       <PageHeader
-        title="Workdesk"
+        title="Workbench"
         description="What the factory is doing, and what it needs from you."
         actions={
           createProject && (
@@ -213,7 +213,7 @@ export default async function ThingsToDoPage() {
           Everything above stays pinned so an alert or an open question is never
           hidden behind a tab. */}
       <Suspense fallback={null}>
-        <DashboardTabs
+        <WorkbenchTabs
           groups={fGroups}
           recommendations={fRecommendations}
           refreshes={fRefreshes}

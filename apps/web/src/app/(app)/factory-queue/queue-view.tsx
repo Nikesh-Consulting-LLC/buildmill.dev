@@ -21,7 +21,7 @@ import { RUN_KIND_LABELS, type RunKind } from "@/lib/run-kinds";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { RequeueButton } from "../dashboard/requeue-button";
+import { RequeueButton } from "../workbench/requeue-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
 import { CancelRunDialog } from "@/components/cancel-run-dialog";
@@ -610,7 +610,7 @@ export function QueueView({
                       <span className="font-mono">{row.feature.displayId}</span>
                     )}
                     <Link
-                      href={`/issues/${row.feature.id}?from=dashboard`}
+                      href={`/issues/${row.feature.id}?from=workbench`}
                       className="truncate font-medium text-foreground hover:underline"
                     >
                       {row.feature.title}

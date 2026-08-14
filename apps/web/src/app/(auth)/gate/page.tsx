@@ -30,7 +30,7 @@ export default async function GatePage() {
     .select("approved_at")
     .eq("id", user.id)
     .maybeSingle();
-  if (profile?.approved_at) redirect("/dashboard");
+  if (profile?.approved_at) redirect("/workbench");
 
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center-safe gap-6 overflow-y-auto bg-muted/40 p-4">

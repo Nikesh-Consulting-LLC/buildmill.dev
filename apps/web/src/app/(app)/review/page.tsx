@@ -4,5 +4,5 @@ import { redirect } from "next/navigation";
  * every pending review with more context. Detail pages (/review/[issueId])
  * remain the place where approving happens. */
 export default function ReviewPage() {
-  redirect("/dashboard");
+  redirect("/workbench");
 }

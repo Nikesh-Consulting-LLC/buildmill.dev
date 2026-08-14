@@ -1718,7 +1718,7 @@ def _valid_uuid(value: str) -> bool:
 # Presence does not need write durability on the authentication path: the
 # only thing that reads `workers.last_seen_at` is the "is it online?"
 # judgement, and that window is WORKER_ONLINE_MINUTES = 5 (see
-# apps/web/.../dashboard/data.ts). No database function reads it at all —
+# apps/web/.../workbench/data.ts). No database function reads it at all —
 # checked against pg_proc on prod, 2026-08-12. Writing at most once every
 # 15 seconds therefore leaves a 20x margin: a worker that is alive can never
 # be reported offline because its heartbeat was throttled (us-87.7 AC3).

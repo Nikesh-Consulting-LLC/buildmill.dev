@@ -54,7 +54,7 @@ export function ChangePasswordForm({ userId }: { userId: string }) {
         setError(flagError.message);
         return;
       }
-      router.push("/dashboard");
+      router.push("/workbench");
       router.refresh();
     } finally {
       setLoading(false);

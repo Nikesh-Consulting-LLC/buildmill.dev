@@ -163,7 +163,7 @@ export function ClarificationsCard({
           <div key={item.id} className="grid gap-2 rounded-lg border p-3">
             <div className="min-w-0">
               <Link
-                href={`/issues/${item.issueId}?from=dashboard`}
+                href={`/issues/${item.issueId}?from=workbench`}
                 className="block truncate text-sm font-medium hover:underline"
               >
                 {item.issueTitle}

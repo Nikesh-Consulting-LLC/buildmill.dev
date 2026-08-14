@@ -10,7 +10,10 @@
 // bar on a phone (us-92.1).
 
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 
+import { StatusBadge } from "@/components/status-badge";
+import { TypeBadge, type IssueType } from "@/components/type-badge";
 import { InProgressSection } from "./in-progress-section";
 import { ReleaseSuggestions } from "./release-suggestions";
 import { WaitingList } from "./waiting-list";
@@ -23,7 +26,7 @@ import type {
   TodoGroup,
 } from "./data";
 
-export function DashboardTabs({
+export function WorkbenchTabs({
   groups,
   recommendations,
   refreshes,
@@ -67,17 +70,61 @@ export function DashboardTabs({
         interactiveByPrincipal={interactiveByPrincipal}
       />
 
+      {/* Manager's note (2026-08-14): the one-line summary hid the queue —
+          show the first five items, and a door to the full queue. The
+          factory-queue page stays the authority on worker-pull order. */}
       {queued.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          <Link
-            href="/factory-queue"
-            className="underline-offset-4 hover:text-foreground hover:underline"
-          >
-            {queued.length} queued
-            {held > 0 && ` · ${held} waiting on something`}
-          </Link>{" "}
-          in the factory, unclaimed.
-        </p>
+        <section className="grid gap-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Queued ({queued.length}){held > 0 && ` · ${held} waiting on something`}
+          </h3>
+          <div className="min-w-0 divide-y rounded-lg border">
+            {queued.slice(0, 5).map((i) => (
+              <div key={i.id} className="flex min-w-0 items-center gap-2 px-3 py-2">
+                <TypeBadge type={i.type as IssueType} />
+                {i.displayId && (
+                  <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                    {i.displayId}
+                  </span>
+                )}
+                <Link
+                  href={`/issues/${i.id}?from=workbench`}
+                  className="min-w-0 truncate text-sm hover:underline"
+                >
+                  {i.title}
+                </Link>
+                <span className="ml-auto flex shrink-0 items-center gap-2">
+                  <span className="hidden max-w-40 truncate text-xs text-muted-foreground sm:inline">
+                    {i.project}
+                  </span>
+                  {i.holdReason ? (
+                    // US-39.4's words, on demand — a held row says it is held
+                    // and the reason is one hover away.
+                    <span
+                      title={i.holdReason}
+                      className="rounded-full border border-amber-300 px-2 py-0.5 text-[11px] text-amber-700 dark:border-amber-900 dark:text-amber-400"
+                    >
+                      held
+                    </span>
+                  ) : (
+                    <StatusBadge status="queued" />
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div>
+            <Link
+              href="/factory-queue"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm font-medium transition-colors hover:bg-accent"
+            >
+              {queued.length > 5
+                ? `All ${queued.length} in Factory Queue`
+                : "Open Factory Queue"}
+              <ArrowRight className="size-4" />
+            </Link>
+          </div>
+        </section>
       )}
 
       {/* US-91.18: work that is built and waiting on a cut. */}

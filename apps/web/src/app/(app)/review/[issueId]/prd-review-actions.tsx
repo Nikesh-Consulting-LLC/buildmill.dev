@@ -162,7 +162,7 @@ export function PrdReviewActions({
     // closed — and that re-render is what produced the 404. The
     // destination is a dynamic server route; navigating fetches it
     // fresh without help.
-    router.push(`/issues/${issueId}?panel=stories&from=dashboard`);
+    router.push(`/issues/${issueId}?panel=stories&from=workbench`);
 
   }
 
@@ -179,7 +179,7 @@ export function PrdReviewActions({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ comment: comment.trim() }),
       });
-      router.push(`/issues/${issueId}?from=dashboard`);
+      router.push(`/issues/${issueId}?from=workbench`);
 
     } catch (e) {
       setError((e as Error).message);

@@ -12,7 +12,7 @@
 
 import Link from "next/link";
 import { useRouter } from "@/lib/router-with-progress";
-import { Bot, ChevronRight, TerminalSquare } from "lucide-react";
+import { Bot, ChevronRight, Cog, TerminalSquare } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,6 +40,23 @@ import type { AgentItem, FeatureRunInfo } from "./data";
 
 /** Muted numeric cell — durations and ages line up in a column. */
 const NUM = "font-mono text-xs tabular-nums text-muted-foreground";
+
+/** Manager's note (2026-08-14): a quiet visual that an agent is at work. One
+ *  slow turn every five seconds, muted — motion as a hum, not a siren. It
+ *  stops when the worker has gone silent: this section already refuses to
+ *  call silence work (the Heard column ambers), and an animation must not
+ *  claim what the data doesn't. Still entirely under `prefers-reduced-motion`. */
+function WorkingGear({ turning }: { turning: boolean }) {
+  return (
+    <Cog
+      aria-hidden
+      className={cn(
+        "size-3.5 shrink-0 text-muted-foreground/60",
+        turning && "animate-[spin_5s_linear_infinite] motion-reduce:animate-none"
+      )}
+    />
+  );
+}
 
 /**
  * One thing an agent is holding right now.
@@ -274,6 +291,7 @@ function LiveCard({ row, hasCli }: { row: LiveRow; hasCli: boolean }) {
     <div className="grid gap-2 rounded-lg border p-3">
       <span className="flex min-w-0 flex-col gap-1">
         <span className="flex min-w-0 items-center gap-2">
+          <WorkingGear turning={!row.isSilent} />
           <TypeBadge type={row.type as IssueType} />
           {row.displayId && (
             <span className="shrink-0 font-mono text-xs text-muted-foreground">
@@ -287,7 +305,7 @@ function LiveCard({ row, hasCli }: { row: LiveRow; hasCli: boolean }) {
           )}
         </span>
         <Link
-          href={`/issues/${row.id}?from=dashboard`}
+          href={`/issues/${row.id}?from=workbench`}
           className="font-medium hover:underline"
         >
           {row.title}
@@ -355,7 +373,7 @@ function LiveTableRow({
               </span>
             )}
             <Link
-              href={`/issues/${row.id}?from=dashboard`}
+              href={`/issues/${row.id}?from=workbench`}
               className="min-w-0 truncate hover:underline"
             >
               {row.title}
@@ -377,13 +395,16 @@ function LiveTableRow({
             pill on a row titled In Progress whenever the status write lags
             the claim — the same contradiction us-86.2 removed from the
             factory tab. */}
-        {row.stories != null ? (
-          <Badge variant="secondary" title="One run, building the whole feature">
-            Building {row.stories}
-          </Badge>
-        ) : (
-          <StatusBadge status="running" />
-        )}
+        <span className="flex items-center gap-1.5">
+          <WorkingGear turning={!row.isSilent} />
+          {row.stories != null ? (
+            <Badge variant="secondary" title="One run, building the whole feature">
+              Building {row.stories}
+            </Badge>
+          ) : (
+            <StatusBadge status="running" />
+          )}
+        </span>
       </TableCell>
       <TableCell className="max-w-52 truncate text-xs">
         {row.workerPrincipalId ? (

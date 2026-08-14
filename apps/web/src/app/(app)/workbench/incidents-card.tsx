@@ -117,7 +117,7 @@ export function IncidentsCard({ incidents }: { incidents: IncidentRow[] }) {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                   <Link
-                    href={`/issues/${inc.issueId}?from=dashboard`}
+                    href={`/issues/${inc.issueId}?from=workbench`}
                     className="min-w-0 truncate font-medium underline-offset-4 hover:underline"
                   >
                     {inc.title}
