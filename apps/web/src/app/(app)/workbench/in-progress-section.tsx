@@ -366,6 +366,7 @@ function LiveTableRow({
       <TableCell className={cn("w-full max-w-0 min-w-0", indent && "pl-6")}>
         <span className="flex min-w-0 flex-col">
           <span className="flex min-w-0 items-center gap-2">
+            <WorkingGear turning={!row.isSilent} />
             <TypeBadge type={row.type as IssueType} />
             {row.displayId && (
               <span className="shrink-0 font-mono text-xs text-muted-foreground">
@@ -395,16 +396,13 @@ function LiveTableRow({
             pill on a row titled In Progress whenever the status write lags
             the claim — the same contradiction us-86.2 removed from the
             factory tab. */}
-        <span className="flex items-center gap-1.5">
-          <WorkingGear turning={!row.isSilent} />
-          {row.stories != null ? (
-            <Badge variant="secondary" title="One run, building the whole feature">
-              Building {row.stories}
-            </Badge>
-          ) : (
-            <StatusBadge status="running" />
-          )}
-        </span>
+        {row.stories != null ? (
+          <Badge variant="secondary" title="One run, building the whole feature">
+            Building {row.stories}
+          </Badge>
+        ) : (
+          <StatusBadge status="running" />
+        )}
       </TableCell>
       <TableCell className="max-w-52 truncate text-xs">
         {row.workerPrincipalId ? (
