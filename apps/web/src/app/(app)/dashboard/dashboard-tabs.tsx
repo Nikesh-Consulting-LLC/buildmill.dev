@@ -22,6 +22,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { StatusBadge, type IssueStatus } from "@/components/status-badge";
 import { TypeBadge, type IssueType } from "@/components/type-badge";
 import { AgentText } from "@/components/agent-text";
@@ -30,6 +37,7 @@ import { cn } from "@/lib/utils";
 import { money } from "@/lib/budget";
 import { RequeueButton } from "./requeue-button";
 import { InProgressSection } from "./in-progress-section";
+import { ReleaseSuggestions } from "./release-suggestions";
 import { WaitingList } from "./waiting-list";
 import { formatDuration, formatMinutes } from "./duration";
 import type { GuidelineRecommendation } from "./guideline-recommendations-group";
@@ -40,6 +48,7 @@ import type {
   DeployRow,
   FeatureRunInfo,
   ReleaseRow,
+  ReleaseSuggestion,
   TodoGroup,
 } from "./data";
 
@@ -90,6 +99,7 @@ export function DashboardTabs({
   agentItems,
   featureRuns,
   interactiveByPrincipal,
+  releaseSuggestions,
   completedItems,
   releaseRows,
   deployRows,
@@ -104,6 +114,8 @@ export function DashboardTabs({
   featureRuns: Record<string, FeatureRunInfo>;
   /** US-91.3: which claiming agents run the `interactive` module. */
   interactiveByPrincipal: Record<string, boolean>;
+  /** US-91.18: projects holding merged work no release has shipped. */
+  releaseSuggestions: ReleaseSuggestion[];
   completedItems: CompletedItem[];
   releaseRows: ReleaseRow[];
   deployRows: DeployRow[];
@@ -114,6 +126,20 @@ export function DashboardTabs({
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
+
+  // US-92.1: one source for both the desktop bar and the phone select.
+  const TAB_ITEMS: { key: TabKey; label: string }[] = [
+    { key: "waiting", label: "Dispatch" },
+    { key: "factory", label: "In the factory" },
+    { key: "completed", label: "Completed" },
+    { key: "releases", label: "Releases" },
+  ];
+  const counts: Record<TabKey, number> = {
+    waiting: waitingCount,
+    factory: agentItems.length,
+    completed: completedItems.length,
+    releases: releaseRows.length + deployRows.length,
+  };
 
   const urlTab = params.get("tab");
   const active: TabKey = isTabKey(urlTab) ? urlTab : "waiting";
@@ -135,7 +161,36 @@ export function DashboardTabs({
     <Tabs value={active} onValueChange={select}>
       {/* The list is w-fit by default, so on a narrow window the last tabs are
           clipped and unreachable. Let the bar itself scroll instead. */}
-      <TabsList className="h-9 max-w-full overflow-x-auto">
+      {/* US-92.1: measured at 375px the four triggers total 555px in a 375px
+          bar, so two of them sat off-screen behind a scroll gesture with no
+          scrollbar and no affordance — hidden, in practice. Below `md` the
+          same four become a control that fits, counts intact, because the
+          counts are why the manager looks. */}
+      <div className="md:hidden">
+        <Select
+          items={TAB_ITEMS.map((t) => ({
+            value: t.key,
+            label: `${t.label} · ${counts[t.key]}`,
+          }))}
+          value={active}
+          onValueChange={(v) => {
+            if (typeof v === "string") select(v);
+          }}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {TAB_ITEMS.map((t) => (
+              <SelectItem key={t.key} value={t.key}>
+                {t.label} · {counts[t.key]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <TabsList className="hidden h-9 max-w-full overflow-x-auto md:inline-flex">
         {/* US-91.1: named for the act, not the state. Every row on this tab
             ends in one of two clicks — dispatch it, or approve it and let it
             dispatch — so "Dispatch" says what the tab is for, and lets
@@ -172,6 +227,8 @@ export function DashboardTabs({
           featureRuns={featureRuns}
           interactiveByPrincipal={interactiveByPrincipal}
         />
+        {/* US-91.18: work that is built and waiting on a cut. */}
+        <ReleaseSuggestions suggestions={releaseSuggestions} />
         <WaitingList
           groups={groups}
           recommendations={recommendations}

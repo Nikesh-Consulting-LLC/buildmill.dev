@@ -41,8 +41,8 @@ first (requested 2026-08-13), then the residue carried out of Phases 85–89:
 | 15 | [us-91.15](us-91.15-a-notification-says-what-happened-and-goes-there.md) | A notification says what happened, and goes there | Completed |
 | 16 | [us-91.16](us-91.16-the-build-stamp-names-the-build.md) | The build stamp names the build | Testing |
 | 17 | [us-91.17](us-91.17-the-workspace-picker-travels.md) | The workspace picker travels, and says when it's switching | Testing |
-| 18 | [us-91.18](us-91.18-merged-work-asks-to-be-released.md) | Merged work asks to be released | New |
-| 19 | [us-92.1](us-92.1-the-tabs-fit-the-phone.md) | Things to Do fits in a hand | New |
+| 18 | [us-91.18](us-91.18-merged-work-asks-to-be-released.md) | Merged work asks to be released | Testing |
+| 19 | [us-92.1](us-92.1-the-tabs-fit-the-phone.md) | Things to Do fits in a hand | Testing |
 | 20 | [us-92.2](us-92.2-one-filter-button-not-eleven-pills.md) | One filter button, not eleven pills | New |
 | 21 | [us-92.3](us-92.3-a-release-is-a-card-with-its-buttons-showing.md) | A release is a card, with its buttons showing | New |
 | 22 | [us-92.4](us-92.4-a-test-case-says-what-it-is.md) | A test case row says what it is | New |

@@ -364,6 +364,33 @@ export type ThingsToDoData = WaitingData & {
   projects: ProjectChip[];
   /** US-37.3: projects whose budget is exhausted, so no new run will start. */
   exhaustedBudgets: ExhaustedBudget[];
+  /** US-91.18: projects with merged work that no release has shipped. */
+  releaseSuggestions: ReleaseSuggestion[];
+};
+
+/** US-91.18: a project holding merged work that no release has shipped.
+ *
+ * The claim is deliberately the cheap one: work items whose status moved to
+ * `merged` since the last release that actually SHIPPED. `previous_release`
+ * in the API means exactly that — a rejected or rolled-back release leaves
+ * its commits unreleased, so the next cut includes them again.
+ *
+ * The truth of what a cut contains is the commit range, which only
+ * `GET /projects/{id}/releases/preview` can answer, and it costs GitHub calls
+ * per project — precisely what Phase 87 removed from page loads. So this is a
+ * prompt, the dialog is the authority, and the card says so. */
+export type ReleaseSuggestion = {
+  projectId: string;
+  project: string;
+  /** The version this is measured from; null when nothing has ever shipped. */
+  sinceVersion: string | null;
+  /** The first few items, for a claim that can be checked. */
+  items: { id: string; displayId: string | null; title: string; type: string }[];
+  total: number;
+  /** True when `total` hit the query cap and is an understatement. */
+  capped: boolean;
+  /** Why a cut would be refused right now — no button when set. */
+  blocker: string | null;
 };
 
 /** US-37.3: a project that cannot start work because its budget is spent.
@@ -1844,9 +1871,112 @@ export async function loadThingsToDo(
     }
   }
 
+
+  // US-91.18: merged work that is sitting unreleased. Three org-scoped reads,
+  // none of them per project and none of them touching GitHub.
+  const releaseSuggestions: ReleaseSuggestion[] = [];
+  {
+    const MERGED_CAP = 500;
+    const [{ data: relRows }, { data: projRows }, { data: mergedRows }] =
+      await Promise.all([
+        supabase
+          .from("releases")
+          .select("project_id, version, status, released_at")
+          .eq("org_id", orgId)
+          .in("status", [
+            "released",
+            "queued",
+            "running",
+            "uat-deployed",
+            "uat-signed-off",
+            "promoting",
+          ]),
+        supabase
+          .from("projects")
+          .select("id, name, release_uat_deployment_id")
+          .eq("org_id", orgId)
+          .is("archived_at", null),
+        supabase
+          .from("issues")
+          .select(
+            "id, title, type, item_no, sub_no, project_id, status_changed_at, epics(number)"
+          )
+          .eq("org_id", orgId)
+          .eq("status", "merged")
+          .is("abandoned_at", null)
+          .order("status_changed_at", { ascending: false })
+          .limit(MERGED_CAP),
+      ]);
+
+    type Rel = {
+      project_id: string;
+      version: string;
+      status: string;
+      released_at: string | null;
+    };
+    const rels = (relRows ?? []) as Rel[];
+    // The last release that actually shipped, per project.
+    const shipped = new Map<string, Rel>();
+    for (const r of rels) {
+      if (r.status !== "released") continue;
+      const prev = shipped.get(r.project_id);
+      if (!prev || (r.released_at ?? "") > (prev.released_at ?? ""))
+        shipped.set(r.project_id, r);
+    }
+    const inFlight = new Map<string, Rel>();
+    for (const r of rels) {
+      if (r.status === "released") continue;
+      if (!inFlight.has(r.project_id)) inFlight.set(r.project_id, r);
+    }
+
+    const merged = (mergedRows ?? []) as unknown as IssueRow[] &
+      { status_changed_at: string | null; project_id: string }[];
+    const cappedOverall = (mergedRows ?? []).length >= MERGED_CAP;
+
+    for (const proj of (projRows ?? []) as {
+      id: string;
+      name: string;
+      release_uat_deployment_id: string | null;
+    }[]) {
+      const last = shipped.get(proj.id) ?? null;
+      const cutoff = last?.released_at ?? null;
+      const mine = merged.filter(
+        (i) =>
+          i.project_id === proj.id &&
+          (!cutoff || (i.status_changed_at ?? "") > cutoff)
+      );
+      if (!mine.length) continue;
+
+      // AC5: a project that cannot cut is told why, and offered no button.
+      const flight = inFlight.get(proj.id);
+      const blocker = flight
+        ? `${flight.version} is still in flight (${flight.status})`
+        : !proj.release_uat_deployment_id
+          ? "no UAT deployment is designated for releases"
+          : null;
+
+      releaseSuggestions.push({
+        projectId: proj.id,
+        project: proj.name,
+        sinceVersion: last?.version ?? null,
+        items: mine.slice(0, 3).map((i) => ({
+          id: i.id,
+          displayId: issueDisplayId(i),
+          title: i.title,
+          type: i.type,
+        })),
+        total: mine.length,
+        capped: cappedOverall,
+        blocker,
+      });
+    }
+    releaseSuggestions.sort((a, b) => a.project.localeCompare(b.project));
+  }
+
   return {
     ...waiting,
     releaseRows,
+    releaseSuggestions,
     agentItems,
     featureRuns,
     interactiveByPrincipal,
