@@ -19,8 +19,9 @@ phases did *not* prove, the Phase 78 known gaps, and the
 retired-unbuilt-do-not-re-propose list — is in
 [APPLICATION.md → Delivery history](../APPLICATION.md#delivery-history).
 
-Thirty stories are open, all drafted but unbuilt — Phase 91's usability work
-first (requested 2026-08-13), then the residue carried out of Phases 85–89:
+Thirty-one stories are open, all drafted but unbuilt — Phase 91's usability
+work first (requested 2026-08-13), then Phase 92's phone work, the public
+site (requested 2026-08-14), and the residue carried out of Phases 85–89:
 
 | Order | Story | Title | Status |
 |---|---|---|---|
@@ -43,16 +44,17 @@ first (requested 2026-08-13), then the residue carried out of Phases 85–89:
 | 17 | [us-91.17](us-91.17-the-workspace-picker-travels.md) | The workspace picker travels, and says when it's switching | Testing |
 | 18 | [us-91.18](us-91.18-merged-work-asks-to-be-released.md) | Merged work asks to be released | Testing |
 | 19 | [us-92.1](us-92.1-the-tabs-fit-the-phone.md) | Things to Do fits in a hand | Testing |
-| 20 | [us-92.2](us-92.2-one-filter-button-not-eleven-pills.md) | One filter button, not eleven pills | New |
-| 21 | [us-92.3](us-92.3-a-release-is-a-card-with-its-buttons-showing.md) | A release is a card, with its buttons showing | New |
-| 22 | [us-92.4](us-92.4-a-test-case-says-what-it-is.md) | A test case row says what it is | New |
-| 23 | [us-92.5](us-92.5-the-report-is-the-row.md) | On Bug Reports, the report is the row | New |
-| 24 | [us-92.6](us-92.6-a-project-card-leads-with-its-state.md) | A project card leads with its state | New |
-| 25 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
-| 26 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
-| 27 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
-| 28 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
-| 29 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+| 20 | [us-92.2](us-92.2-one-filter-button-not-eleven-pills.md) | One filter button, not eleven pills | Testing |
+| 21 | [us-92.3](us-92.3-a-release-is-a-card-with-its-buttons-showing.md) | A release is a card, with its buttons showing | Testing |
+| 22 | [us-92.4](us-92.4-a-test-case-says-what-it-is.md) | A test case row says what it is | Testing |
+| 23 | [us-92.5](us-92.5-the-report-is-the-row.md) | On Bug Reports, the report is the row | Testing |
+| 24 | [us-92.6](us-92.6-a-project-card-leads-with-its-state.md) | A project card leads with its state | Testing |
+| 25 | [us-93.1](us-93.1-the-front-door-tells-the-story.md) | The front door tells the story | New |
+| 26 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
+| 27 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
+| 28 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
+| 29 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
+| 30 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
 
 **Phase 91 — Usability: the dashboard reads like the job** (drafted 2026-08-13,
 the manager's own list). Nothing here is broken; all of it is friction the
@@ -84,6 +86,17 @@ carry the commit and the build time rather than a tag-relative string that goes
 stale without looking stale — and that now names no tag at all, the repository
 having been re-created with none. us-91.13 is a legibility fix: a grey quota
 count on an orange button.
+
+**Phase 93 — The public site** (drafted 2026-08-14, the manager's request).
+buildmill.dev today hands a visitor a login form; the public site behind it
+(`apps/public`) is one fold and a three-card "how it works" — a placeholder
+wearing the brand. us-93.1 replaces it with a single immersive page that
+tells the story of Build Mill top to bottom: what it is in one repeatable
+sentence, what it does as a journey (one story followed from written to
+promoted, every human gate on the way), what the features are, and who it
+is for — every claim true of the shipped product, zero dependencies, no
+external requests, and the root domain actually landing there rather than
+on the app's login.
 
 **Phase 85 residue — us-85.3** (drafted 2026-08-12) closes the loop on the incident
 that motivated us-85.1's workspace verification. A run that fails on a broken bench —

@@ -137,6 +137,156 @@ export function ReportsHub({
     };
   }, []);
 
+  /** US-92.5: the expanded detail, shared by the table row and the phone
+   *  card — two copies of this would drift, and it is the substance of a
+   *  report. */
+  const detailFor = (report: ReportRow) => {
+    const automated = report.source === "automated";
+    const project = projects.find((p) => p.id === report.project_id);
+    const deployment = deployments.find((d) => d.id === report.deployment_id);
+    const decided = !OPEN_STATUSES.includes(report.status);
+    void project;
+    void decided;
+    return (
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap gap-1.5 text-xs">
+                    <Badge variant="outline">
+                      {automated ? "Crash" : "User report"}
+                    </Badge>
+                    {/* Where it happened moved here off the row: it is a
+                        URL, and a URL never truncates usefully. */}
+                    <Badge variant="outline" className="font-mono">
+                      {origin(report)}
+                    </Badge>
+                    {automated && (
+                      <Badge variant="outline">
+                        {report.occurrence_count} occurrences
+                      </Badge>
+                    )}
+                    <Badge variant="outline">
+                      first seen {when(report.first_seen_at)}
+                    </Badge>
+                    <Badge variant="outline">
+                      last seen {when(report.last_seen_at)}
+                    </Badge>
+                    {deployment?.environment && (
+                      <Badge variant="outline">{deployment.environment}</Badge>
+                    )}
+                  </div>
+
+                  {(report.reporter_name || report.reporter_email) && (
+                    <p className="text-sm text-muted-foreground">
+                      Reported by {report.reporter_name ?? "someone"}
+                      {report.reporter_email
+                        ? ` · ${report.reporter_email}`
+                        : ""}
+                    </p>
+                  )}
+
+                  {report.message && (
+                    <p className="text-sm whitespace-pre-wrap">
+                      {report.message}
+                    </p>
+                  )}
+
+                  {report.stack_trace && (
+                    <pre className="max-h-80 overflow-auto rounded-md border bg-background p-3 font-mono text-xs whitespace-pre-wrap">
+                      {report.stack_trace}
+                    </pre>
+                  )}
+
+                  {report.context &&
+                    Object.keys(report.context).length > 0 && (
+                      <pre className="max-h-56 overflow-auto rounded-md border bg-background p-3 font-mono text-xs whitespace-pre-wrap">
+                        {JSON.stringify(report.context, null, 2)}
+                      </pre>
+                    )}
+
+                  <div className="flex flex-wrap gap-2">
+                    {/* US-79.1: promotion is not offered on the wiring
+                        check — it is the pipe's own test ping. */}
+                    {isWiringCheck(report) && !report.promoted_issue_id ? (
+                      <span className="self-center text-xs text-muted-foreground">
+                        This is the self-monitoring wiring check, not a
+                        defect — there is nothing to promote.
+                      </span>
+                    ) : report.promoted_issue_id ? (
+                      <Button
+                        size="sm"
+                        render={
+                          <Link
+                            href={`/issues/${report.promoted_issue_id}?from=${encodeURIComponent("/reports")}&fromLabel=${encodeURIComponent("Reports")}`}
+                          />
+                        }
+                      >
+                        Open the work item this became
+                      </Button>
+                    ) : (
+                      <PromoteDialog
+                        report={report}
+                        epics={epics}
+                        onPromoted={(issueId) =>
+                          setReports((current) =>
+                            current.map((r) =>
+                              r.id === report.id
+                                ? {
+                                    ...r,
+                                    status: "promoted",
+                                    promoted_issue_id: issueId,
+                                  }
+                                : r,
+                            ),
+                          )
+                        }
+                      />
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        copyText(asMarkdown(report), "Details")
+                      }
+                    >
+                      <ClipboardCopy className="mr-1 size-4" /> Copy details
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        copyText(
+                          JSON.stringify(report.context ?? {}, null, 2),
+                          "Context",
+                        )
+                      }
+                    >
+                      <ClipboardCopy className="mr-1 size-4" /> Copy context
+                    </Button>
+                    {report.status === "ignored" ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy === report.id}
+                        onClick={() => setStatus(report, "new")}
+                      >
+                        <RotateCcw className="mr-1 size-4" /> Reopen
+                      </Button>
+                    ) : (
+                      !decided && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={busy === report.id}
+                          onClick={() => setStatus(report, "ignored")}
+                        >
+                          Ignore
+                        </Button>
+                      )
+                    )}
+                  </div>
+                </div>
+    );
+  };
+
   const visible = useMemo(
     () =>
       reports
@@ -233,7 +383,114 @@ export function ReportsHub({
           left and truncate. The detail extract that used to sit here made the
           table wider than the screen for no gain: it repeats the first line of
           the message, which the expansion shows in full. */}
-      <div className="w-full overflow-hidden rounded-lg border">
+      {/* US-92.5: cards below `md`. Triage happens on a phone, when a
+          notification lands — so the report's own words lead, and the project
+          comes back. */}
+      <div className="grid gap-2 md:hidden">
+        {visible.map((report) => {
+          const isOpen = expanded.has(report.id);
+          const project = projects.find((p) => p.id === report.project_id);
+          const deployment = deployments.find(
+            (d) => d.id === report.deployment_id,
+          );
+          const automated = report.source === "automated";
+          const decided = !OPEN_STATUSES.includes(report.status);
+          return (
+            <div key={`m-${report.id}`} className="grid gap-2 rounded-lg border p-3">
+              <button
+                type="button"
+                onClick={() => toggle(report.id)}
+                className="grid gap-1.5 text-left"
+              >
+                <span className="flex min-w-0 items-start gap-2">
+                  {/* US-79.1: a wiring check stays a confirmation, never the
+                      crash treatment — in the card as in the table. */}
+                  {isWiringCheck(report) ? (
+                    <PlugZap className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                  ) : automated ? (
+                    <Bug className="mt-0.5 size-4 shrink-0 text-destructive" />
+                  ) : (
+                    <MessageSquare className="mt-0.5 size-4 shrink-0 text-blue-600" />
+                  )}
+                  <span className="min-w-0 flex-1 text-sm font-medium">
+                    {report.title}
+                  </span>
+                  <ChevronRight
+                    className={cn(
+                      "mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform",
+                      isOpen && "rotate-90",
+                    )}
+                  />
+                </span>
+
+                {/* AC2/AC3: which app reported it, and the rest as words. */}
+                <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span
+                      className="size-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: projectColor(report.project_id) }}
+                    />
+                    <span className="truncate">{project?.name ?? "Unknown"}</span>
+                    {deployment?.name && (
+                      <span className="truncate">· {deployment.name}</span>
+                    )}
+                  </span>
+                  <span>
+                    · {when(automated ? report.last_seen_at : report.created_at)}
+                  </span>
+                  {automated && <span>· seen {report.occurrence_count}×</span>}
+                </span>
+
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <StatusPill status={report.status} />
+                  {isWiringCheck(report) && (
+                    <Badge variant="outline">wiring check</Badge>
+                  )}
+                  {kind(report) && <Badge variant="outline">{kind(report)}</Badge>}
+                </span>
+              </button>
+
+              {/* AC4: the actions are buttons on the card, at a tap size. */}
+              <div className="flex flex-wrap gap-2 border-t pt-2 [&_button]:h-10 [&_button]:flex-1">
+                <Button
+                  variant="outline"
+                  aria-label="Copy the report"
+                  onClick={() => copyText(asErrorText(report), "Report")}
+                >
+                  <ClipboardCopy className="size-4" />
+                  Copy
+                </Button>
+                {report.status === "ignored" ? (
+                  <Button
+                    variant="outline"
+                    disabled={busy === report.id}
+                    onClick={() => setStatus(report, "new")}
+                  >
+                    <RotateCcw className="size-4" />
+                    Reopen
+                  </Button>
+                ) : (
+                  !decided && (
+                    <Button
+                      variant="outline"
+                      disabled={busy === report.id}
+                      onClick={() => setStatus(report, "ignored")}
+                    >
+                      Ignore
+                    </Button>
+                  )
+                )}
+              </div>
+
+              {isOpen && (
+                <div className="border-t pt-2">{detailFor(report)}</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="hidden w-full overflow-hidden rounded-lg border md:block">
         <Table className="w-full table-fixed">
           <TableHeader>
             <TableRow>
@@ -369,142 +626,7 @@ export function ReportsHub({
                     className="bg-muted/30 hover:bg-muted/30"
                   >
                     <TableCell colSpan={7} className="p-4">
-                      <div className="flex flex-col gap-3">
-                        <div className="flex flex-wrap gap-1.5 text-xs">
-                          <Badge variant="outline">
-                            {automated ? "Crash" : "User report"}
-                          </Badge>
-                          {/* Where it happened moved here off the row: it is a
-                              URL, and a URL never truncates usefully. */}
-                          <Badge variant="outline" className="font-mono">
-                            {origin(report)}
-                          </Badge>
-                          {automated && (
-                            <Badge variant="outline">
-                              {report.occurrence_count} occurrences
-                            </Badge>
-                          )}
-                          <Badge variant="outline">
-                            first seen {when(report.first_seen_at)}
-                          </Badge>
-                          <Badge variant="outline">
-                            last seen {when(report.last_seen_at)}
-                          </Badge>
-                          {deployment?.environment && (
-                            <Badge variant="outline">{deployment.environment}</Badge>
-                          )}
-                        </div>
-
-                        {(report.reporter_name || report.reporter_email) && (
-                          <p className="text-sm text-muted-foreground">
-                            Reported by {report.reporter_name ?? "someone"}
-                            {report.reporter_email
-                              ? ` · ${report.reporter_email}`
-                              : ""}
-                          </p>
-                        )}
-
-                        {report.message && (
-                          <p className="text-sm whitespace-pre-wrap">
-                            {report.message}
-                          </p>
-                        )}
-
-                        {report.stack_trace && (
-                          <pre className="max-h-80 overflow-auto rounded-md border bg-background p-3 font-mono text-xs whitespace-pre-wrap">
-                            {report.stack_trace}
-                          </pre>
-                        )}
-
-                        {report.context &&
-                          Object.keys(report.context).length > 0 && (
-                            <pre className="max-h-56 overflow-auto rounded-md border bg-background p-3 font-mono text-xs whitespace-pre-wrap">
-                              {JSON.stringify(report.context, null, 2)}
-                            </pre>
-                          )}
-
-                        <div className="flex flex-wrap gap-2">
-                          {/* US-79.1: promotion is not offered on the wiring
-                              check — it is the pipe's own test ping. */}
-                          {isWiringCheck(report) && !report.promoted_issue_id ? (
-                            <span className="self-center text-xs text-muted-foreground">
-                              This is the self-monitoring wiring check, not a
-                              defect — there is nothing to promote.
-                            </span>
-                          ) : report.promoted_issue_id ? (
-                            <Button
-                              size="sm"
-                              render={
-                                <Link
-                                  href={`/issues/${report.promoted_issue_id}?from=${encodeURIComponent("/reports")}&fromLabel=${encodeURIComponent("Reports")}`}
-                                />
-                              }
-                            >
-                              Open the work item this became
-                            </Button>
-                          ) : (
-                            <PromoteDialog
-                              report={report}
-                              epics={epics}
-                              onPromoted={(issueId) =>
-                                setReports((current) =>
-                                  current.map((r) =>
-                                    r.id === report.id
-                                      ? {
-                                          ...r,
-                                          status: "promoted",
-                                          promoted_issue_id: issueId,
-                                        }
-                                      : r,
-                                  ),
-                                )
-                              }
-                            />
-                          )}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              copyText(asMarkdown(report), "Details")
-                            }
-                          >
-                            <ClipboardCopy className="mr-1 size-4" /> Copy details
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              copyText(
-                                JSON.stringify(report.context ?? {}, null, 2),
-                                "Context",
-                              )
-                            }
-                          >
-                            <ClipboardCopy className="mr-1 size-4" /> Copy context
-                          </Button>
-                          {report.status === "ignored" ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={busy === report.id}
-                              onClick={() => setStatus(report, "new")}
-                            >
-                              <RotateCcw className="mr-1 size-4" /> Reopen
-                            </Button>
-                          ) : (
-                            !decided && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={busy === report.id}
-                                onClick={() => setStatus(report, "ignored")}
-                              >
-                                Ignore
-                              </Button>
-                            )
-                          )}
-                        </div>
-                      </div>
+                      {detailFor(report)}
                     </TableCell>
                   </TableRow>
                 ),

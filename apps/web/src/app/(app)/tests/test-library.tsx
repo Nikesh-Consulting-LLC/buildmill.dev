@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "@/lib/router-with-progress";
 import {
   Archive,
@@ -288,7 +289,7 @@ export function TestLibrary({
       </div>
 
       {paged.length > 0 && (
-        <label className="flex w-fit cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
+        <label className="hidden w-fit cursor-pointer items-center gap-1.5 text-xs text-muted-foreground md:flex">
           <Checkbox
             checked={allSelected}
             indeterminate={someSelected && !allSelected}
@@ -348,7 +349,160 @@ export function TestLibrary({
         />
       ) : (
         <>
-          <div className="min-w-0 rounded-lg border">
+          {/* US-92.4: cards below `md` — a table cannot separate five kinds
+              of fact at 375px, and the sub-line ran them together. */}
+          <div className="grid gap-2 md:hidden">
+            {paged.map((c) => {
+              const isOpen = openCase.has(c.id);
+              const hasProse = !!(c.steps || c.expected_result);
+              const issue = c.issue_id ? issueTitle.get(c.issue_id) : null;
+              return (
+                <div
+                  key={`m-${c.id}`}
+                  className={cn(
+                    "grid gap-2 rounded-lg border p-3",
+                    c.status === "abandoned" && "opacity-60"
+                  )}
+                >
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      className="mt-1"
+                      checked={selected.has(c.id)}
+                      onCheckedChange={() => toggleSelected(c.id)}
+                      aria-label={`Select ${c.title}`}
+                    />
+                    {/* AC1: the title is the identity of a case and never
+                        the thing that truncates. */}
+                    <p className="min-w-0 flex-1 text-sm font-medium">
+                      {c.title}
+                    </p>
+                  </div>
+
+                  {/* AC2: separated, not concatenated. */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                      {c.source === "agent" ? (
+                        <Bot className="size-3.5" />
+                      ) : (
+                        <User className="size-3.5" />
+                      )}
+                      {c.source}
+                    </span>
+                    {c.execution === "automated" ? (
+                      <Badge
+                        variant="secondary"
+                        title={c.spec_ref ?? undefined}
+                        className="gap-1"
+                      >
+                        <Zap className="size-3" />
+                        {c.suite_id
+                          ? (suiteName.get(c.suite_id) ?? "automated")
+                          : "automated"}
+                      </Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        manual
+                      </span>
+                    )}
+                    {c.always_on_uat && (
+                      <Badge variant="outline">every UAT</Badge>
+                    )}
+                    {c.test_types.map((t) => (
+                      <Badge key={t} variant="secondary">
+                        {t}
+                      </Badge>
+                    ))}
+                    {c.environments.map((e) => (
+                      <Badge key={e} variant="outline">
+                        {e}
+                      </Badge>
+                    ))}
+                    {c.status === "abandoned" && (
+                      <Badge variant="outline">abandoned</Badge>
+                    )}
+                  </div>
+
+                  {/* AC3: the work item, named and linked, on its own line. */}
+                  {c.issue_id && issue && (
+                    <Link
+                      href={`/issues/${c.issue_id}`}
+                      className="truncate text-xs text-muted-foreground underline-offset-4 hover:underline"
+                    >
+                      Covers: {issue}
+                    </Link>
+                  )}
+
+                  <div className="flex flex-wrap gap-2 border-t pt-2 [&_button]:h-10 [&_button]:flex-1">
+                    {hasProse && (
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          setOpenCase((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(c.id)) next.delete(c.id);
+                            else next.add(c.id);
+                            return next;
+                          })
+                        }
+                        aria-expanded={isOpen}
+                      >
+                        <ChevronRight
+                          className={cn(
+                            "size-4 transition-transform",
+                            isOpen && "rotate-90"
+                          )}
+                        />
+                        Steps
+                      </Button>
+                    )}
+                    <TestCaseDialog
+                      orgId={orgId}
+                      projectId={projectId}
+                      issues={issues}
+                      modules={modules}
+                      testCase={c}
+                    />
+                    <Button
+                      variant="outline"
+                      disabled={busyId === c.id}
+                      onClick={() =>
+                        setCaseStatus(
+                          c.id,
+                          c.status === "active" ? "abandoned" : "active"
+                        )
+                      }
+                    >
+                      {c.status === "active" ? (
+                        <Archive className="size-4" />
+                      ) : (
+                        <ArchiveRestore className="size-4" />
+                      )}
+                    </Button>
+                  </div>
+
+                  {isOpen && hasProse && (
+                    <div className="grid gap-2 border-t pt-2 text-sm">
+                      {c.steps && (
+                        <pre className="rounded-md bg-muted/50 p-3 text-xs leading-5 whitespace-pre-wrap">
+                          {c.steps}
+                        </pre>
+                      )}
+                      {c.expected_result && (
+                        <p className="text-muted-foreground">
+                          <span className="font-medium text-foreground">
+                            Expected:{" "}
+                          </span>
+                          {c.expected_result}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="hidden min-w-0 rounded-lg border md:block">
             <Table>
               <TableHeader>
                 <TableRow>

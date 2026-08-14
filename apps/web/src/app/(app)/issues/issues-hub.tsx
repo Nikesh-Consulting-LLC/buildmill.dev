@@ -15,6 +15,7 @@ import {
 } from "@/lib/issue-status-filter";
 import { AbandonedIssueList } from "./abandoned-issue-list";
 import { IssueSearchInput } from "./issue-search-input";
+import { MobileFilters } from "./mobile-filters";
 import {
   IssueViews,
   LensSwitch,
@@ -233,10 +234,24 @@ export function IssuesHub({
           initialQuery={searchQuery}
         />
         {!showAbandoned && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <TypeFilters value={typeFilter} onChange={setTypeFilter} />
-            <StatusFilter value={statusFilter} onChange={changeStatusFilter} />
-          </div>
+          <>
+            {/* US-92.2: eleven controls before any content at 375px. Below
+                `md` they become one button that says how many are active;
+                search stays outside it, because finding a known item by name
+                is the commonest phone task on this page. */}
+            <div className="md:hidden">
+              <MobileFilters
+                typeFilter={typeFilter}
+                onTypeChange={setTypeFilter}
+                statusFilter={statusFilter}
+                onStatusChange={changeStatusFilter}
+              />
+            </div>
+            <div className="hidden flex-wrap items-center gap-1.5 md:flex">
+              <TypeFilters value={typeFilter} onChange={setTypeFilter} />
+              <StatusFilter value={statusFilter} onChange={changeStatusFilter} />
+            </div>
+          </>
         )}
       </div>
 

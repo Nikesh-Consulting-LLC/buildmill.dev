@@ -364,6 +364,8 @@ export default async function ProjectsPage({
                       </Link>
                       <ProjectSpend project={p} spend={spendByProject.get(p.id)} />
                     </CardHeader>
+                    {/* US-92.6: `order` puts deployments above the roster
+                        below `md` without a second copy of either block. */}
                     <CardContent className="flex flex-col gap-2 text-sm text-muted-foreground">
                       <div className="flex items-center justify-between gap-2">
                         <span className="flex min-w-0 items-center gap-2">
@@ -389,39 +391,62 @@ export default async function ProjectsPage({
                         />
                       </div>
 
-                      {/* US-10.15: people & agents assigned to this project. */}
-                      <div className="border-t pt-2">
-                        <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
-                          People &amp; agents
-                        </div>
-                        {assigned.length === 0 ? (
-                          /* US-31.10: name which half is empty — "no one
-                             assigned" was wrong in two different ways. */
-                          <p className="text-xs text-muted-foreground">
-                            No agents granted, and no one assigned to its work
-                            items.
-                          </p>
-                        ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {assigned.map((a) => (
-                              <span
-                                key={a.id}
-                                className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs text-foreground"
-                              >
-                                {a.kind === "agent" ? (
-                                  <Bot className="size-3 text-muted-foreground" />
-                                ) : (
-                                  <User className="size-3 text-muted-foreground" />
-                                )}
-                                {a.name}
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                      {/* US-10.15: people & agents assigned to this project.
+                          US-92.6: below `md` the chips fold behind their own
+                          count — three rows of them is a screenful spent on
+                          what a manager rarely acts on from a phone. The
+                          chips themselves are written once and placed twice,
+                          so the two cannot drift. */}
+                      <div className="order-2 border-t pt-2 md:order-none">
+                        {(() => {
+                          const chips =
+                            assigned.length === 0 ? (
+                              /* US-31.10: name which half is empty — "no one
+                                 assigned" was wrong in two different ways. */
+                              <p className="text-xs text-muted-foreground">
+                                No agents granted, and no one assigned to its
+                                work items.
+                              </p>
+                            ) : (
+                              <div className="flex flex-wrap gap-1">
+                                {assigned.map((a) => (
+                                  <span
+                                    key={a.id}
+                                    className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs text-foreground"
+                                  >
+                                    {a.kind === "agent" ? (
+                                      <Bot className="size-3 text-muted-foreground" />
+                                    ) : (
+                                      <User className="size-3 text-muted-foreground" />
+                                    )}
+                                    {a.name}
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          return (
+                            <>
+                              <details className="md:hidden">
+                                <summary className="cursor-pointer list-none text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                                  {assigned.length === 0
+                                    ? "No people or agents"
+                                    : `${assigned.length} people & agents`}
+                                </summary>
+                                <div className="mt-1.5">{chips}</div>
+                              </details>
+                              <div className="hidden md:block">
+                                <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                                  People &amp; agents
+                                </div>
+                                {chips}
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
 
                       {/* US-10.15: compact deployment cards. */}
-                      <div className="border-t pt-2">
+                      <div className="order-1 border-t pt-2 md:order-none">
                         <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
                           <Rocket className="size-3" /> Deployments
                         </div>
