@@ -113,7 +113,7 @@ export default async function IssueDetailPage({
   const { data: runs } = await supabase
     .from("runs")
     .select(
-      "id, created_at, status, kind, error, lines_added, lines_removed, files_changed, change_breakdown, pushed_head_sha, pushed_at, claimed_at, last_heartbeat_at, worker_id, stop_requested_at, cancel_reason, workers(name)"
+      "id, created_at, status, kind, error, lines_added, lines_removed, files_changed, change_breakdown, pushed_head_sha, pushed_at, claimed_at, last_heartbeat_at, worker_id, stop_requested_at, cancel_reason, work_seconds, cost_usd, workers(name)"
     )
     .eq("issue_id", issue.id)
     .order("created_at", { ascending: false });

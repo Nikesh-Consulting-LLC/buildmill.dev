@@ -13,16 +13,23 @@ import { ChevronDown } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { BulkDeleteBar } from "@/components/bulk-delete-bar";
-import { StatusBadge, type IssueStatus } from "@/components/status-badge";
+import {
+  StatusBadge,
+  statusLabel,
+  type IssueStatus,
+} from "@/components/status-badge";
 import { StageDots } from "@/components/stage-tracker";
 import { TypeBadge, type IssueType } from "@/components/type-badge";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  matchesStatusFilter,
+  statusFilterLabel,
+} from "@/lib/issue-status-filter";
 import { ISSUE_TYPES, TYPE_LABELS } from "@/lib/issue-body";
 import { projectColor, workItemDisplayId } from "@/lib/work-items";
 import { ComplexityBadge } from "@/components/complexity-badge";
@@ -68,7 +75,8 @@ export function IssueViews({
   /** Toolbar state lives on the hub (one compact row) and is passed down. */
   layout: IssuesLayout;
   typeFilter: IssueType | null;
-  statusFilter: IssueStatus | null;
+  /** US-91.5: the statuses to show. Merged and done start unchecked. */
+  statusFilter: ReadonlySet<string>;
   /** US-87.12: ids whose rows just changed from a live update. */
   recentlyChanged?: ReadonlySet<string>;
 }) {
@@ -85,7 +93,7 @@ export function IssueViews({
   const filteredIssues = useMemo(() => {
     let out = issues;
     if (typeFilter) out = out.filter((i) => i.type === typeFilter);
-    if (statusFilter) out = out.filter((i) => i.status === statusFilter);
+    out = out.filter((i) => matchesStatusFilter(i.status, statusFilter));
     return out;
   }, [issues, typeFilter, statusFilter]);
 
@@ -308,36 +316,66 @@ export function StatusFilter({
   value,
   onChange,
 }: {
-  value: IssueStatus | null;
-  onChange: (v: IssueStatus | null) => void;
+  /** US-91.5: the set of statuses to SHOW. Empty means nothing shows. */
+  value: ReadonlySet<string>;
+  onChange: (v: ReadonlySet<string>) => void;
 }) {
+  const all = ALL_STATUSES as readonly string[];
+  const everything = value.size === all.length;
+  // Filtering is on unless every status is checked — the pill has to look
+  // different when something is being withheld, including under the default.
+  const filtering = !everything;
+
+  function toggle(status: string) {
+    const next = new Set(value);
+    if (next.has(status)) next.delete(status);
+    else next.add(status);
+    onChange(next);
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         className={cn(
           "flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
-          value
+          filtering
             ? "border-primary bg-primary text-primary-foreground"
             : "border-input text-muted-foreground hover:bg-muted"
         )}
       >
-        {value ? <StatusBadge status={value} /> : "All statuses"}
+        {statusFilterLabel(value, all, statusLabel)}
         <ChevronDown className="size-3" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuRadioGroup
-          value={value ?? "all"}
-          onValueChange={(v) =>
-            onChange(v === "all" ? null : (v as IssueStatus))
-          }
-        >
-          <DropdownMenuRadioItem value="all">All statuses</DropdownMenuRadioItem>
-          {ALL_STATUSES.map((s) => (
-            <DropdownMenuRadioItem key={s} value={s}>
-              <StatusBadge status={s} />
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
+      <DropdownMenuContent align="end" className="w-52">
+        {/* Reaching "everything" by ticking eleven boxes is how a filter
+            becomes an obstacle. */}
+        <div className="flex items-center justify-between gap-2 px-2 py-1.5 text-xs text-muted-foreground">
+          <button
+            type="button"
+            className="hover:text-foreground"
+            onClick={() => onChange(new Set(all))}
+          >
+            Select all
+          </button>
+          <button
+            type="button"
+            className="hover:text-foreground"
+            onClick={() => onChange(new Set())}
+          >
+            Clear
+          </button>
+        </div>
+        {ALL_STATUSES.map((s) => (
+          <DropdownMenuCheckboxItem
+            key={s}
+            checked={value.has(s)}
+            // The menu stays open while several boxes are ticked.
+            closeOnClick={false}
+            onCheckedChange={() => toggle(s)}
+          >
+            <StatusBadge status={s} />
+          </DropdownMenuCheckboxItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -6,6 +6,7 @@ CRUD lives in Supabase under RLS (see ARCHITECTURE.md "build less API").
 
 import asyncio
 import logging
+import pathlib
 import time
 from contextlib import asynccontextmanager
 
@@ -538,4 +539,35 @@ async def report_unhandled_exception(request: Request, exc: Exception) -> Respon
 
 @app.get("/api/v1/health")
 async def health():
-    return {"status": "ok"}
+    return {"status": "ok", **_build_stamp()}
+
+
+# US-91.16: the same stamp the web footer reads, so "are web and api the same
+# build" is answerable without SSH. Written by the deploy workflow to
+# apps/web/VERSION; the API reads that one file rather than keeping a second
+# copy that could disagree with it.
+_BUILD_STAMP: dict[str, str] | None = None
+
+
+def _build_stamp() -> dict[str, str]:
+    global _BUILD_STAMP
+    if _BUILD_STAMP is None:
+        stamp: dict[str, str] = {}
+        try:
+            path = (
+                pathlib.Path(__file__).resolve().parents[3] / "apps" / "web" / "VERSION"
+            )
+            for line in path.read_text(encoding="utf-8").splitlines():
+                key, sep, value = line.partition("=")
+                if sep and value.strip():
+                    stamp[key.strip()] = value.strip()
+        except OSError:
+            # A checkout without the stamp is a dev build, not an error.
+            pass
+        _BUILD_STAMP = {
+            "build_version": stamp.get("version", ""),
+            "build_commit": stamp.get("commit", ""),
+            "build_ref": stamp.get("ref", ""),
+            "built_at": stamp.get("built_at", ""),
+        }
+    return _BUILD_STAMP

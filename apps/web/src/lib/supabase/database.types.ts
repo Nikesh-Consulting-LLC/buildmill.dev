@@ -14,6 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_effort_daily: {
+        Row: {
+          cost_usd: number
+          day: string
+          files_changed: number
+          issues_completed: number
+          lines_added: number
+          lines_removed: number
+          org_id: string
+          runs_finished: number
+          tokens_in: number
+          tokens_out: number
+          updated_at: string
+          work_seconds: number
+          worker_id: string
+        }
+        Insert: {
+          cost_usd?: number
+          day: string
+          files_changed?: number
+          issues_completed?: number
+          lines_added?: number
+          lines_removed?: number
+          org_id: string
+          runs_finished?: number
+          tokens_in?: number
+          tokens_out?: number
+          updated_at?: string
+          work_seconds?: number
+          worker_id: string
+        }
+        Update: {
+          cost_usd?: number
+          day?: string
+          files_changed?: number
+          issues_completed?: number
+          lines_added?: number
+          lines_removed?: number
+          org_id?: string
+          runs_finished?: number
+          tokens_in?: number
+          tokens_out?: number
+          updated_at?: string
+          work_seconds?: number
+          worker_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_effort_daily_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_effort_daily_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agent_events: {
         Row: {
           actor_email: string
@@ -2284,6 +2347,7 @@ export type Database = {
           complexity_model: string | null
           complexity_rationale: string | null
           complexity_scored_at: string | null
+          cost_usd: number
           created_at: string
           data_model_impact: string | null
           epic_id: string
@@ -2321,6 +2385,7 @@ export type Database = {
           complexity_model?: string | null
           complexity_rationale?: string | null
           complexity_scored_at?: string | null
+          cost_usd?: number
           created_at?: string
           data_model_impact?: string | null
           epic_id: string
@@ -2358,6 +2423,7 @@ export type Database = {
           complexity_model?: string | null
           complexity_rationale?: string | null
           complexity_scored_at?: string | null
+          cost_usd?: number
           created_at?: string
           data_model_impact?: string | null
           epic_id?: string
@@ -4760,6 +4826,7 @@ export type Database = {
           tool_calls_dropped: number
           tool_surface: Json | null
           updated_at: string
+          work_seconds: number | null
           worker_id: string | null
         }
         Insert: {
@@ -4824,6 +4891,7 @@ export type Database = {
           tool_calls_dropped?: number
           tool_surface?: Json | null
           updated_at?: string
+          work_seconds?: number | null
           worker_id?: string | null
         }
         Update: {
@@ -4888,6 +4956,7 @@ export type Database = {
           tool_calls_dropped?: number
           tool_surface?: Json | null
           updated_at?: string
+          work_seconds?: number | null
           worker_id?: string | null
         }
         Relationships: [

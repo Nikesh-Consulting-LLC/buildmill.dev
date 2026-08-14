@@ -47,7 +47,9 @@ export type ActivityRow = {
 };
 
 const ANY = "__any__";
-const PAGE = 50;
+// US-91.8: a small window the manager steps through, not a page that grows
+// under them. Ten is what was asked for.
+const PAGE = 10;
 
 const KIND_LABELS: Record<string, string> = {
   gate: "Gate decisions",
@@ -114,11 +116,10 @@ export function ActivityFeed({
   orgId: string;
 }) {
   const router = useRouter();
-  const [project, setProject] = useState(ANY);
   const [actor, setActor] = useState(ANY);
   const [kind, setKind] = useState(ANY);
   const [failuresOnly, setFailuresOnly] = useState(false);
-  const [visible, setVisible] = useState(PAGE);
+  const [page, setPage] = useState(0);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -167,16 +168,6 @@ export function ActivityFeed({
     return row.actorName || (row.actorType === "system" ? "factory" : "worker");
   }
 
-  const projectItems = useMemo(
-    () => [
-      { label: "All projects", value: ANY },
-      ...Array.from(new Set(rows.map((r) => r.project).filter(Boolean)))
-        .sort()
-        .map((p) => ({ label: p, value: p })),
-    ],
-    [rows]
-  );
-
   const actorItems = useMemo(
     () => [
       { label: "All actors", value: ANY },
@@ -201,17 +192,21 @@ export function ActivityFeed({
   const filtered = useMemo(
     () =>
       rows.filter((r) => {
-        if (project !== ANY && r.project !== project) return false;
         if (actor !== ANY && actorLabel(r) !== actor) return false;
         if (kind !== ANY && r.kind !== kind) return false;
         if (failuresOnly && r.outcome !== "failure") return false;
         return true;
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, project, actor, kind, failuresOnly, actorNames]
+    [rows, actor, kind, failuresOnly, actorNames]
   );
 
-  const shown = filtered.slice(0, visible);
+  // AC5: a filter change returns to page 1; the count always describes the
+  // filtered total, never the page.
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE));
+  const current = Math.min(page, pageCount - 1);
+  const from = current * PAGE;
+  const shown = filtered.slice(from, from + PAGE);
   const failureCount = rows.filter((r) => r.outcome === "failure").length;
 
   return (
@@ -227,33 +222,13 @@ export function ActivityFeed({
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-end gap-3">
           <div className="grid gap-1.5">
-            <Label className="text-xs text-muted-foreground">Project</Label>
-            <Select
-              items={projectItems}
-              value={project}
-              onValueChange={(v) => {
-                if (typeof v === "string") setProject(v);
-              }}
-            >
-              <SelectTrigger size="sm" className="w-44">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {projectItems.map((i) => (
-                  <SelectItem key={i.value} value={i.value}>
-                    {i.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid gap-1.5">
             <Label className="text-xs text-muted-foreground">Actor</Label>
             <Select
               items={actorItems}
               value={actor}
               onValueChange={(v) => {
                 if (typeof v === "string") setActor(v);
+                setPage(0);
               }}
             >
               <SelectTrigger size="sm" className="w-44">
@@ -275,6 +250,7 @@ export function ActivityFeed({
               value={kind}
               onValueChange={(v) => {
                 if (typeof v === "string") setKind(v);
+                setPage(0);
               }}
             >
               <SelectTrigger size="sm" className="w-44">
@@ -292,7 +268,10 @@ export function ActivityFeed({
           <label className="flex cursor-pointer items-center gap-2 pb-1.5">
             <Checkbox
               checked={failuresOnly}
-              onCheckedChange={(v) => setFailuresOnly(Boolean(v))}
+              onCheckedChange={(v) => {
+                setFailuresOnly(Boolean(v));
+                setPage(0);
+              }}
               aria-label="Failures only"
             />
             <span className="text-xs text-muted-foreground">
@@ -311,7 +290,7 @@ export function ActivityFeed({
           <EmptyState
             icon={ActivityIcon}
             title="Nothing matches these filters"
-            description="Widen the project, actor, or kind filter — or turn off failures-only."
+            description="Widen the actor or kind filter, turn off failures-only, or add projects in the filter at the top of the page."
           />
         ) : (
           <div className="grid gap-1">
@@ -420,15 +399,31 @@ export function ActivityFeed({
           </div>
         )}
 
-        {filtered.length > visible && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="self-center"
-            onClick={() => setVisible((v) => v + PAGE)}
-          >
-            Show more ({filtered.length - visible} older)
-          </Button>
+        {filtered.length > PAGE && (
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {from + 1}–{Math.min(from + PAGE, filtered.length)} of{" "}
+              {filtered.length}
+            </span>
+            <span className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={current === 0}
+                onClick={() => setPage(current - 1)}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={current >= pageCount - 1}
+                onClick={() => setPage(current + 1)}
+              >
+                Next
+              </Button>
+            </span>
+          </div>
         )}
       </CardContent>
     </Card>

@@ -21,6 +21,8 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { money } from "@/lib/budget";
+import { compactTokens, formatWorkSeconds } from "@/lib/work-seconds";
 import { formatLastSeen } from "@/lib/format-time";
 import { ROLES, ROLE_LABELS, type Role } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
@@ -186,6 +188,58 @@ export function principalName(m: MemberRow) {
   return m.principals?.display_name || m.principals?.email || m.principal_id;
 }
 
+/** US-91.12: one agent's totals over the KPI window. Seconds are what is
+ *  stored (us-91.11); hours are a rendering. */
+export type AgentEffort = {
+  workSeconds: number;
+  issuesCompleted: number;
+  linesAdded: number;
+  linesRemoved: number;
+  tokens: number;
+  costUsd: number;
+};
+
+export type TeamKpis = {
+  windowDays: number;
+  completed: number;
+  queued: number;
+  workSeconds: number;
+};
+
+/** The three numbers the manager brings to this page. Two are 30-day windows
+ *  and one is live — a tile that does not say which is a number nobody can
+ *  act on, so each says it on its face. */
+function KpiRow({ kpis }: { kpis: TeamKpis }) {
+  const tiles = [
+    {
+      label: "Work items completed",
+      value: String(kpis.completed),
+      note: `merged · last ${kpis.windowDays} days`,
+    },
+    {
+      label: "Work items queued",
+      value: String(kpis.queued),
+      note: "dispatched, not finished · right now",
+    },
+    {
+      label: "Agent work",
+      value: formatWorkSeconds(kpis.workSeconds),
+      note: `across every agent · last ${kpis.windowDays} days`,
+    },
+  ];
+  return (
+    <div className="grid gap-3 sm:grid-cols-3">
+      {tiles.map((t) => (
+        <div key={t.label} className="rounded-lg border p-3">
+          <p className="text-xs font-medium text-muted-foreground">{t.label}</p>
+          <p className="mt-0.5 text-2xl font-semibold tabular-nums">{t.value}</p>
+          <p className="text-[11px] text-muted-foreground">{t.note}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function TeamView({
   orgId,
   canManage,
@@ -203,6 +257,8 @@ export function TeamView({
   claudeBillingByPrincipal,
   moduleByPrincipal,
   runningRunByPrincipal,
+  effortByPrincipal,
+  kpis,
   canManageOrg,
   myPrincipalId,
   initialExpandedId,
@@ -233,6 +289,9 @@ export function TeamView({
   /** US-78.11: principal -> the run it is holding right now, or absent.
    *  Drives the CLI button's glow. */
   runningRunByPrincipal: Record<string, string>;
+  /** US-91.12: each agent's totals over the KPI window. */
+  effortByPrincipal: Record<string, AgentEffort>;
+  kpis: TeamKpis;
   /** US-55.6: gates the Claude Terminal action, same as the agent's own page. */
   canManageOrg: boolean;
   /** The signed-in user's own principal id, for "your own token" wording. */
@@ -323,6 +382,10 @@ export function TeamView({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* US-91.12: is this team producing anything? Three numbers, each
+          stating the window it covers. */}
+      <KpiRow kpis={kpis} />
+
       <div className="flex flex-wrap items-center justify-end gap-2">
         {canManage && (
           <>
@@ -356,6 +419,7 @@ export function TeamView({
         assignedByPrincipal={assignedByPrincipal}
         moduleByPrincipal={moduleByPrincipal}
         runningRunByPrincipal={runningRunByPrincipal}
+        effortByPrincipal={effortByPrincipal}
         claudeBillingByPrincipal={claudeBillingByPrincipal}
         principals={principals}
         projects={projects as ConnectProject[]}
@@ -396,6 +460,7 @@ function MemberList({
   assignedByPrincipal,
   moduleByPrincipal,
   runningRunByPrincipal,
+  effortByPrincipal,
   claudeBillingByPrincipal,
   principals,
   projects,
@@ -417,6 +482,8 @@ function MemberList({
   /** US-78.11: principal -> the run it is holding right now, or absent.
    *  Drives the CLI button's glow. */
   runningRunByPrincipal: Record<string, string>;
+  /** US-91.12: each agent's totals over the KPI window. */
+  effortByPrincipal: Record<string, AgentEffort>;
   claudeBillingByPrincipal: Record<string, string | null>;
   principals: ConnectPrincipal[];
   projects: ConnectProject[];
@@ -649,6 +716,24 @@ function MemberList({
                       {seat && ` · ${seat.hostName} slot ${seat.slotIndex}`}
                       {!seat && isAgent && mine.length > 0 && " · self-hosted"}
                     </span>
+                    {/* US-91.12: what this agent actually did. A person's row
+                        shows nothing here rather than a line of zeroes —
+                        `user_activity_sessions` measures something else
+                        (us-91.11 AC6) and must not be shown as the same. */}
+                    {isAgent && effortByPrincipal[m.principal_id] && (
+                      <span className="truncate text-[11px] text-muted-foreground">
+                        {(() => {
+                          const e = effortByPrincipal[m.principal_id];
+                          return [
+                            `${formatWorkSeconds(e.workSeconds)} worked`,
+                            `${e.issuesCompleted} completed`,
+                            `+${e.linesAdded} −${e.linesRemoved} lines`,
+                            `${compactTokens(e.tokens)} tokens`,
+                            money(e.costUsd),
+                          ].join(" · ");
+                        })()}
+                      </span>
+                    )}
                   </span>
                 </button>
 

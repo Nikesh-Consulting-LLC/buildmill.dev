@@ -18,7 +18,7 @@ same commit as the change it describes:
 - [Interface catalog](docs/application/interface-catalog.md) — every route/tool/message, grouped by surface (Web UI, Supabase, FastAPI, Worker MCP, Runner WebSocket, run_items, docs tree, wireframes, instruction files, Git proxy, LLM Gateway)
 - [End to end: one story](docs/application/end-to-end-one-story.md) — the mainstream path, start to finish
 - [Rules & invariants](#rules--invariants) — below: always-true properties; a violation is a bug, not a preference
-- [Delivery history](#delivery-history) — below: the 62 shipped phases, condensed to what still matters; full summaries in git history
+- [Delivery history](#delivery-history) — below: the shipped phases (1–90), condensed to what still matters; full summaries in git history
 
 Operating a worker or runner? Read Actors & surfaces, the Worker MCP / Runner WebSocket / Git proxy
 subsections of the Interface catalog, and End to end: one story. Changing code? Read Domain objects,
@@ -314,6 +314,176 @@ polling the pool**, so two conversations can never edit one checkout. Two of its
 own criteria are unmet and recorded rather than implied: a session's work is not
 yet promotable through the submit path, and `llm_usage.session_id` has a column but
 no writer, because the gateway keys usage on `run_id`.
+
+Three gaps from that phase are still open and are recorded here so they are not
+rediscovered by hitting them: `platform_run_config.model_routes` is empty, so an
+interactive agent created by the wizard resolves a model from nowhere and refuses to
+run until one is set on the agent itself (us-78.5 AC3 is not true yet — choosing a
+fleet-wide default is a superadmin decision about which model and whose money, which
+is why it was left rather than picked); no Buildmill-owned fork of
+`xai-org/grok-build` exists, so the provisioner installs upstream's binary under our
+own name (us-78.1 AC1 unmet, and Apache-2.0 §6 means the name must change before this
+is presented as a product); and the CLI-window button's glow (us-78.11 AC2) has never
+been observed, because it needs an interactive agent holding a running run at the
+moment someone looks at the Team page.
+
+**Phases 79–90** (41 stories, confirmed 2026-08-13) — the second hardening pass:
+production error truth, a testing process that actually runs, an app made fast, and a
+release that can retry.
+
+- **Production error truth** (79) answered the first real harvest of the
+  self-monitoring inbox — prod BUG-1…BUG-8, promoted 2026-08-11 — in noise-first
+  order: silence the mask and the two hang-up floods so real crashes are visible
+  (79.7, 79.6, 79.3), make a database outage legible as a 504 in words (79.5), then
+  the manager-facing diagnoses (79.2's failed merge naming its credential and its
+  cure, 79.4, 79.1). us-79.8 widened the phase past API exceptions to the errors that
+  never become exceptions — an agent dying holding its claim, a lease expiring in
+  silence — as an **Agent failures** console beside System issues (migration 238;
+  `record_agent_failure` wired into `complete_run`, `requeue_expired_claims`,
+  `requeue_stale_heartbeats`). Its refinement over the draft is the shape worth
+  copying: orgs/projects/issues/runs stay member-scoped, so the platform-admin console
+  reads them through two `is_platform_admin()`-gated `security definer` functions
+  rather than directly.
+- **Tests you will actually run** (80) cut the api suite from ~30 minutes to ~30
+  seconds, and the diagnosis is the durable part: `--durations=40` killed the
+  hogs theory (the forty slowest summed to ~280s of ~1800s), and a probe that made
+  `socket.connect` raise proved the real cause — a fake-backed route test whose read
+  is not faked calls `https://test.supabase.co` **for real** and waits on it, then
+  turns the failure into the refusal it asserts. The assertion passes either way; it
+  just costs seconds. Essential blocks outbound resolution and holds back only
+  `*_sql.py`, `needs_db` and `slow`; Full QA (`--full`) runs everything. Nothing was
+  deleted. See Testing in CLAUDE.md for the live contract.
+- **The reimagined testing process** (81, 82) turned six test types into one
+  mechanism, split by who is competent to do the job: **authoring is LLM work**
+  (specs land in the target repo via reviewed changesets), **execution is
+  deterministic** (a `deploy.py`-style SSH pipeline runs the suites against the
+  deployed UAT instance and parses JUnit XML — no LLM in the path). Suites are
+  declared per project (migration 239); the pipeline (240) pins the commit, runs under
+  `timeout` with `SF_BASE_URL`/`SF_COMMIT_SHA`/`SF_RESULTS_PATH`, and treats **JUnit
+  as truth with the exit code merely informative** — `error` is not `failed`, exit 124
+  is `timed-out`, and suites sharing a server serialize on a per-server lock. Results
+  are member-read-only with no write policies, so a browser cannot forge them. UAT
+  deploys trigger suites automatically (status-guarded, exceptions swallowed so the
+  deploy's own outcome stands); results map `(suite_id, spec_ref)` onto the release's
+  copied cases and reach the sign-off gate (241), which gates only on
+  `blocks_signoff=true` and is advisory by default with a per-suite waiver that stamps
+  who/when/why. Plan-time automated-case authoring (242) and worker-side pre-submit
+  evidence (244) both ride **rendering-side** context, deliberately, so a project-level
+  instruction override can never shadow the authoring contract. Phase 82 added prod
+  smoke after go-live (fire-and-forget — a smoke verdict can never fail the
+  confirmation; a failure points at "Mark rolled back" and **the human decides**, never
+  auto-rollback), prose→spec conversion as ordinary chores, a module taxonomy computed
+  from the real commit range that *suggests* manual regression cases (243), and
+  one-click adoption of untracked specs. Unit tests stay out of the case DB — code,
+  recorded as evidence, never tracked rows.
+- **Interactive agent stability** (83) hardened Phase 78 against what an audit of the
+  real CLI (grok 1.0.0, live handshake) found: the fleet's CLI self-updated and
+  ingested Claude/Cursor config from workspace repos by default (83.1 pins the version
+  and closes both doors); the CLI-window path had never worked and duplicated the run
+  path's session-open at lower maturity (83.2 makes `acp/engine.py` one engine, two
+  owners — migration 245); the promised idle close had no caller and a crashed session
+  CLI held the agent forever (83.3 — graceful close measured live, and the capability
+  is declared as an **empty object**, so the check is presence, not truthiness);
+  and escalation's effort setting was silently dropped while the CLI measurably accepts
+  it, with truncated answers scoring as success (83.4 — the effort vocabulary was read
+  off the live handshake, not guessed, and truncation stops now fail the run with the
+  partial text preserved). Fixed straight on `main`, not a story: the capability check
+  in `agent_sessions.py` called a nonexistent RPC (`has_capability` →
+  `has_org_capability`), 403ing every session open.
+- **Manager ergonomics** (84, 85.2, 86.2) — a feature's header row clears the
+  unanimous gate in one click (Curate/Plan/Code/Approve all), projection only, no new
+  endpoint or migration; a batch dispatch became one ordered request that sorts by
+  build order regardless of click order and reports skipped items verbatim rather than
+  dropping them silently; and Waiting on you shows the build, not its cargo, when a
+  feature owns the run.
+- **Agent readiness** (85.1) gave the manager a Prepare workspace action per project
+  row (migration 246, `workspace_prep_jobs`): a background job on the agent's runner
+  creates the working directory, fetches code, writes agent + MCP config, registers
+  granted Tool servers, then **verifies** the environment (shell, git, factory MCP,
+  tool handshakes) and reports the resolved run settings — so the first dispatched task
+  starts on a known-good workspace instead of discovering a broken one.
+- **Routing, simplified** (86.1) replaced the build-mode radio and Concurrency
+  checkbox with two switches and one law. "Follow the build order" (default on) keeps
+  Epic→Feature→Story ordering; off queues anything in any order — **the switch frees
+  the order, never the law**. "Route the feature as one" (default on) makes the feature
+  the routing unit: batch plan, one feature-owned code run and PR, and one repo docs
+  commit per batch action instead of one per story. `sequential_only`'s dispatch freeze
+  was deleted outright; the law replacing it has no checkbox — a project works one item
+  at a time, start to merge, and everything queued behind it waits wearing the us-74.5
+  hourglass with its reason on every surface. **Dispatch itself is never refused**
+  (migration 247). The rewrite surfaced 19 older pool/capabilities/liveness tests whose
+  scenes assumed multiple concurrent offerings per project; all 19 were re-scened to
+  the law with zero changes to the migration — no genuine defect found.
+- **The app gets fast** (87.1–87.7, 87.11, 87.12) fixed an app laggy at 63 work items
+  that would not have survived hundreds of projects, and the lesson is that the lag was
+  never data volume — it was fixed cost. The shell recomputed the whole Things-to-Do
+  dataset on **every** navigation to print one badge, reading `principals` three times
+  by the same key across six sequential round trips (87.1's `React.cache()` request
+  cache; 87.2's `org_pending_count`, whose per-group counts were run against prod's
+  live data for all nine organizations before being wired). Work Items loaded every
+  item in the workspace including each one's **full markdown body**, unscoped and
+  unbounded, then filtered in the browser (87.3 — `body` and `acceptance_criteria` off
+  the list select, one `hub-query.ts` definition shared by the server's first page and
+  the browser's Load more, ordered `(updated_at desc, id desc)` so a timestamp tie
+  across a page boundary cannot repeat one row and lose another; 87.4 adds CSS
+  `content-visibility` rather than windowing, which was the wrong tool for a nested
+  collapsible tree). The single largest win was Realtime: **89.5% of all database
+  execution time** (28,016s of 31,286s over six weeks) was decoding WAL for 27
+  published tables, trimmed to 20 (87.5) — and that audit earned its keep, because
+  `clarifications` and `releases` look unsubscribed until you read
+  `shell-live-count.tsx`, and dropping them would have silently frozen the sidebar
+  badge. Underneath, the API opened a fresh Postgres connection at each of 214 call
+  sites with no pool (87.6 — all five `_connect` definitions now lease from one
+  bounded `app/pool.py`), and authenticated workers with an `UPDATE` that had run
+  940,000 times, feeding that same WAL (87.7 — auth is now a `SELECT`, presence a
+  throttled mark at most once per worker per 15s). Then the follow-on, from the
+  manager's report after the release — *"it refreshes so fast, there is no transition
+  or progress indication"*: making the app fast removed the feedback its slowness used
+  to provide. 87.11 recalibrated the existing signal (a 1.1s sweep starting off-screen
+  showed nothing at all on a 150ms navigation) into an indeterminate fill with a
+  minimum visible duration, plus `loading.tsx` skeletons on the six heaviest routes
+  (there were zero) and React `<ViewTransition>`; 87.12 gave live updates their own
+  local tint-and-fade, with twenty simultaneous changes standing down rather than
+  flashing the whole list.
+- **The agent window reads like a terminal** (88.1) fixed the screen where the manager
+  watches an agent work. ACP streams message and thought chunks token by token; each
+  was stripped and run through the whitespace-collapsing clipper, then rejoined with a
+  space — deleting every newline in the agent's markdown and putting spaces around
+  every punctuation-only token (`a health check command .`). Chunks now rejoin
+  verbatim, and the console is dressed as the terminal it is: fixed dark surface, mono,
+  a gutter glyph per event kind, rows on a grid so wrapped text hang-indents past the
+  glyph column.
+- **The zero-secret workspace** (89.1, 89.2), the manager's direction after the
+  FEAT-2.8 token commit: the worker token stops being copied. No token-in-remote-URL,
+  token-in-workspace-config, token-in-helper-script, or write-then-delete dances — one
+  home (the slot env file), everything else brokered by the supervisor. A git
+  credential helper answers fetch/push reading `FACTORY_WORKER_TOKEN` from the process
+  env at git time (so the CLI agent's own `git push` authenticates the same way and
+  rotation touches no workspace), and a loopback MCP broker injects the header, so
+  workspace files carry at most a machine-local key that is worthless off the box.
+  Rotation is one file plus one restart — the same zero-secret pattern the LLM gateway
+  already proved for model keys (US-10.3), applied to the last secret on the box.
+  89.2 added the manager-facing layer: a per-project Environment section (entries plain
+  or write-only-secret, optionally agent-scoped) delivered as process env at CLI spawn
+  and discoverable over MCP, with scrubber registration and a changeset sweep so no
+  delivered secret can ride a commit.
+- **Release resilience** (90.1), drafted from release 2026.08.13.1's death: a release
+  that failed before anything shipped gets a Retry that re-runs **only the failed leg**
+  — a fresh notes prep or a fresh UAT deploy — on the same version and the same pinned
+  commit, with completed legs never redone. Immutability is sharpened, not weakened: a
+  version names exactly one build forever, so a failed **attempt** retries while a
+  **rejected** build never does (supersede stays). The endpoint takes no body at all —
+  the retry reads `commit_sha` and `version` off the stored release even when the
+  request names a different commit — and every attempt is audited
+  (`release_prep_runs.requested_by`, migration 251) and counted, so a third try reads
+  as a third try.
+
+**What these phases did not prove.** Much of 81–82 is verified by tests and build, not
+by a live round trip: no suite has yet run end-to-end against a real server, no machine
+verdict has landed on a real release, no cut has computed touched modules against a
+real repo, and no agent has authored an automated case or reported test evidence live.
+Each rides the next release that exercises it. This is recorded rather than smoothed
+over, per the same evidence-over-vocabulary rule Phase 78 established.
 
 **Retired unbuilt — do not re-propose without a fresh ask** (2026-08-09 sweep): the
 `mcp_tool_calls` stall detector (us-69.1) and the `git clean -fd` workspace hygiene fix

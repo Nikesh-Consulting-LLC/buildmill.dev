@@ -588,8 +588,13 @@ export function AddAgentWizard({
       <DialogTrigger render={<Button variant="create" />}>
         <Bot className="size-4" />
         Add agent
+        {/* US-91.13: the count is the only thing on this button carrying
+            information, and `text-muted-foreground` is a neutral picked for a
+            page background — on the `create` variant's saturated fill it was
+            close to unreadable. De-emphasise with the button's OWN foreground
+            instead of borrowing another surface's. */}
         {quota && (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-xs text-create-foreground/75">
             ({quota.used} of {quota.max})
           </span>
         )}

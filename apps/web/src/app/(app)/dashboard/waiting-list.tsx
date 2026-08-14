@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "@/lib/router-with-progress";
 import {
@@ -40,6 +40,10 @@ import {
   GuidelineRefreshGroup,
   type GuidelineRefresh,
 } from "./guideline-refresh-group";
+import {
+  useCollapsedProjects,
+  WAITING_COLLAPSE_KEY,
+} from "./project-groups";
 import type { TodoGroup, TodoItem } from "./data";
 
 // US-6.4 / mockup: the wait age reads as a compact pill — neutral by default,
@@ -288,28 +292,48 @@ export function WaitingList({
     });
   }
 
-  if (
-    groups.length === 0 &&
-    recommendations.length === 0 &&
-    refreshes.length === 0
-  ) {
-    return (
-      <EmptyState
-        icon={ClipboardCheck}
-        title="Nothing needs you right now"
-        description="When a PRD, plan, review, or sign-off is waiting on your decision, it shows up here."
-      />
-    );
-  }
+  // US-91.4: project is the outer level of this tab. The existing groups
+  // (Dispatch, Review, QA sign-off, …) keep their order inside each project,
+  // so folding a project hides everything for it in one click instead of
+  // five. Counts are unaffected: collapsing is a view state.
+  const sections = useMemo(() => {
+    const order = groups.map((g) => g.title);
+    const byProject = new Map<
+      string,
+      { id: string; name: string; items: Map<string, TodoItem[]> }
+    >();
+    for (const g of groups) {
+      for (const item of g.items) {
+        const entry = byProject.get(item.projectId) ?? {
+          id: item.projectId,
+          name: item.project,
+          items: new Map<string, TodoItem[]>(),
+        };
+        const bucket = entry.items.get(g.title) ?? [];
+        bucket.push(item);
+        entry.items.set(g.title, bucket);
+        byProject.set(item.projectId, entry);
+      }
+    }
+    return [...byProject.values()]
+      .map((entry) => ({
+        id: entry.id,
+        name: entry.name,
+        count: [...entry.items.values()].reduce((n, a) => n + a.length, 0),
+        groups: order
+          .filter((title) => entry.items.has(title))
+          .map((title) => ({ title, items: entry.items.get(title)! })),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [groups]);
+  // AC5: one project renders flat — no grouping chrome at all.
+  const grouped = sections.length > 1;
+  const { collapsed, toggle: toggleProject } = useCollapsedProjects(
+    WAITING_COLLAPSE_KEY
+  );
 
-  return (
-    <div className="grid min-w-0 gap-4">
-      {/* US-68.4: below `md` a table has no room for a title, a reason, and
-          an action cell at once — a card per item, one full-width primary
-          action, replaces it outright rather than trying to squeeze columns
-          further. Same groups, same nesting, same handlers as the table. */}
-      <div className="grid gap-4 md:hidden">
-        {groups.map((g) => {
+  function renderGroupCards(g: TodoGroup) {
+
           const isDispatch = g.title === DISPATCH_GROUP;
           const dispatchableIds = g.items
             .filter(
@@ -483,24 +507,10 @@ export function WaitingList({
               })}
             </div>
           );
-        })}
-      </div>
-      {/* US-19.1: one compact table, group headings as spanning rows, so the
-          reason and the age line up in columns instead of wrapping under each
-          title. Dispatch/redispatch/peek behavior is unchanged. */}
-      <div className="hidden min-w-0 rounded-lg border md:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-8" />
-              <TableHead>Work item</TableHead>
-              <TableHead className="hidden w-44 lg:table-cell">Why it&apos;s here</TableHead>
-              <TableHead className="hidden w-20 lg:table-cell">Age</TableHead>
-              <TableHead className="w-56" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {groups.map((g) => {
+  }
+
+  function renderGroupRows(g: TodoGroup): ReactNode[] {
+
               const isDispatch = g.title === DISPATCH_GROUP;
               return [
                 <TableRow key={g.title} className="hover:bg-transparent">
@@ -722,6 +732,98 @@ export function WaitingList({
                   ];
                 }),
               ];
+  }
+
+  if (
+    groups.length === 0 &&
+    recommendations.length === 0 &&
+    refreshes.length === 0
+  ) {
+    return (
+      <EmptyState
+        icon={ClipboardCheck}
+        title="Nothing needs you right now"
+        description="When a PRD, plan, review, or sign-off is waiting on your decision, it shows up here."
+      />
+    );
+  }
+
+  return (
+    <div className="grid min-w-0 gap-4">
+      {/* US-68.4: below `md` a table has no room for a title, a reason, and
+          an action cell at once — a card per item, one full-width primary
+          action, replaces it outright rather than trying to squeeze columns
+          further. Same groups, same nesting, same handlers as the table. */}
+      <div className="grid gap-4 md:hidden">
+        {sections.flatMap((section) => {
+          const folded = grouped && collapsed.has(section.id);
+          const head = grouped
+            ? [
+                <button
+                  key={`proj-${section.id}`}
+                  type="button"
+                  onClick={() => toggleProject(section.id)}
+                  aria-expanded={!folded}
+                  className="flex w-full items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                >
+                  <ChevronRight
+                    className={cn(
+                      "size-3.5 transition-transform",
+                      !folded && "rotate-90"
+                    )}
+                  />
+                  {section.name} ({section.count})
+                </button>,
+              ]
+            : [];
+          if (folded) return head;
+          return [...head, ...section.groups.map(renderGroupCards)];
+        })}
+      </div>
+      {/* US-19.1: one compact table, group headings as spanning rows, so the
+          reason and the age line up in columns instead of wrapping under each
+          title. Dispatch/redispatch/peek behavior is unchanged. */}
+      <div className="hidden min-w-0 rounded-lg border md:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-8" />
+              <TableHead>Work item</TableHead>
+              <TableHead className="hidden w-44 lg:table-cell">Why it&apos;s here</TableHead>
+              <TableHead className="hidden w-20 lg:table-cell">Age</TableHead>
+              <TableHead className="w-56" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sections.flatMap((section) => {
+              const folded = grouped && collapsed.has(section.id);
+              const head = grouped
+                ? [
+                    <TableRow
+                      key={`proj-${section.id}`}
+                      className="hover:bg-transparent"
+                    >
+                      <TableCell colSpan={5} className="bg-muted py-1.5">
+                        <button
+                          type="button"
+                          onClick={() => toggleProject(section.id)}
+                          aria-expanded={!folded}
+                          className="flex w-full items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground"
+                        >
+                          <ChevronRight
+                            className={cn(
+                              "size-3.5 transition-transform",
+                              !folded && "rotate-90"
+                            )}
+                          />
+                          {section.name} ({section.count})
+                        </button>
+                      </TableCell>
+                    </TableRow>,
+                  ]
+                : [];
+              if (folded) return head;
+              return [...head, ...section.groups.flatMap(renderGroupRows)];
             })}
           </TableBody>
         </Table>

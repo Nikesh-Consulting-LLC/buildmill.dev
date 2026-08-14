@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { closeEpic } from "@/lib/close-epic";
 import { isIssueTerminal } from "@/lib/epics";
 import { StatusBadge, type IssueStatus } from "@/components/status-badge";
+import { money } from "@/lib/budget";
 import { StageDots } from "@/components/stage-tracker";
 import { TypeBadge, type IssueType } from "@/components/type-badge";
 import { Badge } from "@/components/ui/badge";
@@ -407,6 +408,16 @@ function OutlineRow({
         status={i.status}
         className="hidden shrink-0 md:inline-flex"
       />
+      {/* US-91.14: what it cost, across every run against it — failed and
+          superseded attempts included. Null is "nothing has run yet". */}
+      {i.cost_usd != null && Number(i.cost_usd) > 0 && (
+        <span
+          className="hidden shrink-0 font-mono text-xs tabular-nums text-muted-foreground sm:inline"
+          title="Everything this item has cost, across every run against it — failed, cancelled and superseded attempts included. Not the price of the merge."
+        >
+          {money(Number(i.cost_usd))}
+        </span>
+      )}
       <StatusBadge status={i.status as IssueStatus} />
     </div>
   );

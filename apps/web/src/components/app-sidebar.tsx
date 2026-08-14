@@ -8,7 +8,6 @@ import {
   ChevronRight,
   PanelLeftClose,
   PanelLeftOpen,
-  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -16,7 +15,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { UserMenu } from "@/components/user-menu";
 import { OrgSwitcher } from "@/components/org-switcher";
 import { NotificationBell, type NotificationRow } from "@/components/notification-bell";
-import { ADMIN_ITEMS, NAV_ITEMS, type NavEntry } from "@/components/nav-items";
+import { ADMIN_ENTRIES, NAV_ITEMS, type NavEntry } from "@/components/nav-items";
 import { EnvBadge } from "@/components/env-badge";
 import { envLogoTint } from "@/lib/env-label";
 import type { OrgOption } from "@/lib/active-org";
@@ -76,12 +75,10 @@ export function AppSidebar({
     ? [
         ...NAV_ITEMS,
         { separator: true },
-        {
-          href: "/admin",
-          label: "SuperAdmin",
-          icon: ShieldCheck,
-          children: ADMIN_ITEMS,
-        },
+        // US-91.10: four menus under a section heading, not one drawer of
+        // fifteen links. `/admin` itself keeps working by URL; it no longer
+        // owns a row.
+        ...ADMIN_ENTRIES,
       ]
     : NAV_ITEMS;
 
@@ -166,7 +163,16 @@ export function AppSidebar({
             );
           }
           const { href, label, icon: Icon, children } = entry;
-          const active = pathname.startsWith(href);
+          // US-91.10: a parent is active when the current route is any of its
+          // children. The old `startsWith(href)` worked only because the one
+          // parent was `/admin`, which prefixed everything under it; with
+          // parents anchored at `/admin/orgs` etc., `/admin/users` would
+          // leave Accounts unhighlighted.
+          const active =
+            pathname.startsWith(href) ||
+            (children ?? []).some(
+              (c) => "href" in c && pathname.startsWith(c.href)
+            );
 
           // Expanded sidebar: an item with children is a disclosure row;
           // its sections carry the active highlight while open.

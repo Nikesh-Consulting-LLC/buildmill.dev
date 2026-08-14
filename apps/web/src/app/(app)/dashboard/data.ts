@@ -151,6 +151,9 @@ export type AgentItem = {
   id: string;
   title: string;
   projectId: string;
+  /** US-91.4: the project's name, so In Progress can group by it. Read off
+   * the issue row the item is already built from — no extra query. */
+  project: string;
   status: string;
   /** US-24.2: the feature this story belongs to, for nesting. */
   parent?: ParentFeatureRef | null;
@@ -286,6 +289,10 @@ export type CompletedItem = {
    * Run 50a91484 in prod carries a started_at 13h17m before its finished_at
    * for a run that took five seconds. */
   durationMs: number | null;
+  /** US-91.14: what this run cost, straight off `runs.cost_usd`. Null when
+   * the run recorded no cost — rendered as "—", never as $0.00, because
+   * "nothing was recorded" and "it was free" are different facts. */
+  costUsd: number | null;
 };
 
 /** US-15.4: run kind → the milestone words shown when that run finishes. */
@@ -330,6 +337,9 @@ export type WaitingData = {
  * run's issue is the FEATURE (migrations 138/139), so per-story liveness
  * lookups find nothing and eleven stories read "Running" with no agent. */
 export type FeatureRunInfo = {
+  /** US-91.2: the run itself, so In Progress can requeue a silent build and
+   * link its CLI window the same way a story row does. */
+  runId: string;
   workerName: string;
   workerPrincipalId: string | null;
   runningMinutes: number;
@@ -342,6 +352,9 @@ export type ThingsToDoData = WaitingData & {
   agentItems: AgentItem[];
   /** US-86.2: keyed by feature issue id, present only while its run is live. */
   featureRuns: Record<string, FeatureRunInfo>;
+  /** US-91.3: principal id → runs the `interactive` module, for the agents
+   * currently holding a claim. Absent means no CLI window to offer. */
+  interactiveByPrincipal: Record<string, boolean>;
   deployRows: DeployRow[];
   completedItems: CompletedItem[];
   stalledQueue: StalledQueue | null;
@@ -1139,6 +1152,10 @@ export async function loadWaiting(
  * (zero rows = nothing), and the agent's kind checkboxes bound the kinds. */
 export type RunLiveness = {
   runId: string;
+  /** US-91.3: the claiming worker, so one batched `runner_config` read can
+   *  say which of them run the `interactive` module (and therefore have a
+   *  CLI window worth linking). */
+  workerId: string | null;
   workerName: string;
   /** US-35.5: the agent behind the claim, so the row can link to its profile.
    *  Null for a worker with no principal (nothing links, the name still shows). */
@@ -1183,7 +1200,7 @@ async function loadFactoryHealth(
       supabase
         .from("runs")
         .select(
-          "id, issue_id, claimed_at, claim_expires_at, last_heartbeat_at, workers(name, type, principal_id)"
+          "id, issue_id, worker_id, claimed_at, claim_expires_at, last_heartbeat_at, workers(name, type, principal_id)"
         )
         .eq("org_id", orgId)
         .eq("status", "running")
@@ -1234,6 +1251,7 @@ async function loadFactoryHealth(
     const silentThreshold = w?.type === "human" ? 30 : 20;
     const liveness: RunLiveness = {
       runId: r.id as string,
+      workerId: (r.worker_id as string | null) ?? null,
       workerName: w?.name ?? "",
       workerPrincipalId: w?.principal_id ?? null,
       runningMinutes,
@@ -1401,7 +1419,8 @@ export async function loadThingsToDo(
         .select(
           // US-15.6: the issue's type + numbering so a finished run shows the id too.
           // US-19.1: claimed_at + the worker's name back the Duration/Agent columns.
-          "id, kind, finished_at, claimed_at, issue_id, project_id, workers(name), issues!runs_issue_org_fk!inner(title, type, item_no, sub_no, epics(number), abandoned_at, projects!inner(archived_at))"
+          // US-91.14: cost_usd — what this run cost, on the row that reports it.
+          "id, kind, finished_at, claimed_at, issue_id, project_id, cost_usd, workers(name), issues!runs_issue_org_fk!inner(title, type, item_no, sub_no, epics(number), abandoned_at, projects!inner(archived_at))"
         )
         .eq("org_id", orgId)
         .eq("status", "succeeded")
@@ -1596,6 +1615,7 @@ export async function loadThingsToDo(
         id: i.id,
         title: i.title,
         projectId: i.project_id,
+        project: projectName(i),
         status: i.status,
         type: i.type,
         displayId: issueDisplayId(i),
@@ -1650,6 +1670,7 @@ export async function loadThingsToDo(
     claimed_at: string | null;
     issue_id: string;
     project_id: string;
+    cost_usd: number | null;
     workers: CompletedRunWorker | CompletedRunWorker[] | null;
     issues: CompletedRunIssue | CompletedRunIssue[] | null;
   };
@@ -1691,6 +1712,7 @@ export async function loadThingsToDo(
           claimedMs != null && finishedMs != null && finishedMs >= claimedMs
             ? finishedMs - claimedMs
             : null,
+        costUsd: r.cost_usd,
       };
     });
 
@@ -1787,6 +1809,7 @@ export async function loadThingsToDo(
     const live = health.livenessByIssue.get(p.id);
     if (live) {
       featureRuns[p.id] = {
+        runId: live.runId,
         workerName: live.workerName,
         workerPrincipalId: live.workerPrincipalId,
         runningMinutes: live.runningMinutes,
@@ -1796,11 +1819,37 @@ export async function loadThingsToDo(
     }
   }
 
+  // US-91.3: which of the claiming agents have a CLI window worth linking.
+  // One `runner_config` read for the workers actually holding a claim — the
+  // roster's own condition (`enabled_modules` contains `interactive`), never
+  // a query per row.
+  const interactiveByPrincipal: Record<string, boolean> = {};
+  const principalByWorker = new Map<string, string>();
+  for (const live of health.livenessByIssue.values()) {
+    if (live.workerId && live.workerPrincipalId)
+      principalByWorker.set(live.workerId, live.workerPrincipalId);
+  }
+  if (principalByWorker.size) {
+    const { data: configs } = await supabase
+      .from("runner_config")
+      .select("worker_id, enabled_modules")
+      .in("worker_id", [...principalByWorker.keys()]);
+    for (const c of (configs ?? []) as {
+      worker_id: string;
+      enabled_modules: string[] | null;
+    }[]) {
+      const pid = principalByWorker.get(c.worker_id);
+      if (pid && (c.enabled_modules ?? []).includes("interactive"))
+        interactiveByPrincipal[pid] = true;
+    }
+  }
+
   return {
     ...waiting,
     releaseRows,
     agentItems,
     featureRuns,
+    interactiveByPrincipal,
     deployRows,
     completedItems,
     stalledQueue: health.stalledQueue,
