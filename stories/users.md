@@ -19,7 +19,7 @@ phases did *not* prove, the Phase 78 known gaps, and the
 retired-unbuilt-do-not-re-propose list — is in
 [APPLICATION.md → Delivery history](../APPLICATION.md#delivery-history).
 
-Twenty-two stories are open, all drafted but unbuilt — Phase 91's usability work
+Thirty stories are open, all drafted but unbuilt — Phase 91's usability work
 first (requested 2026-08-13), then the residue carried out of Phases 85–89:
 
 | Order | Story | Title | Status |
@@ -41,11 +41,18 @@ first (requested 2026-08-13), then the residue carried out of Phases 85–89:
 | 15 | [us-91.15](us-91.15-a-notification-says-what-happened-and-goes-there.md) | A notification says what happened, and goes there | Testing |
 | 16 | [us-91.16](us-91.16-the-build-stamp-names-the-build.md) | The build stamp names the build | Testing |
 | 17 | [us-91.17](us-91.17-the-workspace-picker-travels.md) | The workspace picker travels, and says when it's switching | Testing |
-| 18 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
-| 19 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
-| 20 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
-| 21 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
-| 22 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+| 18 | [us-91.18](us-91.18-merged-work-asks-to-be-released.md) | Merged work asks to be released | New |
+| 19 | [us-92.1](us-92.1-the-tabs-fit-the-phone.md) | Things to Do fits in a hand | New |
+| 20 | [us-92.2](us-92.2-one-filter-button-not-eleven-pills.md) | One filter button, not eleven pills | New |
+| 21 | [us-92.3](us-92.3-a-release-is-a-card-with-its-buttons-showing.md) | A release is a card, with its buttons showing | New |
+| 22 | [us-92.4](us-92.4-a-test-case-says-what-it-is.md) | A test case row says what it is | New |
+| 23 | [us-92.5](us-92.5-the-report-is-the-row.md) | On Bug Reports, the report is the row | New |
+| 24 | [us-92.6](us-92.6-a-project-card-leads-with-its-state.md) | A project card leads with its state | New |
+| 25 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
+| 26 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
+| 27 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
+| 28 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
+| 29 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
 
 **Phase 91 — Usability: the dashboard reads like the job** (drafted 2026-08-13,
 the manager's own list). Nothing here is broken; all of it is friction the
