@@ -225,9 +225,10 @@ def test_the_mapping_is_retired_with_the_matrix():
 
 def test_the_web_eligibility_surface_dropped_the_mapping_too():
     """us-35.5: two surfaces disagreeing about who can work is the defect it
-    was written to remove. The dashboard now mirrors worker_has_grant's two
-    halves (access + enabled_kinds) and carries no kind mapping of its own —
-    the client-side literal is exactly what drifted (it missed wireframe)."""
+    was written to remove. The workdesk (us-91.19 renamed the dashboard) now
+    mirrors worker_has_grant's two halves (access + enabled_kinds) and carries
+    no kind mapping of its own — the client-side literal is exactly what
+    drifted (it missed wireframe)."""
     ts = (
         ROOT
         / "apps"
@@ -235,7 +236,7 @@ def test_the_web_eligibility_surface_dropped_the_mapping_too():
         / "src"
         / "app"
         / "(app)"
-        / "dashboard"
+        / "workbench"
         / "data.ts"
     ).read_text(encoding="utf-8")
     assert "RUN_KIND_CAPABILITY" not in ts
