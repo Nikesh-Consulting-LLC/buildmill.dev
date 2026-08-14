@@ -388,6 +388,19 @@ export type ReleaseSuggestion = {
   capped: boolean;
   /** Why a cut would be refused right now — no button when set. */
   blocker: string | null;
+  /** us-91.18 UAT amendment: when a release is already in flight, the card
+   * IS that release — version, live status, and the items it snapshotted —
+   * not a prompt to cut another. Null when no release is in flight. */
+  flight: {
+    id: string;
+    version: string;
+    status: string;
+    /** From the release's own included_items snapshot — the authority. */
+    items: { id: string; displayId: string | null; title: string; type: string }[];
+    total: number;
+    /** Merged items NOT carried by this release — the next cut's cargo. */
+    extraMerged: number;
+  } | null;
 };
 
 /** US-37.3: a project that cannot start work because its budget is spent.
@@ -1733,7 +1746,7 @@ export async function loadThingsToDo(
       await Promise.all([
         supabase
           .from("releases")
-          .select("project_id, version, status, released_at")
+          .select("id, project_id, version, status, released_at, included_items")
           .eq("org_id", orgId)
           .in("status", [
             "released",
@@ -1761,10 +1774,12 @@ export async function loadThingsToDo(
       ]);
 
     type Rel = {
+      id: string;
       project_id: string;
       version: string;
       status: string;
       released_at: string | null;
+      included_items: unknown;
     };
     const rels = (relRows ?? []) as Rel[];
     // The last release that actually shipped, per project.
@@ -1799,11 +1814,33 @@ export async function loadThingsToDo(
       );
       if (!mine.length) continue;
 
-      // AC5: a project that cannot cut is told why, and offered no button.
-      const flight = inFlight.get(proj.id);
-      const blocker = flight
-        ? `${flight.version} is still in flight (${flight.status})`
-        : !proj.release_uat_deployment_id
+      // AC5 (amended during UAT 2026-08-14): a release already in flight IS
+      // the card — its version, live status, and its own included_items
+      // snapshot — never a prompt to cut another. Other blockers keep the
+      // chip-and-no-button shape.
+      const flightRel = inFlight.get(proj.id);
+      let flight: ReleaseSuggestion["flight"] = null;
+      if (flightRel) {
+        const snapshot = (
+          Array.isArray(flightRel.included_items) ? flightRel.included_items : []
+        ) as { issue_id: string; title: string; type: string; display_id: string | null }[];
+        const carried = new Set(snapshot.map((x) => x.issue_id));
+        flight = {
+          id: flightRel.id,
+          version: flightRel.version,
+          status: flightRel.status,
+          items: snapshot.slice(0, 3).map((x) => ({
+            id: x.issue_id,
+            displayId: x.display_id ?? null,
+            title: x.title,
+            type: x.type,
+          })),
+          total: snapshot.length,
+          extraMerged: mine.filter((i) => !carried.has(i.id)).length,
+        };
+      }
+      const blocker =
+        !flight && !proj.release_uat_deployment_id
           ? "no UAT deployment is designated for releases"
           : null;
 
@@ -1820,6 +1857,7 @@ export async function loadThingsToDo(
         total: mine.length,
         capped: cappedOverall,
         blocker,
+        flight,
       });
     }
     releaseSuggestions.sort((a, b) => a.project.localeCompare(b.project));
