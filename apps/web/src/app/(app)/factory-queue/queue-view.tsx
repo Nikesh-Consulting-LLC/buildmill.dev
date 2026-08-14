@@ -20,6 +20,8 @@ import { apiFetch } from "@/lib/api";
 import { RUN_KIND_LABELS, type RunKind } from "@/lib/run-kinds";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { RequeueButton } from "../dashboard/requeue-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
 import { CancelRunDialog } from "@/components/cancel-run-dialog";
@@ -279,14 +281,28 @@ function QueueRow({
       {item.status === "running" && (
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Bot className="size-3" />
-          <span>
+          <span
+            className={cn(
+              item.silentMinutes !== null &&
+                item.silentMinutes >= SILENT_MINUTES &&
+                "text-amber-700 dark:text-amber-400"
+            )}
+          >
             {item.workerName || "worker"}
             {item.activity && ` · ${item.activity}`}
+            {/* US-91.19: elapsed came from the retired factory tab. */}
+            {item.elapsedMinutes !== null && ` · ${item.elapsedMinutes}m elapsed`}
             {item.silentMinutes !== null &&
               ` · last heard ${
                 item.silentMinutes === 0 ? "just now" : `${item.silentMinutes}m ago`
               }`}
           </span>
+          {/* US-91.19: the escape the factory tab offered when a worker went
+              quiet — silence is not the same as work. */}
+          {item.silentMinutes !== null &&
+            item.silentMinutes >= SILENT_MINUTES && (
+              <RequeueButton runId={item.id} />
+            )}
         </div>
       )}
 
@@ -326,6 +342,10 @@ function QueueRow({
     </div>
   );
 }
+
+/** US-91.19: the dashboard's threshold for "materially longer than its
+ *  heartbeat cadence" — silence is not the same as work. */
+const SILENT_MINUTES = 20;
 
 export function QueueView({
   groups,

@@ -44,6 +44,9 @@ export type QueueItem = {
   workerName: string | null;
   activity: string | null;
   silentMinutes: number | null;
+  /** US-91.19: minutes since the claim — the "Elapsed" column the retired
+   *  factory tab carried. Running rows only. */
+  elapsedMinutes: number | null;
 };
 
 export type QueueGroup = {
@@ -202,7 +205,11 @@ export async function loadFactoryQueue(
     let workerName: string | null = null;
     let activity: string | null = null;
     let silentMinutes: number | null = null;
+    let elapsedMinutes: number | null = null;
     if (r.status === "running") {
+      elapsedMinutes = r.claimed_at
+        ? Math.max(0, Math.floor((now - new Date(r.claimed_at).getTime()) / 60_000))
+        : null;
       const last = lastActivityByRun.get(r.id);
       const isClarification = last?.tool === "request_clarification";
       state = isClarification ? "blocked-on-you" : "running";
@@ -246,6 +253,7 @@ export async function loadFactoryQueue(
       workerName,
       activity,
       silentMinutes,
+      elapsedMinutes,
     };
   });
 

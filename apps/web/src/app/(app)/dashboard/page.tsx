@@ -36,13 +36,10 @@ export default async function ThingsToDoPage() {
     parkedRuns,
     recommendationItems,
     refreshItems,
-    releaseRows,
     agentItems,
     featureRuns,
     interactiveByPrincipal,
     releaseSuggestions,
-    deployRows,
-    completedItems,
     stalledQueue,
     incidents,
     exhaustedBudgets,
@@ -99,11 +96,8 @@ export default async function ThingsToDoPage() {
     matches(r.projectId)
   );
   const fRefreshes = refreshItems.filter((r) => matches(r.projectId));
-  const fReleases = releaseRows.filter((r) => matches(r.projectId));
   const fAgent = agentItems.filter((a) => matches(a.projectId));
   const fIncidents = incidents.filter((i) => matches(i.projectId));
-  const fDeploy = deployRows.filter((d) => matches(d.projectId));
-  const fCompleted = completedItems.filter((c) => matches(c.projectId));
   const fWaitingCount =
     fGroups.reduce((n, g) => n + g.items.length, 0) +
     fRecommendations.length +
@@ -117,7 +111,7 @@ export default async function ThingsToDoPage() {
   return (
     <div className="flex w-full flex-col gap-6">
       <PageHeader
-        title="Things to Do"
+        title="Workdesk"
         description="What the factory is doing, and what it needs from you."
         actions={
           createProject && (
@@ -227,10 +221,6 @@ export default async function ThingsToDoPage() {
           featureRuns={featureRuns}
           interactiveByPrincipal={interactiveByPrincipal}
           releaseSuggestions={releaseSuggestions}
-          completedItems={fCompleted}
-          releaseRows={fReleases}
-          deployRows={fDeploy}
-          waitingCount={fWaitingCount}
           orgId={orgId}
         />
       </Suspense>

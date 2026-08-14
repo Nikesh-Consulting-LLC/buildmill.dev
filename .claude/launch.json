@@ -1,0 +1,16 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "mockup",
+      "url": "http://localhost:3999",
+      "port": 3999
+    },
+    {
+      "name": "public-site",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["apps/public/server.js"],
+      "port": 3040
+    }
+  ]
+}

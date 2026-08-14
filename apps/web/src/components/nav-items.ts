@@ -2,6 +2,7 @@ import {
   Activity,
   CircleHelp,
   Cpu,
+  Factory,
   FlaskConical,
   LayoutDashboard,
   FolderGit2,
@@ -137,8 +138,14 @@ export const ADMIN_ITEMS: NavChild[] = [
 // group (Projects/Servers), then Team/Settings/Help. Superadmin is appended
 // by the shell for platform admins only.
 export const NAV_ITEMS: NavEntry[] = [
-  { href: "/dashboard", label: "Things to Do", icon: LayoutDashboard },
+  // US-91.19: "Things to Do" described a list; the page is one desk you
+  // work from now. The route stays /dashboard — renaming it would break
+  // every link, bookmark and agent instruction for no gain.
+  { href: "/dashboard", label: "Workdesk", icon: LayoutDashboard },
   { href: "/issues", label: "Work Items", icon: ListTodo },
+  // US-91.19: what the factory is holding or working, in worker-pull order.
+  // It was a tab on the workdesk restating this page; now it is the page.
+  { href: "/factory-queue", label: "Factory Queue", icon: Factory },
   { href: "/tests", label: "Testing", icon: FlaskConical },
   // Release surface — presentation to be defined by later stories.
   { href: "/releases", label: "Release", icon: Rocket },

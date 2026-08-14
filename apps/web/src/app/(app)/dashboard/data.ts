@@ -348,15 +348,12 @@ export type FeatureRunInfo = {
 };
 
 export type ThingsToDoData = WaitingData & {
-  releaseRows: ReleaseRow[];
   agentItems: AgentItem[];
   /** US-86.2: keyed by feature issue id, present only while its run is live. */
   featureRuns: Record<string, FeatureRunInfo>;
   /** US-91.3: principal id → runs the `interactive` module, for the agents
    * currently holding a claim. Absent means no CLI window to offer. */
   interactiveByPrincipal: Record<string, boolean>;
-  deployRows: DeployRow[];
-  completedItems: CompletedItem[];
   stalledQueue: StalledQueue | null;
   /** US-13.6: runs that died holding their claim, most recent first. */
   incidents: IncidentRow[];
@@ -1422,55 +1419,11 @@ export async function loadThingsToDo(
   // distinguishable from "still going" without reading a terminal.
   const incidentCutoff = new Date(Date.now() - 48 * 3600_000).toISOString();
 
-  const [
-    { data: deployRuns },
-    { data: completedRunRows },
-    { data: deployedEvents },
-    { data: incidentEvents },
-    { data: dismissedRows },
-    health,
-  ] = await Promise.all([
-      supabase
-        .from("deployment_runs")
-        .select(
-          "id, status, created_at, deployment_id, deployments!deployment_runs_deployment_id_org_id_fkey!inner(name, project_id)"
-        )
-        .eq("org_id", orgId)
-        .in("status", ["queued", "running"]),
-      // US-15.4: every finished agent run, so the factory's output is visible
-      // as it accrues (not only at the final merge). Successful runs only.
-      // US-19.1: the merged/done issues query that used to sit here is gone —
-      // Completed is a run feed now, so nothing consumed it.
-      supabase
-        .from("runs")
-        .select(
-          // US-15.6: the issue's type + numbering so a finished run shows the id too.
-          // US-19.1: claimed_at + the worker's name back the Duration/Agent columns.
-          // US-91.14: cost_usd — what this run cost, on the row that reports it.
-          "id, kind, finished_at, claimed_at, issue_id, project_id, cost_usd, workers(name), issues!runs_issue_org_fk!inner(title, type, item_no, sub_no, epics(number), abandoned_at, projects!inner(archived_at))"
-        )
-        .eq("org_id", orgId)
-        .eq("status", "succeeded")
-        .not("finished_at", "is", null)
-        .is("issues.abandoned_at", null)
-        .is("issues.projects.archived_at", null)
-        .order("finished_at", { ascending: false })
-        .limit(15),
-      supabase
-        .from("releases")
-        .select(
-          "id, version, status, project_id, included_items, created_at, projects!releases_project_id_fkey!inner(name, archived_at)"
-        )
-        .eq("org_id", orgId)
-        .is("projects.archived_at", null)
-        // US-23.1: a cancelled release was abandoned before an agent started
-        // — nothing was ever built, deployed, or tested. This tab is "what is
-        // in flight and what is already out", so counting one here reports a
-        // release that does not exist. It stays in the Releases hub, which is
-        // the history and the place it belongs.
-        .neq("status", "cancelled")
-        .order("created_at", { ascending: false })
-        .limit(10),
+  // US-91.19: the deploy-in-flight, finished-run and released-version queries
+  // that fed the retired Completed and Releases tabs are gone with them.
+  // Deleting a tab while still paying for its data would be the worst of both.
+  const [{ data: incidentEvents }, { data: dismissedRows }, health] =
+    await Promise.all([
       supabase
         .from("issue_events")
         .select(
@@ -1550,17 +1503,6 @@ export async function loadThingsToDo(
       age: formatAge(e.created_at as string),
     });
   }
-
-  const releaseRows: ReleaseRow[] = (deployedEvents ?? []).map((r) => ({
-    id: r.id as string,
-    version: r.version as string,
-    status: r.status as string,
-    projectId: r.project_id as string,
-    project:
-      (r.projects as unknown as { name: string } | null)?.name ?? "Project",
-    itemCount: Array.isArray(r.included_items) ? r.included_items.length : 0,
-    age: formatAge(r.created_at as string),
-  }));
 
   const inFlightIssueIds = waiting.issues
     .filter(
@@ -1664,96 +1606,6 @@ export async function loadThingsToDo(
         lastNote: noteByIssue.get(i.id),
       };
     });
-
-  const deployRows: DeployRow[] = (deployRuns ?? []).map((r) => {
-    const dep = r.deployments as unknown as
-      | { name: string; project_id: string }
-      | { name: string; project_id: string }[]
-      | null;
-    const depOne = Array.isArray(dep) ? dep[0] : dep;
-    return {
-      id: r.id as string,
-      name: depOne?.name ?? "deployment",
-      projectId: depOne?.project_id ?? "",
-      status: r.status as string,
-      age: formatAge(r.created_at as string),
-    };
-  });
-
-  // US-19.1: every finished agent run, labelled by kind. Merged/shipped work
-  // items are deliberately absent — see the CompletedItem doc comment.
-  type CompletedRunIssue = {
-    title: string;
-    type: string;
-    item_no?: number | null;
-    sub_no?: number | null;
-    epics?: { number: number } | { number: number }[] | null;
-  };
-  type CompletedRunWorker = { name: string | null };
-  type CompletedRunRow = {
-    id: string;
-    kind: string;
-    finished_at: string | null;
-    claimed_at: string | null;
-    issue_id: string;
-    project_id: string;
-    cost_usd: number | null;
-    workers: CompletedRunWorker | CompletedRunWorker[] | null;
-    issues: CompletedRunIssue | CompletedRunIssue[] | null;
-  };
-  const runItems: CompletedItem[] = ((completedRunRows ?? []) as CompletedRunRow[])
-    .map((r) => {
-      const rel = Array.isArray(r.issues) ? r.issues[0] : r.issues;
-      const worker = Array.isArray(r.workers) ? r.workers[0] : r.workers;
-      // US-19.1: the attempt that produced this result — claimed → finished.
-      const claimedMs = r.claimed_at ? new Date(r.claimed_at).getTime() : null;
-      const finishedMs = r.finished_at ? new Date(r.finished_at).getTime() : null;
-      return {
-        id: r.id,
-        issueId: r.issue_id,
-        title: rel?.title ?? "Work item",
-        projectId: r.project_id,
-        type: rel?.type ?? "",
-        // US-15.6: the run row carries the issue's numbering; reuse the same
-        // display-id helper the rest of the dashboard uses.
-        displayId: rel
-          ? issueDisplayId({
-              id: r.issue_id,
-              title: rel.title,
-              type: rel.type,
-              status: "",
-              updated_at: "",
-              parent_id: null,
-              project_id: r.project_id,
-              item_no: rel.item_no ?? null,
-              sub_no: rel.sub_no ?? null,
-              epics: rel.epics ?? null,
-              projects: null,
-            })
-          : null,
-        label: COMPLETED_RUN_LABEL[r.kind] ?? "Run finished",
-        at: r.finished_at ?? new Date(0).toISOString(),
-        age: r.finished_at ? formatAge(r.finished_at) : "—",
-        workerName: worker?.name ?? "",
-        durationMs:
-          claimedMs != null && finishedMs != null && finishedMs >= claimedMs
-            ? finishedMs - claimedMs
-            : null,
-        costUsd: r.cost_usd,
-      };
-    });
-
-  // US-15.6: Completed reflects "nothing more happening right now", not
-  // "something finished once" — so an issue with any run still in flight
-  // (a running breakdown after its PRD succeeded, say) never shows here while
-  // that run is open. inFlightIssueIds already unions AGENT_STATUSES and the
-  // active PRD/breakdown runs.
-  const inFlight = new Set(inFlightIssueIds);
-  // One feed, most-recent first, bounded so a long history doesn't flood the tab.
-  const completedItems: CompletedItem[] = runItems
-    .filter((c) => !inFlight.has(c.issueId))
-    .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
-    .slice(0, 12);
 
   // Per-project waiting counts for the filter chips, from the unfiltered
   // groups + recommendations so a chip's count is independent of the filter.
@@ -1975,13 +1827,10 @@ export async function loadThingsToDo(
 
   return {
     ...waiting,
-    releaseRows,
     releaseSuggestions,
     agentItems,
     featureRuns,
     interactiveByPrincipal,
-    deployRows,
-    completedItems,
     stalledQueue: health.stalledQueue,
     incidents,
     projects,

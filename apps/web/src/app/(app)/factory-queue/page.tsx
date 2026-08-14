@@ -28,7 +28,7 @@ export default async function FactoryQueuePage() {
           className="mb-2 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-3.5" />
-          Things to Do
+          Workdesk
         </Link>
         <h1 className="text-2xl font-semibold tracking-tight">Factory queue</h1>
         <p className="text-sm text-muted-foreground">
