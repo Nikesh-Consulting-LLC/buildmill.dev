@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { apiCall } from "@/lib/api";
+import { useCanViewCosts } from "@/lib/use-can-view-costs";
 
 type Totals = {
   tokens_in: number;
@@ -35,6 +36,10 @@ export function SpendSummary({
 }) {
   const [totals, setTotals] = useState<Totals | null>(null);
   const [failed, setFailed] = useState(false);
+  // us-95.1 AC6: the breakdown moved behind the Costs gate — the link renders
+  // only for viewers who hold the key; everyone else keeps the same figures
+  // without a door they'd be turned away from.
+  const canViewCosts = useCanViewCosts(orgId);
 
   useEffect(() => {
     let cancelled = false;
@@ -76,10 +81,14 @@ export function SpendSummary({
           · {totals.unparsed_calls} unmeasured
         </span>
       )}
-      {" · "}
-      <Link href="/settings/spend" className="underline underline-offset-4">
-        breakdown
-      </Link>
+      {canViewCosts && (
+        <>
+          {" · "}
+          <Link href="/costs" className="underline underline-offset-4">
+            breakdown
+          </Link>
+        </>
+      )}
     </p>
   );
 }

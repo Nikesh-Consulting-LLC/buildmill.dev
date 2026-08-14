@@ -7,6 +7,7 @@ import {
   getCallerPrincipal,
   getProfile,
   getActiveOrg,
+  getOrgCapabilities,
 } from "@/lib/request-cache";
 import { AppSidebar } from "@/components/app-sidebar";
 import { MobileNav } from "@/components/mobile-nav";
@@ -74,7 +75,7 @@ export default async function AppLayout({
   // with the page, so the badge and the page header can never disagree.
   // Both of these need `orgId`, so they follow the batch above — but they do
   // not need each other, so they run together.
-  const [pendingCount, notificationsResult] = await Promise.all([
+  const [pendingCount, notificationsResult, canViewCosts] = await Promise.all([
     orgId ? getPendingCount(orgId) : Promise.resolve(0),
     principalId && orgId
       ? supabase
@@ -84,6 +85,12 @@ export default async function AppLayout({
           .order("created_at", { ascending: false })
           .limit(30)
       : Promise.resolve({ data: [] }),
+    // us-95.1: whether the Costs nav entry renders. Shared (React.cache) with
+    // the /costs page's own gate, so a shell that shows the door and a page
+    // that opens it always read the same answer.
+    orgId
+      ? getOrgCapabilities(orgId, user.id).then((c) => c.can("view_costs"))
+      : Promise.resolve(false),
   ]);
   const notifications = notificationsResult.data;
 
@@ -100,6 +107,7 @@ export default async function AppLayout({
         badgeCount={pendingCount}
         orgs={orgs}
         activeOrgId={orgId || null}
+        canViewCosts={canViewCosts}
       />
       <AppSidebar
         isSuperadmin={isSuperadmin}
@@ -111,6 +119,7 @@ export default async function AppLayout({
         activeOrgId={orgId || null}
         principalId={principalId}
         notifications={notifications ?? []}
+        canViewCosts={canViewCosts}
       />
       {/* US-87.11: one transition boundary around the page content, so a
           route change crossfades and a `loading.tsx` skeleton hands off to

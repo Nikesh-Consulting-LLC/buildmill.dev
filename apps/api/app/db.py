@@ -6,6 +6,7 @@ User-facing endpoints never use this; they go through PostgREST + RLS.
 """
 
 import contextvars
+import datetime as dt
 import hashlib
 import json
 import logging
@@ -3184,7 +3185,29 @@ SPEND_DIMENSIONS = {
     # US-60.2: the superadmin's cross-org view only — an org's own Spend page
     # never groups by org, it already knows which one it is.
     "org": "u.org_id::text",
+    # us-95.3: the work-shaped axes, resolved by walking the usage row's run
+    # to its work item at read time. Rows that cannot be walked — no run, or
+    # a batch run whose ledger does not say which item a call served — keep a
+    # NULL key and land in ONE named bucket, never dropped and never
+    # pro-rated: a guessed attribution is worse than a named gap.
+    "type": "i.type",
+    "epic": "i.epic_id::text",
+    "item": "i.id::text",
 }
+
+# The dimensions (and the item_type filter) that need the run -> issue walk.
+# LEFT joins, so unattributable usage keeps its row; skipped entirely for the
+# infrastructure dimensions, which have answered without them since US-33.3.
+ISSUE_SPEND_DIMENSIONS = frozenset({"type", "epic", "item"})
+_ISSUE_SPEND_JOIN = (
+    " left join public.runs r on r.id = u.run_id"
+    " left join public.issues i on i.id = r.issue_id"
+)
+
+ISSUE_TYPES = ("feature", "bug", "chore", "story")
+
+# The one row work-shaped groupings may not silently omit (us-95.3 AC3).
+UNATTRIBUTABLE_LABEL = "Not attributable to a work item"
 
 
 def spend_breakdown(
@@ -3195,6 +3218,7 @@ def spend_breakdown(
     days: int = 30,
     project_id: str | None = None,
     worker_id: str | None = None,
+    item_type: str | None = None,
 ) -> dict[str, Any]:
     """US-33.3: tokens in, tokens out and cost, grouped one way, over a window.
 
@@ -3210,6 +3234,11 @@ def spend_breakdown(
     US-60.2: `org_id=None` means no org filter at all — every org at once.
     Only the platform-admin-gated `/admin/usage` route may call it that way;
     the org-scoped `/llm/org-spend` route always supplies its own org id.
+
+    us-95.3/95.4: `type`/`epic`/`item` group through the run -> issue walk;
+    `item_type` narrows to one work-item type through the same walk (which
+    inherently excludes the unattributable rows — a bug filter cannot vouch
+    for money it cannot attribute).
     """
     if group_by not in SPEND_DIMENSIONS:
         group_by = "project"
@@ -3217,7 +3246,14 @@ def spend_breakdown(
         window = max(1, min(int(days), 366))
     except (TypeError, ValueError):
         window = 30
+    if item_type not in ISSUE_TYPES:
+        item_type = None
     expr = SPEND_DIMENSIONS[group_by]
+    join = (
+        _ISSUE_SPEND_JOIN
+        if group_by in ISSUE_SPEND_DIMENSIONS or item_type
+        else ""
+    )
     clauses = [f"u.created_at > now() - interval '{window} days'"]
     params: list[Any] = []
     if org_id and _valid_uuid(org_id):
@@ -3229,6 +3265,9 @@ def spend_breakdown(
     if worker_id and _valid_uuid(worker_id):
         clauses.append("u.worker_id = %s")
         params.append(worker_id)
+    if item_type:
+        clauses.append("i.type = %s")
+        params.append(item_type)
     where = " and ".join(clauses)
     with _connect(settings) as conn:
         rows = conn.execute(
@@ -3248,10 +3287,13 @@ def spend_breakdown(
                    -- A breakdown that silently omits it claims a completeness
                    -- it does not have.
                    count(*) filter (where not u.parsed) as unparsed_calls
-            from public.llm_usage u
+            from public.llm_usage u{join}
             where {where}
             group by 1
-            order by 4 desc nulls last, 2 desc
+            -- us-95.3: by cost. (`4` had pointed at cost until US-38.1's two
+            -- cache columns shifted it onto cache reads — position 6 is cost
+            -- again, and the tie-break stays tokens in.)
+            order by 6 desc nulls last, 2 desc
             limit 200
             """,
             tuple(params),
@@ -3286,13 +3328,60 @@ def spend_breakdown(
                 (keys,),
             ).fetchall():
                 labels[row["id"]] = row["name"]
+        elif keys and group_by == "type":
+            # Constraint values read as labels with a capital; no lookup table
+            # exists to disagree with.
+            labels = {k: k.capitalize() for k in keys}
+        elif keys and group_by == "epic":
+            # us-95.3 AC2: epic `number` repeats across projects — a bare "E4"
+            # from two projects would collapse two epics into one label, so the
+            # project's name always rides along.
+            for row in conn.execute(
+                """
+                select e.id::text as id, e.number, e.title, p.name as project
+                from public.epics e
+                join public.projects p on p.id = e.project_id
+                where e.id = any(%s::uuid[])
+                """,
+                (keys,),
+            ).fetchall():
+                labels[row["id"]] = (
+                    f"E{row['number']} — {row['title']} · {row['project']}"
+                )
+        elif keys and group_by == "item":
+            # Same display-id composition the issue surfaces use
+            # (US-<epic>.<item>[.<sub>]); an item never numbered falls back to
+            # its title alone rather than a malformed id.
+            for row in conn.execute(
+                """
+                select i.id::text as id, i.title,
+                       case when e.number is not null and i.item_no is not null
+                         then 'US-' || e.number || '.' || i.item_no ||
+                              coalesce('.' || i.sub_no, '')
+                       end as display_id
+                from public.issues i
+                left join public.epics e on e.id = i.epic_id
+                where i.id = any(%s::uuid[])
+                """,
+                (keys,),
+            ).fetchall():
+                labels[row["id"]] = (
+                    f"{row['display_id']} — {row['title']}"
+                    if row["display_id"]
+                    else row["title"]
+                )
+    null_label = (
+        UNATTRIBUTABLE_LABEL
+        if group_by in ISSUE_SPEND_DIMENSIONS
+        else "unattributed"
+    )
     out = []
     for r in rows:
         key = r["key"]
         out.append(
             {
                 "key": key,
-                "label": labels.get(key or "", key or "unattributed"),
+                "label": labels.get(key or "", key or null_label),
                 "tokens_in": int(r["tokens_in"]),
                 "tokens_out": int(r["tokens_out"]),
                 "cache_read_tokens": int(r["cache_read_tokens"]),
@@ -3319,6 +3408,109 @@ def spend_breakdown(
             "calls": sum(r["calls"] for r in out),
             "unparsed_calls": sum(r["unparsed_calls"] for r in out),
         },
+    }
+
+
+def spend_trend(
+    settings: Settings,
+    org_id: str,
+    *,
+    days: int = 30,
+    project_id: str | None = None,
+    worker_id: str | None = None,
+    item_type: str | None = None,
+) -> dict[str, Any]:
+    """us-95.2: the window as a daily curve, and the window set against the
+    window before it.
+
+    Day buckets are UTC calendar dates over the same `created_at > now() - N
+    days` predicate the breakdown uses, so the series sums to exactly the
+    total the table shows — one source of dollars (us-91.11 AC4). Days with
+    no metered calls are real zeros, filled here rather than left for the
+    client to infer from gaps. The previous window is a single total over
+    (now-2N, now-N] with the same filters — enough to say "up 40%", no more.
+
+    us-95.4: accepts the same three filters as the breakdown, so the curve
+    and the table can never be governed by different controls.
+    """
+    try:
+        window = max(1, min(int(days), 366))
+    except (TypeError, ValueError):
+        window = 30
+    if item_type not in ISSUE_TYPES:
+        item_type = None
+    join = _ISSUE_SPEND_JOIN if item_type else ""
+    clauses = [f"u.created_at > now() - interval '{2 * window} days'"]
+    params: list[Any] = []
+    if org_id and _valid_uuid(org_id):
+        clauses.append("u.org_id = %s")
+        params.append(org_id)
+    if project_id and _valid_uuid(project_id):
+        clauses.append("u.project_id = %s")
+        params.append(project_id)
+    if worker_id and _valid_uuid(worker_id):
+        clauses.append("u.worker_id = %s")
+        params.append(worker_id)
+    if item_type:
+        clauses.append("i.type = %s")
+        params.append(item_type)
+    where = " and ".join(clauses)
+    with _connect(settings) as conn:
+        rows = conn.execute(
+            f"""
+            select (u.created_at at time zone 'utc')::date as day,
+                   u.created_at > now() - interval '{window} days' as in_window,
+                   coalesce(sum(u.cost_usd), 0) as cost_usd,
+                   coalesce(sum(u.tokens_in), 0)  as tokens_in,
+                   coalesce(sum(u.tokens_out), 0) as tokens_out,
+                   count(*) as calls,
+                   count(*) filter (where not u.parsed) as unparsed_calls
+            from public.llm_usage u{join}
+            where {where}
+            group by 1, 2
+            """,
+            tuple(params),
+        ).fetchall()
+    # The calendar day the cutoff falls on can straddle it; grouping by the
+    # in-window flag as well keeps that day's out-of-window portion in the
+    # previous total instead of inflating the series.
+    by_day: dict[str, dict[str, Any]] = {}
+    prev_cost = 0.0
+    prev_calls = 0
+    for r in rows:
+        if r["in_window"]:
+            by_day[r["day"].isoformat()] = r
+        else:
+            prev_cost += float(r["cost_usd"])
+            prev_calls += int(r["calls"])
+    today = dt.datetime.now(dt.timezone.utc).date()
+    first = today - dt.timedelta(days=window)
+    series = []
+    for offset in range((today - first).days + 1):
+        day = (first + dt.timedelta(days=offset)).isoformat()
+        r = by_day.get(day)
+        series.append(
+            {
+                "day": day,
+                "cost_usd": float(r["cost_usd"]) if r else 0.0,
+                "tokens_in": int(r["tokens_in"]) if r else 0,
+                "tokens_out": int(r["tokens_out"]) if r else 0,
+                "calls": int(r["calls"]) if r else 0,
+                "unparsed_calls": int(r["unparsed_calls"]) if r else 0,
+            }
+        )
+    total = round(sum(p["cost_usd"] for p in series), 6)
+    any_calls = any(p["calls"] for p in series)
+    return {
+        "days": window,
+        "series": series,
+        # Same semantics as the breakdown totals: None means "nothing metered
+        # carried a price", which must not read as free.
+        "total_cost_usd": total if total else (0.0 if any_calls else None),
+        "previous_cost_usd": round(prev_cost, 6) if prev_calls else None,
+        "previous_calls": prev_calls,
+        "calls": sum(p["calls"] for p in series),
+        "unparsed_calls": sum(p["unparsed_calls"] for p in series),
     }
 
 

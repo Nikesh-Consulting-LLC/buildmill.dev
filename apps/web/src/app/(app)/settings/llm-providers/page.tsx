@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/card";
 import { requireOrg } from "../require-org";
 import { ProvidersSection, type LlmProvider } from "./providers-section";
+import { RatesSection } from "./rates-section";
 import { RoutingSection, type LlmRoute } from "./routing-section";
 import {
   SubscriptionSection,
@@ -90,6 +91,23 @@ export default async function LlmProvidersPage() {
             providers={providerRows}
             routes={(routes as LlmRoute[] | null) ?? []}
           />
+        </CardContent>
+      </Card>
+
+      {/* us-95.1: the rates joined this page from the old Settings → Spend —
+          they are configuration (the provider's published pricing), and this
+          is the page about providers. The report they feed is /costs. */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Model rates</CardTitle>
+          <CardDescription>
+            What each model costs per million tokens. The gateway meters every
+            call in tokens; these rates turn tokens into the dollars the Costs
+            section reports.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <RatesSection orgId={orgId} />
         </CardContent>
       </Card>
     </div>

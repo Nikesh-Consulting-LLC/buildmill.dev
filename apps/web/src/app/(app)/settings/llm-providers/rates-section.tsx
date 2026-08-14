@@ -1,16 +1,12 @@
 "use client";
 
-// US-33.1 + US-33.3: what the factory costs, and the rates it is costed at.
+// US-33.1 + US-36.4 + US-38.1: the model rates — moved here from the old
+// Settings → Spend page by us-95.1. Rates are configuration (the provider's
+// published pricing, hand-entered), so they live in Settings beside the
+// providers they price; the spend REPORT they feed moved to the top-level
+// Costs section.
 //
-// Nothing has ever written `runs.cost_usd` — the columns have been in the schema
-// since migration 005 and every run reported null spend. The gateway now meters
-// every model call, and every figure here is a query over those append-only
-// rows: no counter exists to drift, because a drifted cost figure is worse than
-// no cost figure — it will be believed.
-//
-// Tokens in and out stay separate everywhere. They have different prices, and
-// collapsing them destroys the only information that explains why two runs with
-// the same token count cost differently.
+// Self-contained: loads its own prices and model list, reloads after a save.
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -18,28 +14,8 @@ import Link from "next/link";
 import { apiCall } from "@/lib/api";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { toastError, toastSuccess } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
-
-type Row = {
-  key: string | null;
-  label: string;
-  tokens_in: number;
-  tokens_out: number;
-  cache_read_tokens: number;
-  cache_write_tokens: number;
-  cost_usd: number | null;
-  calls: number;
-  unparsed_calls: number;
-};
-
-type Breakdown = {
-  group_by: string;
-  days: number;
-  rows: Row[];
-  totals: Omit<Row, "key" | "label">;
-};
 
 type Price = {
   model: string;
@@ -49,60 +25,9 @@ type Price = {
   cache_write_per_mtok: number | null;
 };
 
-/** US-38.1: how much of the input side never had to be re-read.
- *
- * A cache read bills at a fraction of the input rate, so on a workload that
- * re-sends its conversation every turn this share IS the bill. Shown as a
- * share of input rather than a raw count, because the raw count is already two
- * columns to its left and the question here is "is caching working at all".
- *
- * A dash, not 0%, when nothing reported it: rows written before the split carry
- * NULL, and "we did not measure this" must not read as "nothing was cached". */
-function cacheShare(row: {
-  tokens_in: number;
-  cache_read_tokens: number;
-}): string {
-  if (!row.tokens_in || !row.cache_read_tokens) return "—";
-  return `${Math.round((row.cache_read_tokens / row.tokens_in) * 100)}%`;
-}
-
-const DIMENSIONS = [
-  { key: "project", label: "By project" },
-  { key: "agent", label: "By agent" },
-  { key: "provider", label: "By provider" },
-  { key: "model", label: "By model" },
-];
-const WINDOWS = [
-  { days: 1, label: "Today" },
-  { days: 7, label: "7 days" },
-  { days: 30, label: "30 days" },
-  { days: 90, label: "90 days" },
-];
-
-function money(value: number | null | undefined) {
-  if (value == null) return "—";
-  return `$${value.toFixed(value < 1 ? 4 : 2)}`;
-}
-
-function tokens(value: number) {
-  return value.toLocaleString();
-}
-
-// US-9.7: `orgId` is resolved server-side (settings/spend/page.tsx via
-// requireOrg) and this component is remounted with `key={orgId}` whenever
-// the active workspace changes — so a stale org can never linger in state
-// the way it would if this component re-derived and cached its own orgId.
-export default function SpendView({ orgId }: { orgId: string }) {
-  const [groupBy, setGroupBy] = useState("project");
-  const [days, setDays] = useState(30);
-  const [data, setData] = useState<Breakdown | null>(null);
+export function RatesSection({ orgId }: { orgId: string }) {
   const [prices, setPrices] = useState<Price[]>([]);
   const [orgModels, setOrgModels] = useState<string[]>([]);
-  // US-52.4: runs billed to a Claude subscription in this window. They bypass
-  // the gateway, so they appear in NO figure on this page — a separate line,
-  // never lumped into "could not be measured", which flags metering problems.
-  const [subscriptionRuns, setSubscriptionRuns] = useState(0);
-  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -138,192 +63,14 @@ export default function SpendView({ orgId }: { orgId: string }) {
       if (row.default_model) models.add(row.default_model as string);
     }
     setOrgModels([...models].sort());
-    const since = new Date(Date.now() - days * 86_400_000).toISOString();
-    const { count: subCount } = await supabase
-      .from("runs")
-      .select("id", { count: "exact", head: true })
-      .eq("org_id", orgId)
-      .eq("billing", "subscription")
-      .gte("created_at", since);
-    setSubscriptionRuns(subCount ?? 0);
-    try {
-      setData(
-        await apiCall(
-          `/api/v1/llm/orgs/${orgId}/spend?group_by=${groupBy}&days=${days}`,
-        ),
-      );
-      setError(null);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }, [orgId, groupBy, days]);
+  }, [orgId]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   return (
-    <div className="flex w-full flex-col gap-6">
-      <div>
-        <h2 className="text-lg font-semibold">Spend</h2>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          Every model call the factory makes passes through its own gateway, which
-          meters it. These figures are queries over those records, not counters —
-          and cost uses the rate that was in force when each call was made, so
-          repricing a model changes what future runs cost and never rewrites what
-          past ones did.
-        </p>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        {DIMENSIONS.map((d) => (
-          <Button
-            key={d.key}
-            size="sm"
-            variant={groupBy === d.key ? "default" : "outline"}
-            onClick={() => setGroupBy(d.key)}
-          >
-            {d.label}
-          </Button>
-        ))}
-        <span className="ml-auto flex gap-2">
-          {WINDOWS.map((w) => (
-            <Button
-              key={w.days}
-              size="sm"
-              variant={days === w.days ? "default" : "outline"}
-              onClick={() => setDays(w.days)}
-            >
-              {w.label}
-            </Button>
-          ))}
-        </span>
-      </div>
-
-      {error && <p className="text-sm text-destructive">{error}</p>}
-
-      {data === null ? (
-        <p className="text-sm text-muted-foreground">Loading spend…</p>
-      ) : data.rows.length === 0 ? (
-        <div className="rounded-md border border-dashed p-8 text-sm text-muted-foreground">
-          <p className="font-medium text-foreground">
-            Nothing metered in this window.
-          </p>
-          <p className="mt-2 max-w-2xl">
-            Spend appears here as soon as an agent makes a model call through the
-            factory gateway. Runs that predate metering report nothing rather than
-            zero — the calls happened, they were simply never counted.
-          </p>
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-md border">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b bg-muted/40 text-xs">
-                <th className="px-3 py-2 font-medium">
-                  {DIMENSIONS.find((d) => d.key === data.group_by)?.label.replace(
-                    "By ",
-                    "",
-                  )}
-                </th>
-                <th className="px-3 py-2 text-right font-medium">Tokens in</th>
-                <th className="px-3 py-2 text-right font-medium">Tokens out</th>
-                {/* US-38.1: the share of input served from the provider's
-                    prompt cache. Hidden on narrow screens rather than allowed
-                    to overflow the table (us-35.7). */}
-                <th className="hidden px-3 py-2 text-right font-medium lg:table-cell">
-                  Cached
-                </th>
-                <th className="px-3 py-2 text-right font-medium">Cost</th>
-                <th className="px-3 py-2 text-right font-medium">Calls</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.rows.map((r) => (
-                <tr key={r.key ?? "unattributed"} className="border-b last:border-0">
-                  <td className="px-3 py-1.5">
-                    {r.label}
-                    {/* US-33.3: what we could not measure, named rather than
-                        quietly dropped from the total. */}
-                    {r.unparsed_calls > 0 && (
-                      <Badge
-                        variant="outline"
-                        className="ml-2 text-[11px] text-amber-700 dark:text-amber-400"
-                        title="Calls whose provider usage could not be read. They are counted as calls but contribute no tokens or cost."
-                      >
-                        {r.unparsed_calls} unmeasured
-                      </Badge>
-                    )}
-                  </td>
-                  <td className="px-3 py-1.5 text-right font-mono text-xs">
-                    {tokens(r.tokens_in)}
-                  </td>
-                  <td className="px-3 py-1.5 text-right font-mono text-xs">
-                    {tokens(r.tokens_out)}
-                  </td>
-                  <td
-                    className="hidden px-3 py-1.5 text-right font-mono text-xs lg:table-cell"
-                    title={
-                      r.cache_read_tokens
-                        ? `${tokens(r.cache_read_tokens)} read from cache, ${tokens(
-                            r.cache_write_tokens
-                          )} written to it`
-                        : "nothing reported a cache hit here"
-                    }
-                  >
-                    {cacheShare(r)}
-                  </td>
-                  <td className="px-3 py-1.5 text-right font-mono text-xs">
-                    {money(r.cost_usd)}
-                  </td>
-                  <td className="px-3 py-1.5 text-right font-mono text-xs">
-                    {r.calls}
-                  </td>
-                </tr>
-              ))}
-              <tr className="bg-muted/30 font-medium">
-                <td className="px-3 py-2">
-                  Total
-                  {data.totals.unparsed_calls > 0 && (
-                    <span className="ml-2 text-xs font-normal text-amber-700 dark:text-amber-400">
-                      · {data.totals.unparsed_calls} call(s) could not be measured
-                    </span>
-                  )}
-                  {subscriptionRuns > 0 && (
-                    <span className="ml-2 text-xs font-normal text-muted-foreground">
-                      · {subscriptionRuns} run(s) on subscription (off-meter, by
-                      design)
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right font-mono text-xs">
-                  {tokens(data.totals.tokens_in)}
-                </td>
-                <td className="px-3 py-2 text-right font-mono text-xs">
-                  {tokens(data.totals.tokens_out)}
-                </td>
-                <td className="hidden px-3 py-2 text-right font-mono text-xs lg:table-cell">
-                  {cacheShare(data.totals)}
-                </td>
-                <td className="px-3 py-2 text-right font-mono text-xs">
-                  {money(data.totals.cost_usd)}
-                </td>
-                <td className="px-3 py-2 text-right font-mono text-xs">
-                  {data.totals.calls}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      <Prices
-        orgId={orgId}
-        prices={prices}
-        orgModels={orgModels}
-        onSaved={() => load()}
-      />
-    </div>
+    <Prices orgId={orgId} prices={prices} orgModels={orgModels} onSaved={() => load()} />
   );
 }
 
@@ -432,21 +179,18 @@ function Prices({
   ];
 
   return (
-    <div className="grid gap-3 rounded-lg border p-4 text-sm">
-      <span className="font-medium">Rates</span>
+    <div className="grid gap-3 text-sm">
       <p className="max-w-3xl text-xs text-muted-foreground">
         Dollars per million tokens, as every provider quotes them. Tokens are the
         measured fact; money is tokens times these. A model with no rate is
         metered in tokens and reports its cost as unknown — deliberately, because
         &quot;we have no price for this&quot; and &quot;it was free&quot; must not
-        read the same. Rates come from your{" "}
-        <Link
-          href="/settings/llm-providers"
-          className="underline underline-offset-4"
-        >
-          provider&apos;s
+        read the same. Rates feed the{" "}
+        <Link href="/costs" className="underline underline-offset-4">
+          Costs
         </Link>{" "}
-        published pricing; the factory does not guess them.
+        section; they come from your provider&apos;s published pricing — the
+        factory does not guess them.
       </p>
 
       {prices.length > 0 && (
@@ -522,7 +266,8 @@ function Prices({
       {unpriced.length > 0 && (
         <p className="text-xs text-amber-700 dark:text-amber-400">
           No rate yet for: {unpriced.join(", ")}. Calls on those models are
-          counted in tokens and cost nothing on this page until a rate is set.
+          counted in tokens and cost nothing on the Costs page until a rate is
+          set.
         </p>
       )}
 

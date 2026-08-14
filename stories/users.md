@@ -19,9 +19,10 @@ phases did *not* prove, the Phase 78 known gaps, and the
 retired-unbuilt-do-not-re-propose list — is in
 [APPLICATION.md → Delivery history](../APPLICATION.md#delivery-history).
 
-Thirty-two stories are open — Phase 91's usability work first (requested
+Thirty-six stories are open — Phase 91's usability work first (requested
 2026-08-13), then Phase 92's phone work, the public site and its beta gate
-(requested 2026-08-14), and the residue carried out of Phases 85–89:
+(requested 2026-08-14), Phase 95's cost management (requested 2026-08-14),
+and the residue carried out of Phases 85–89:
 
 | Order | Story | Title | Status |
 |---|---|---|---|
@@ -52,11 +53,15 @@ Thirty-two stories are open — Phase 91's usability work first (requested
 | 25 | [us-92.6](us-92.6-a-project-card-leads-with-its-state.md) | A project card leads with its state | Testing |
 | 26 | [us-93.1](us-93.1-the-front-door-tells-the-story.md) | The front door tells the story | Testing |
 | 27 | [us-94.1](us-94.1-a-new-account-waits-at-the-door.md) | A new account waits at the door | Testing |
-| 28 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
-| 29 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
-| 30 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
-| 31 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
-| 32 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+| 28 | [us-95.1](us-95.1-cost-gets-its-own-room.md) | Cost gets its own room, and managers hold the key | Testing |
+| 29 | [us-95.2](us-95.2-spend-is-a-curve-not-a-number.md) | Spend is a curve, not a number | Testing |
+| 30 | [us-95.3](us-95.3-every-dollar-names-the-work.md) | Every dollar names the work that bought it | Testing |
+| 31 | [us-95.4](us-95.4-a-slice-narrows-and-a-view-travels.md) | A slice narrows, and a view travels | Testing |
+| 32 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
+| 33 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
+| 34 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
+| 35 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
+| 36 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
 
 **Phase 91 — Usability: the dashboard reads like the job** (drafted 2026-08-13,
 the manager's own list). Nothing here is broken; all of it is friction the
@@ -109,6 +114,22 @@ Accounts gains the pending queue with per-row Approve; enforcement is
 server-side (RLS/API, not a client redirect); every existing account is
 grandfathered in the same migration; the decision is audited. No deny
 flow, no emails, no invite codes — approval only.
+
+**Phase 95 — Cost management** (drafted 2026-08-14, the manager's request).
+Money today is one settings page every member can open, plus facts scattered
+where us-91.14 put them. Phase 95 gives cost its own room and locks the
+door: a top-level **Costs** section holding the spend reporting, gated to
+owner and admin through a new `view_costs` capability in the US-9.2 grid,
+with the rates form staying behind in Settings where configuration lives
+(us-95.1). The section then learns the manager's actual questions: which way
+spending is going — a daily curve and a window-over-window comparison, every
+figure still computed from the append-only `llm_usage` ledger (us-95.2);
+what the money bought in the work's own terms — spend grouped by work-item
+type, epic, and item via the run → issue join, with money that cannot be
+attributed shown as a named bucket rather than dropped or pro-rated
+(us-95.3); and how to narrow a view and hand it over — Project/Agent/Type
+filters that compose with any grouping and window, the whole slice carried
+in the URL (us-95.4).
 
 **Phase 85 residue — us-85.3** (drafted 2026-08-12) closes the loop on the incident
 that motivated us-85.1's workspace verification. A run that fails on a broken bench —

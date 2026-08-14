@@ -1,10 +1,11 @@
 "use client";
 
-// US-60.2: the superadmin's own view of what Settings → Spend already
+// US-60.2: the superadmin's own view of what an org's Costs section already
 // computes for one org — grouped by org (or drilled into one org's own
 // project/agent breakdown), across every customer at once. Read-only:
 // no invoice, no charge, no payment — the same `cost_usd` figures the
-// org's own Spend page already renders, made visible in aggregate.
+// org's own Costs page (us-95.1, formerly Settings → Spend) already
+// renders, made visible in aggregate.
 
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
@@ -99,7 +100,7 @@ export default function AdminUsagePage() {
         <h1 className="text-2xl font-semibold tracking-tight">Usage</h1>
         <p className="max-w-3xl text-sm text-muted-foreground">
           Every org&apos;s API usage, across every customer at once — the same
-          metered figures Settings → Spend shows one org, including Buildmill
+          metered figures the Costs section shows one org, including Buildmill
           Agent usage (billed to the platform&apos;s own key, so it reads
           distinctly by provider). Visibility only: no invoice, no charge.
         </p>

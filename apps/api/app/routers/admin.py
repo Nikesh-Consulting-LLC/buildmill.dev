@@ -582,12 +582,14 @@ CAPABILITY_KEYS = (
     "review_work",
     "develop",
     "view",
+    # us-95.1: the Costs section's door key. Gates the section, not the ledger.
+    "view_costs",
 )
 
-# The shipped default matrix (mirrors migration 087) — used by "reset".
+# The shipped default matrix (mirrors migrations 087 + 254) — used by "reset".
 DEFAULT_ROLE_CAPABILITIES: dict[str, tuple[str, ...]] = {
     "owner": CAPABILITY_KEYS,
-    "admin": ("manage_members", "manage_project", "manage_work", "review_work", "develop", "view"),
+    "admin": ("manage_members", "manage_project", "manage_work", "review_work", "develop", "view", "view_costs"),
     "lead": ("manage_work", "review_work", "develop", "view"),
     "developer": ("develop", "view"),
     "reviewer": ("review_work", "view"),

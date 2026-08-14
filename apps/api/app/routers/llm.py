@@ -666,7 +666,30 @@ async def delete_model_price(
 
 # ---------------------------------------------------------------------------
 # US-33.3: what it cost, by project, agent, provider and model
+# us-95.2/95.3/95.4: plus the daily curve and the work-shaped dimensions,
+# rendered by the Costs section
 # ---------------------------------------------------------------------------
+
+
+async def _require_view_costs(
+    org_id: str, user: AuthUser, settings: Settings
+) -> None:
+    """us-95.1: the Costs section's door, resolved through the same
+    role_capabilities grid the client gate reads — so they cannot disagree.
+    Platform admins pass inside has_org_capability itself."""
+    try:
+        allowed = await rpc(
+            settings,
+            user.token,
+            "has_org_capability",
+            {"p_org": org_id, "p_capability": "view_costs"},
+        )
+    except RpcError:
+        allowed = False
+    if not allowed:
+        raise HTTPException(
+            status_code=403, detail="Costs is visible to owners and admins"
+        )
 
 
 @router.get("/orgs/{org_id}/spend")
@@ -676,15 +699,18 @@ async def org_spend(
     days: int = 30,
     project_id: str | None = None,
     worker_id: str | None = None,
+    item_type: str | None = None,
     user: AuthUser = Depends(verify_token),
     settings: Settings = Depends(get_settings),
 ):
-    """One grain, four dimensions, over a window.
+    """One grain, seven dimensions, over a window.
 
     Read-gated on org membership rather than a capability: spend is something
-    every member of the org can see, and RLS already scopes the underlying rows
-    the same way. Computed from the append-only usage rows at read time — there
-    is no counter to drift.
+    every member of the org can see (the project card and agent page read this
+    exact endpoint), and RLS already scopes the underlying rows the same way.
+    The Costs *section* is gated client-side plus on its own endpoints; this
+    shared one stays member-read (us-95.1). Computed from the append-only
+    usage rows at read time — there is no counter to drift.
     """
     try:
         member = await rpc(settings, user.token, "is_org_member", {"org": org_id})
@@ -700,4 +726,33 @@ async def org_spend(
         days=days,
         project_id=project_id,
         worker_id=worker_id,
+        item_type=item_type,
+    )
+
+
+@router.get("/orgs/{org_id}/spend-trend")
+async def org_spend_trend(
+    org_id: str,
+    days: int = 30,
+    project_id: str | None = None,
+    worker_id: str | None = None,
+    item_type: str | None = None,
+    user: AuthUser = Depends(verify_token),
+    settings: Settings = Depends(get_settings),
+):
+    """us-95.2: the daily spend curve plus the previous window's total.
+
+    Unlike /spend above, this is new and only the Costs section reads it, so
+    it verifies `view_costs` server-side and answers a refusal — not data —
+    to a member without the key.
+    """
+    await _require_view_costs(org_id, user, settings)
+    return await asyncio.to_thread(
+        db.spend_trend,
+        settings,
+        org_id,
+        days=days,
+        project_id=project_id,
+        worker_id=worker_id,
+        item_type=item_type,
     )

@@ -26,6 +26,8 @@ export const CAPABILITIES = [
   "review_work",
   "develop",
   "view",
+  // us-95.1: the Costs section's door key (owner + admin by default).
+  "view_costs",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
@@ -82,6 +84,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   review_work: "Review work",
   develop: "Develop",
   view: "View",
+  view_costs: "View costs",
 };
 
 export const CAPABILITY_DESCRIPTIONS: Record<Capability, string> = {
@@ -92,6 +95,7 @@ export const CAPABILITY_DESCRIPTIONS: Record<Capability, string> = {
   review_work: "Review, approve, merge, and send back",
   develop: "Claim runs, own router tokens, push via the router",
   view: "Read-only access to org data",
+  view_costs: "Open the Costs section: spend reporting and trends",
 };
 
 // Cells the Superadmin cannot toggle off (re-enforced server-side, US-9.3):

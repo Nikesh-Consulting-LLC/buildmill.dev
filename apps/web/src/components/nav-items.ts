@@ -1,5 +1,6 @@
 import {
   Activity,
+  CircleDollarSign,
   CircleHelp,
   Cpu,
   Factory,
@@ -37,16 +38,26 @@ export type NavItem = {
 // can group "work" vs "configure" vs "team/settings" vs superadmin.
 export type NavEntry = NavItem | { heading: string } | { separator: true };
 
+// us-95.1: the one capability-gated entry. Both shells filter it out unless
+// the layout resolved `view_costs` for the caller's role in the active org.
+export const COSTS_HREF = "/costs";
+
+/** The nav with the Costs entry removed for viewers without the key. */
+export function navItemsFor(entries: NavEntry[], canViewCosts: boolean): NavEntry[] {
+  if (canViewCosts) return entries;
+  return entries.filter((e) => !("href" in e) || e.href !== COSTS_HREF);
+}
+
 // US-2.24: settings sections are a submenu of the Settings entry in the
 // main navigation (sidebar + mobile drawer), not an in-page rail.
 // US-9.13/9.14: Workers, My Access Tokens, and My Team all fold into the
 // top-level Team surface.
 export const SETTINGS_ITEMS: NavChild[] = [
+  // us-95.1: the model rates joined this page; the spend REPORT moved to the
+  // top-level Costs section (/settings/spend redirects there).
   { href: "/settings/llm-providers", label: "LLM Providers" },
   // US-57.7: run presets are platform-authored now (US-57.6) — the org nav
   // entry retires with the page; /admin/preset-templates is the superadmin's.
-  // US-33.1/33.3: what the factory costs, and the rates it is costed at.
-  { href: "/settings/spend", label: "Spend" },
   // US-34.1: the MCP servers agents may be granted.
   { href: "/settings/tools", label: "Tool servers" },
   { href: "/settings/github", label: "GitHub" },
@@ -157,6 +168,11 @@ export const NAV_ITEMS: NavEntry[] = [
   // Activity, the other "what happened out there" surface, so the four
   // delivery surfaces above it read as the pipeline in order.
   { href: "/reports", label: "Bug Reports", icon: MessageSquareWarning },
+  // us-95.1: what the factory costs, grouped with the other "what happened"
+  // surfaces. The shells hide it unless the viewer holds `view_costs`
+  // (owner + admin by default); hiding is courtesy — the page itself turns
+  // non-holders away server-side.
+  { href: COSTS_HREF, label: "Costs", icon: CircleDollarSign },
   { separator: true },
   { heading: "Configure" },
   { href: "/projects", label: "Projects", icon: FolderGit2 },

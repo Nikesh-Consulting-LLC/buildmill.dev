@@ -26,6 +26,7 @@ import {
   type ActiveOrg,
   type CallerPrincipal,
 } from "@/lib/active-org";
+import { loadOrgCapabilities, type OrgCapabilities } from "@/lib/permissions";
 
 /** One Supabase server client per request, so the helpers below share a
  * connection and their cache keys stay argument-free. */
@@ -85,5 +86,15 @@ export const getActiveOrg = cache(
     const supabase = await getServerClient();
     const principal = await getCallerPrincipal(userId);
     return resolveActiveOrgFrom(supabase, userId, principal?.active_org_id ?? null);
+  }
+);
+
+/** us-95.1: the caller's capabilities in an org, shared between the shell's
+ * nav gate and the /costs page's own server-side check — one answer per
+ * request, resolved through the same US-9.2 grid RLS reads. */
+export const getOrgCapabilities = cache(
+  async (orgId: string, userId: string): Promise<OrgCapabilities> => {
+    const supabase = await getServerClient();
+    return loadOrgCapabilities(supabase, orgId, userId);
   }
 );

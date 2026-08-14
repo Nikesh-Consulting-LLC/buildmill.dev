@@ -1,11 +1,9 @@
-import { requireOrg } from "../require-org";
-import SpendView from "./spend-view";
+import { redirect } from "next/navigation";
 
-// US-9.7: resolved server-side and passed down with `key={orgId}` so the
-// client view remounts (fresh state, not a stale cached org) whenever the
-// workspace switcher changes the active org — router.refresh() alone
-// doesn't reset a client component's own useState.
-export default async function SpendPage() {
-  const { orgId } = await requireOrg();
-  return <SpendView orgId={orgId} key={orgId} />;
+// us-95.1: the spend report moved to the top-level Costs section and the
+// rates form to Settings → LLM Providers. This route survives only so old
+// bookmarks land somewhere true — /costs runs the same server-side gate it
+// would for any visitor.
+export default function SpendPage() {
+  redirect("/costs");
 }
