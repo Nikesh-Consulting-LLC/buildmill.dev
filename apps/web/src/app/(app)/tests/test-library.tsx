@@ -56,8 +56,9 @@ export type TestCaseRow = {
 export type SuiteOption = { id: string; name: string };
 
 /** US-91.6: rows on screen at once. Selection survives paging, so this bounds
- *  what is rendered, not what can be acted on. */
-const PAGE_SIZE = 50;
+ *  what is rendered, not what can be acted on. Ten, per the manager's UAT —
+ *  the point was a window you step through, and fifty is still a scroll. */
+const PAGE_SIZE = 10;
 
 export function TestLibrary({
   orgId,

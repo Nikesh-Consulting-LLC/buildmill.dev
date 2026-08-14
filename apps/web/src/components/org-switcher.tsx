@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "@/lib/router-with-progress";
 import { Building2, Check, ChevronsUpDown, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -20,13 +20,34 @@ export function OrgSwitcher({
   orgs,
   activeOrgId,
   collapsed = false,
+  className,
 }: {
   orgs: OrgOption[];
   activeOrgId: string | null;
   collapsed?: boolean;
+  className?: string;
 }) {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
+  /** The workspace being switched TO, while the switch is in flight. */
+  const [pending, setPending] = useState<string | null>(null);
+  const busy = pending !== null;
+
+  // UAT: the switch writes `principals.active_org_id` and re-renders every
+  // org-scoped page, which takes a moment. Clear the overlay when the server
+  // actually comes back on the new workspace — not when the write returns,
+  // which is a second or two too early and leaves the old data on screen
+  // under a "done" UI.
+  useEffect(() => {
+    if (pending && activeOrgId === pending) setPending(null);
+  }, [pending, activeOrgId]);
+
+  // A switch that never lands must not leave the app behind a permanent
+  // curtain: give up after 15s and let the manager try again.
+  useEffect(() => {
+    if (!pending) return;
+    const t = setTimeout(() => setPending(null), 15_000);
+    return () => clearTimeout(t);
+  }, [pending]);
 
   if (orgs.length <= 1) return null;
 
@@ -34,7 +55,7 @@ export function OrgSwitcher({
 
   async function select(orgId: string) {
     if (orgId === activeOrgId) return;
-    setBusy(true);
+    setPending(orgId);
     const supabase = createClient();
     const {
       data: { user },
@@ -46,11 +67,30 @@ export function OrgSwitcher({
         .eq("auth_user_id", user.id);
     }
     router.refresh();
-    setBusy(false);
   }
 
+  const pendingName = orgs.find((o) => o.orgId === pending)?.name;
+
   return (
-    <DropdownMenu>
+    <>
+      {/* UAT: say it out loud. The old feedback was a spinner on the trigger
+          — inside a menu that has already closed — so a slow switch read as
+          a dead click. */}
+      {busy && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+        >
+          <div className="flex items-center gap-3 rounded-lg border bg-card px-5 py-4 shadow-lg">
+            <Loader2 className="size-5 shrink-0 animate-spin text-muted-foreground" />
+            <span className="text-sm font-medium">
+              Switching workspace{pendingName ? ` to ${pendingName}` : ""}…
+            </span>
+          </div>
+        </div>
+      )}
+      <DropdownMenu>
       <DropdownMenuTrigger
         render={
           <button
@@ -59,6 +99,7 @@ export function OrgSwitcher({
             className={cn(
               "flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm transition-colors hover:bg-sidebar-accent/60",
               collapsed ? "justify-center" : "w-full",
+              className,
             )}
           />
         }
@@ -83,6 +124,7 @@ export function OrgSwitcher({
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
-    </DropdownMenu>
+      </DropdownMenu>
+    </>
   );
 }

@@ -51,26 +51,36 @@ test("a build sitting on the tag shows no drift", () => {
   assert.equal(appVersion("version=2026.08.14.1\ncommit=abc1234"), "2026.08.14.1");
 });
 
-test("an untagged build names a commit and never claims a version", () => {
+test("an untagged build shows only when it was built", () => {
   // `git describe --always` with no matching tag — the state this repository
-  // is in today, so it is the case that matters most.
+  // is in today, so it is the case that matters most. UAT: a bare sha is
+  // noise in a footer; the time is what a reader can act on, and the sha
+  // stays one hover away.
   const raw = [
     "version=0230b43",
     "commit=0230b43727fed5c0bfd3ab4c40e98d4c9ce2b6b8",
     "ref=prod",
     "built_at=2026-08-14T09:12:00Z",
   ].join("\n");
-  const s = parseStamp(raw);
-  assert.equal(s.version, null);
-  assert.equal(s.commit, "0230b43727fed5c0bfd3ab4c40e98d4c9ce2b6b8");
+  const stamp = parseStamp(raw);
+  assert.equal(stamp.version, null);
+  assert.equal(stamp.commit, "0230b43727fed5c0bfd3ab4c40e98d4c9ce2b6b8");
+
   const shown = appVersion(raw);
-  assert.match(shown, /^commit 0230b43 · /);
+  assert.ok(!/commit/.test(shown), `showed a sha: ${shown}`);
   assert.ok(!/\d{4}\.\d{2}\.\d{2}\.\d/.test(shown), "claimed a version");
+  assert.match(
+    versionDetail(raw) ?? "",
+    /0230b43727fed5c0bfd3ab4c40e98d4c9ce2b6b8/
+  );
 });
 
-test("an empty version field still yields a build line from the commit", () => {
-  const raw = "version=\ncommit=deadbeefdeadbeef\nbuilt_at=2026-08-14T09:12:00Z";
-  assert.match(appVersion(raw), /^commit deadbee · /);
+test("a tagged build keeps its version beside the time", () => {
+  assert.match(appVersion(STAMP), /^2026\.08\.14\.1 \+7 · /);
+});
+
+test("with no timestamp at all, the sha beats saying nothing", () => {
+  assert.equal(appVersion("commit=deadbeefdeadbeef"), "commit deadbee");
 });
 
 test("a missing stamp is a dev build", () => {

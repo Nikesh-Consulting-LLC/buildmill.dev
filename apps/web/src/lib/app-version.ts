@@ -99,24 +99,29 @@ export function formatBuiltAt(iso: string | null): string | null {
 }
 
 /**
- * The compact line under the logo: `Build 2026.08.14.1 · 14 Aug 09:12`, or
- * `Build 0230b43 · 14 Aug 09:12` for an untagged build — where the short sha
- * is plainly a commit, never left looking like a version. `dev` locally.
+ * The compact line under the logo.
+ *
+ * Tagged: `2026.08.14.1 +3 · 14 Aug 09:12`. Untagged: just `14 Aug 09:12` —
+ * amended after UAT, because a bare sha is noise to the person reading a
+ * footer: it answers "which build" only for someone already holding a list
+ * of shas, while the timestamp answers "is this today's" for everyone. The
+ * sha is still one hover away in `versionDetail`, so nothing is lost for the
+ * case that needs it. `dev` when there is no stamp at all.
  */
 export function appVersion(raw?: string | null): string {
   const stamp = parseStamp(
     raw === undefined ? process.env.NEXT_PUBLIC_APP_VERSION : raw
   );
+  const when = formatBuiltAt(stamp.builtAt);
   const name = stamp.version
     ? stamp.drift
       ? `${stamp.version} +${stamp.drift}`
       : stamp.version
-    : stamp.commit
-      ? `commit ${stamp.commit.slice(0, 7)}`
-      : null;
-  if (!name) return "dev";
-  const when = formatBuiltAt(stamp.builtAt);
-  return when ? `${name} · ${when}` : name;
+    : null;
+  if (name) return when ? `${name} · ${when}` : name;
+  if (when) return when;
+  // No version and no timestamp: the sha is all there is, so it beats "dev".
+  return stamp.commit ? `commit ${stamp.commit.slice(0, 7)}` : "dev";
 }
 
 /** The full detail, one hover away: sha, branch, exact UTC timestamp. */

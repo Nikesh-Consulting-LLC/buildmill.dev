@@ -16,6 +16,8 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { UserMenu } from "@/components/user-menu";
 import { ADMIN_ENTRIES, NAV_ITEMS, type NavEntry } from "@/components/nav-items";
 import { EnvBadge } from "@/components/env-badge";
+import { OrgSwitcher } from "@/components/org-switcher";
+import type { OrgOption } from "@/lib/active-org";
 import { envLogoTint } from "@/lib/env-label";
 
 export function MobileNav({
@@ -24,6 +26,8 @@ export function MobileNav({
   displayName,
   avatarUrl,
   badgeCount = 0,
+  orgs = [],
+  activeOrgId = null,
 }: {
   isSuperadmin: boolean;
   email: string;
@@ -31,6 +35,10 @@ export function MobileNav({
   avatarUrl?: string | null;
   /** US-6.1: pending-decision count shown on the Things to Do entry. */
   badgeCount?: number;
+  /** UAT: the workspace picker lived only in the sidebar, which is
+   *  `hidden md:flex` — so on a phone there was no way to switch at all. */
+  orgs?: OrgOption[];
+  activeOrgId?: string | null;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -121,6 +129,14 @@ export function MobileNav({
                 <X className="size-5" />
               </Button>
             </div>
+            {/* UAT: the workspace picker, which until now existed only in
+                the desktop sidebar. First thing in the drawer, because every
+                entry below it is scoped to whichever workspace is active. */}
+            {orgs.length > 1 && (
+              <div className="border-b p-3">
+                <OrgSwitcher orgs={orgs} activeOrgId={activeOrgId} />
+              </div>
+            )}
             <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
               {items.map((entry, idx) => {
                 if ("separator" in entry) {

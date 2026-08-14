@@ -29,6 +29,17 @@ import { ProjectActions } from "./project-actions";
 import { ProjectSpend } from "./project-spend";
 
 type Assignee = { id: string; name: string; kind: string };
+/** US-91.9: "deployed Aug 13, 6:56 PM" — the same shape the rest of the app
+ *  uses for a recent moment. */
+function formatWhen(iso: string) {
+  return new Date(iso).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 type DeploymentCard = {
   id: string;
   name: string;
@@ -44,6 +55,8 @@ type DeploymentCard = {
   liveReleaseId: string | null;
   /** Short sha (or zip filename) of an off-release build. */
   liveCommit: string | null;
+  /** When the live run finished — "deployed <when>" on the card. */
+  liveAt: string | null;
 };
 
 export default async function ProjectsPage({
@@ -218,7 +231,12 @@ export default async function ProjectsPage({
     // one per project and never one per deployment.
     const liveByDeployment = new Map<
       string,
-      { version: string | null; releaseId: string | null; commit: string | null }
+      {
+        version: string | null;
+        releaseId: string | null;
+        commit: string | null;
+        at: string | null;
+      }
     >();
     const currentRunIds = (deps ?? [])
       .map((d) => d.current_run_id)
@@ -226,7 +244,9 @@ export default async function ProjectsPage({
     if (currentRunIds.length) {
       const { data: liveRuns } = await supabase
         .from("deployment_runs")
-        .select("id, deployment_id, release_id, commit_sha, zip_filename")
+        .select(
+          "id, deployment_id, release_id, commit_sha, zip_filename, finished_at, created_at"
+        )
         .in("id", currentRunIds);
       const releaseIds = [
         ...new Set(
@@ -248,6 +268,7 @@ export default async function ProjectsPage({
           ? (versionById.get(r.release_id) ?? null)
           : null;
         liveByDeployment.set(r.deployment_id, {
+          at: (r.finished_at as string | null) ?? (r.created_at as string | null),
           version,
           releaseId: version ? r.release_id : null,
           // AC4: an off-release deploy says so. Borrowing the last release's
@@ -270,6 +291,7 @@ export default async function ProjectsPage({
         liveVersion: live?.version ?? null,
         liveReleaseId: live?.releaseId ?? null,
         liveCommit: live?.commit ?? null,
+        liveAt: live?.at ?? null,
       });
       deploymentsByProject.set(d.project_id, arr);
     }
@@ -428,27 +450,38 @@ export default async function ProjectsPage({
                                     {d.website_url}
                                   </span>
                                 )}
-                                {/* US-91.9: which build is live. The version
-                                    links to its release; an off-release build
-                                    is named as a commit, never dressed up as
-                                    a version. */}
-                                {d.liveVersion ? (
-                                  <span className="truncate font-mono text-[11px] tabular-nums text-muted-foreground">
-                                    <Link
-                                      href={`/projects/${p.id}/releases/${d.liveReleaseId}`}
-                                      className="underline-offset-4 hover:underline"
-                                    >
-                                      {d.liveVersion}
-                                    </Link>
+                                {/* US-91.9: which build is live, said in
+                                    words. A version is date-shaped, so
+                                    unlabelled it reads as a date; a bare sha
+                                    reads as noise. The label names what it
+                                    is, the timestamp says when it went out,
+                                    and the release is a real link. */}
+                                {(d.liveVersion || d.liveCommit) && (
+                                  <span className="flex min-w-0 flex-wrap items-baseline gap-x-1 text-muted-foreground">
+                                    <span className="shrink-0">Live:</span>
+                                    {d.liveVersion ? (
+                                      <Link
+                                        href={`/projects/${p.id}/releases/${d.liveReleaseId}`}
+                                        className="font-mono tabular-nums text-foreground underline decoration-dotted underline-offset-4 hover:decoration-solid"
+                                        title={`Release ${d.liveVersion} — open it`}
+                                      >
+                                        {d.liveVersion}
+                                      </Link>
+                                    ) : (
+                                      <span
+                                        className="font-mono"
+                                        title="Deployed outside a release — no version names this build"
+                                      >
+                                        commit {d.liveCommit}
+                                      </span>
+                                    )}
+                                    {d.liveAt && (
+                                      <span className="truncate">
+                                        · deployed {formatWhen(d.liveAt)}
+                                      </span>
+                                    )}
                                   </span>
-                                ) : d.liveCommit ? (
-                                  <span
-                                    className="truncate font-mono text-[11px] text-muted-foreground"
-                                    title="Deployed outside a release — no version names this build"
-                                  >
-                                    off-release · {d.liveCommit}
-                                  </span>
-                                ) : null}
+                                )}
                                 <span className="flex items-center gap-1 text-muted-foreground">
                                   <span
                                     className={cn(
