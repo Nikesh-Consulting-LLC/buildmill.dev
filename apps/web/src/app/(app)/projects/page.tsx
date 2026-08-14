@@ -29,6 +29,17 @@ import { ProjectActions } from "./project-actions";
 import { ProjectSpend } from "./project-spend";
 
 type Assignee = { id: string; name: string; kind: string };
+/** US-91.9: "deployed Aug 13, 6:56 PM" — the same shape the rest of the app
+ *  uses for a recent moment. */
+function formatWhen(iso: string) {
+  return new Date(iso).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 type DeploymentCard = {
   id: string;
   name: string;
@@ -44,6 +55,8 @@ type DeploymentCard = {
   liveReleaseId: string | null;
   /** Short sha (or zip filename) of an off-release build. */
   liveCommit: string | null;
+  /** When the live run finished — "deployed <when>" on the card. */
+  liveAt: string | null;
 };
 
 export default async function ProjectsPage({
@@ -218,7 +231,12 @@ export default async function ProjectsPage({
     // one per project and never one per deployment.
     const liveByDeployment = new Map<
       string,
-      { version: string | null; releaseId: string | null; commit: string | null }
+      {
+        version: string | null;
+        releaseId: string | null;
+        commit: string | null;
+        at: string | null;
+      }
     >();
     const currentRunIds = (deps ?? [])
       .map((d) => d.current_run_id)
@@ -226,7 +244,9 @@ export default async function ProjectsPage({
     if (currentRunIds.length) {
       const { data: liveRuns } = await supabase
         .from("deployment_runs")
-        .select("id, deployment_id, release_id, commit_sha, zip_filename")
+        .select(
+          "id, deployment_id, release_id, commit_sha, zip_filename, finished_at, created_at"
+        )
         .in("id", currentRunIds);
       const releaseIds = [
         ...new Set(
@@ -248,6 +268,7 @@ export default async function ProjectsPage({
           ? (versionById.get(r.release_id) ?? null)
           : null;
         liveByDeployment.set(r.deployment_id, {
+          at: (r.finished_at as string | null) ?? (r.created_at as string | null),
           version,
           releaseId: version ? r.release_id : null,
           // AC4: an off-release deploy says so. Borrowing the last release's
@@ -270,6 +291,7 @@ export default async function ProjectsPage({
         liveVersion: live?.version ?? null,
         liveReleaseId: live?.releaseId ?? null,
         liveCommit: live?.commit ?? null,
+        liveAt: live?.at ?? null,
       });
       deploymentsByProject.set(d.project_id, arr);
     }
@@ -342,6 +364,8 @@ export default async function ProjectsPage({
                       </Link>
                       <ProjectSpend project={p} spend={spendByProject.get(p.id)} />
                     </CardHeader>
+                    {/* US-92.6: `order` puts deployments above the roster
+                        below `md` without a second copy of either block. */}
                     <CardContent className="flex flex-col gap-2 text-sm text-muted-foreground">
                       <div className="flex items-center justify-between gap-2">
                         <span className="flex min-w-0 items-center gap-2">
@@ -367,39 +391,62 @@ export default async function ProjectsPage({
                         />
                       </div>
 
-                      {/* US-10.15: people & agents assigned to this project. */}
-                      <div className="border-t pt-2">
-                        <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
-                          People &amp; agents
-                        </div>
-                        {assigned.length === 0 ? (
-                          /* US-31.10: name which half is empty — "no one
-                             assigned" was wrong in two different ways. */
-                          <p className="text-xs text-muted-foreground">
-                            No agents granted, and no one assigned to its work
-                            items.
-                          </p>
-                        ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {assigned.map((a) => (
-                              <span
-                                key={a.id}
-                                className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs text-foreground"
-                              >
-                                {a.kind === "agent" ? (
-                                  <Bot className="size-3 text-muted-foreground" />
-                                ) : (
-                                  <User className="size-3 text-muted-foreground" />
-                                )}
-                                {a.name}
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                      {/* US-10.15: people & agents assigned to this project.
+                          US-92.6: below `md` the chips fold behind their own
+                          count — three rows of them is a screenful spent on
+                          what a manager rarely acts on from a phone. The
+                          chips themselves are written once and placed twice,
+                          so the two cannot drift. */}
+                      <div className="order-2 border-t pt-2 md:order-none">
+                        {(() => {
+                          const chips =
+                            assigned.length === 0 ? (
+                              /* US-31.10: name which half is empty — "no one
+                                 assigned" was wrong in two different ways. */
+                              <p className="text-xs text-muted-foreground">
+                                No agents granted, and no one assigned to its
+                                work items.
+                              </p>
+                            ) : (
+                              <div className="flex flex-wrap gap-1">
+                                {assigned.map((a) => (
+                                  <span
+                                    key={a.id}
+                                    className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs text-foreground"
+                                  >
+                                    {a.kind === "agent" ? (
+                                      <Bot className="size-3 text-muted-foreground" />
+                                    ) : (
+                                      <User className="size-3 text-muted-foreground" />
+                                    )}
+                                    {a.name}
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          return (
+                            <>
+                              <details className="md:hidden">
+                                <summary className="cursor-pointer list-none text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                                  {assigned.length === 0
+                                    ? "No people or agents"
+                                    : `${assigned.length} people & agents`}
+                                </summary>
+                                <div className="mt-1.5">{chips}</div>
+                              </details>
+                              <div className="hidden md:block">
+                                <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                                  People &amp; agents
+                                </div>
+                                {chips}
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
 
                       {/* US-10.15: compact deployment cards. */}
-                      <div className="border-t pt-2">
+                      <div className="order-1 border-t pt-2 md:order-none">
                         <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
                           <Rocket className="size-3" /> Deployments
                         </div>
@@ -428,27 +475,38 @@ export default async function ProjectsPage({
                                     {d.website_url}
                                   </span>
                                 )}
-                                {/* US-91.9: which build is live. The version
-                                    links to its release; an off-release build
-                                    is named as a commit, never dressed up as
-                                    a version. */}
-                                {d.liveVersion ? (
-                                  <span className="truncate font-mono text-[11px] tabular-nums text-muted-foreground">
-                                    <Link
-                                      href={`/projects/${p.id}/releases/${d.liveReleaseId}`}
-                                      className="underline-offset-4 hover:underline"
-                                    >
-                                      {d.liveVersion}
-                                    </Link>
+                                {/* US-91.9: which build is live, said in
+                                    words. A version is date-shaped, so
+                                    unlabelled it reads as a date; a bare sha
+                                    reads as noise. The label names what it
+                                    is, the timestamp says when it went out,
+                                    and the release is a real link. */}
+                                {(d.liveVersion || d.liveCommit) && (
+                                  <span className="flex min-w-0 flex-wrap items-baseline gap-x-1 text-muted-foreground">
+                                    <span className="shrink-0">Live:</span>
+                                    {d.liveVersion ? (
+                                      <Link
+                                        href={`/projects/${p.id}/releases/${d.liveReleaseId}`}
+                                        className="font-mono tabular-nums text-foreground underline decoration-dotted underline-offset-4 hover:decoration-solid"
+                                        title={`Release ${d.liveVersion} — open it`}
+                                      >
+                                        {d.liveVersion}
+                                      </Link>
+                                    ) : (
+                                      <span
+                                        className="font-mono"
+                                        title="Deployed outside a release — no version names this build"
+                                      >
+                                        commit {d.liveCommit}
+                                      </span>
+                                    )}
+                                    {d.liveAt && (
+                                      <span className="truncate">
+                                        · deployed {formatWhen(d.liveAt)}
+                                      </span>
+                                    )}
                                   </span>
-                                ) : d.liveCommit ? (
-                                  <span
-                                    className="truncate font-mono text-[11px] text-muted-foreground"
-                                    title="Deployed outside a release — no version names this build"
-                                  >
-                                    off-release · {d.liveCommit}
-                                  </span>
-                                ) : null}
+                                )}
                                 <span className="flex items-center gap-1 text-muted-foreground">
                                   <span
                                     className={cn(

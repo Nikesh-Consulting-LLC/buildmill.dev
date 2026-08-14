@@ -15,6 +15,7 @@ import { IssueDialog, type EpicOption } from "../issues/issue-dialog";
 import { ClarificationsCard } from "./clarifications-card";
 import { ParkedRunsCard } from "./parked-runs-card";
 import { IncidentsCard } from "./incidents-card";
+import { MobilePreamble } from "./mobile-preamble";
 import { DashboardTabs } from "./dashboard-tabs";
 import { loadThingsToDo } from "./data";
 
@@ -35,12 +36,10 @@ export default async function ThingsToDoPage() {
     parkedRuns,
     recommendationItems,
     refreshItems,
-    releaseRows,
     agentItems,
     featureRuns,
     interactiveByPrincipal,
-    deployRows,
-    completedItems,
+    releaseSuggestions,
     stalledQueue,
     incidents,
     exhaustedBudgets,
@@ -97,11 +96,8 @@ export default async function ThingsToDoPage() {
     matches(r.projectId)
   );
   const fRefreshes = refreshItems.filter((r) => matches(r.projectId));
-  const fReleases = releaseRows.filter((r) => matches(r.projectId));
   const fAgent = agentItems.filter((a) => matches(a.projectId));
   const fIncidents = incidents.filter((i) => matches(i.projectId));
-  const fDeploy = deployRows.filter((d) => matches(d.projectId));
-  const fCompleted = completedItems.filter((c) => matches(c.projectId));
   const fWaitingCount =
     fGroups.reduce((n, g) => n + g.items.length, 0) +
     fRecommendations.length +
@@ -115,7 +111,7 @@ export default async function ThingsToDoPage() {
   return (
     <div className="flex w-full flex-col gap-6">
       <PageHeader
-        title="Things to Do"
+        title="Workdesk"
         description="What the factory is doing, and what it needs from you."
         actions={
           createProject && (
@@ -140,66 +136,78 @@ export default async function ThingsToDoPage() {
         }
       />
 
-      {stalledQueue && (
-        <Link
-          href="/workers"
-          className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 transition-colors hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950/70 dark:text-amber-200 dark:hover:bg-amber-900/50"
-        >
-          <AlertTriangle className="size-4 shrink-0" />
-          <span className="min-w-0 flex-1">
-            <span className="font-semibold">Factory stalled:</span>{" "}
-            {stalledQueue.count} item
-            {stalledQueue.count > 1 ? "s have" : " has"} been queued for up to{" "}
-            {stalledQueue.oldestMinutes}m, but no capable worker is online.
-          </span>
-          <span className="shrink-0 font-medium underline underline-offset-4">
-            Open Workers
-          </span>
-        </Link>
-      )}
+      {/* US-92.1: on a phone these five fold behind one counting line, so the
+          first screen is work rather than warnings. Unchanged at `md`+. */}
+      <MobilePreamble
+        counts={[
+          { label: "stalled queue", n: stalledQueue ? 1 : 0 },
+          { label: "project over budget", n: fBudgets.length },
+          { label: "incident", n: fIncidents.length },
+          { label: "open question", n: fClarifications.length },
+          { label: "parked run", n: fParkedRuns.length },
+        ]}
+      >
+        {stalledQueue && (
+          <Link
+            href="/workers"
+            className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 transition-colors hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950/70 dark:text-amber-200 dark:hover:bg-amber-900/50"
+          >
+            <AlertTriangle className="size-4 shrink-0" />
+            <span className="min-w-0 flex-1">
+              <span className="font-semibold">Factory stalled:</span>{" "}
+              {stalledQueue.count} item
+              {stalledQueue.count > 1 ? "s have" : " has"} been queued for up to{" "}
+              {stalledQueue.oldestMinutes}m, but no capable worker is online.
+            </span>
+            <span className="shrink-0 font-medium underline underline-offset-4">
+              Open Workers
+            </span>
+          </Link>
+        )}
 
-      {/* US-37.3: an exhausted budget stops new work from starting. Pinned
-          above the tabs with the other alerts, and one banner for every
-          project rather than one each — four out-of-budget projects should not
-          push the actual work off the screen. */}
-      {fBudgets.length > 0 && (
-        <div className="flex flex-col gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive sm:flex-row sm:items-start sm:gap-3">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <span className="font-semibold">
-              {fBudgets.length === 1
-                ? "A project is out of budget:"
-                : `${fBudgets.length} projects are out of budget:`}
-            </span>{" "}
-            no new run will start on{" "}
-            {fBudgets.length === 1 ? "it" : "them"} until the budget is raised
-            or its counter is reset. Runs already going finish normally.
-            <ul className="mt-1.5 flex flex-col gap-1">
-              {fBudgets.map((b) => (
-                <li key={b.id} className="min-w-0">
-                  <Link
-                    href={`/projects/${b.id}?tab=overview`}
-                    className="font-medium underline underline-offset-4"
-                  >
-                    {b.name}
-                  </Link>{" "}
-                  <span className="font-mono text-xs tabular-nums">
-                    {money(b.spent)} of {money(b.budget)}
-                  </span>
-                </li>
-              ))}
-            </ul>
+        {/* US-37.3: an exhausted budget stops new work from starting. Pinned
+            above the tabs with the other alerts, and one banner for every
+            project rather than one each — four out-of-budget projects should not
+            push the actual work off the screen. */}
+        {fBudgets.length > 0 && (
+          <div className="flex flex-col gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive sm:flex-row sm:items-start sm:gap-3">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <span className="font-semibold">
+                {fBudgets.length === 1
+                  ? "A project is out of budget:"
+                  : `${fBudgets.length} projects are out of budget:`}
+              </span>{" "}
+              no new run will start on{" "}
+              {fBudgets.length === 1 ? "it" : "them"} until the budget is raised
+              or its counter is reset. Runs already going finish normally.
+              <ul className="mt-1.5 flex flex-col gap-1">
+                {fBudgets.map((b) => (
+                  <li key={b.id} className="min-w-0">
+                    <Link
+                      href={`/projects/${b.id}?tab=overview`}
+                      className="font-medium underline underline-offset-4"
+                    >
+                      {b.name}
+                    </Link>{" "}
+                    <span className="font-mono text-xs tabular-nums">
+                      {money(b.spent)} of {money(b.budget)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* US-15.18: collapsed to a glanceable count that expands on demand and
-          can be cleared (org-wide acknowledgement). */}
-      <IncidentsCard incidents={fIncidents} />
+        {/* US-15.18: collapsed to a glanceable count that expands on demand and
+            can be cleared (org-wide acknowledgement). */}
+        <IncidentsCard incidents={fIncidents} />
 
-      <ClarificationsCard items={fClarifications} />
+        <ClarificationsCard items={fClarifications} />
 
-      <ParkedRunsCard items={fParkedRuns} />
+        <ParkedRunsCard items={fParkedRuns} />
+      </MobilePreamble>
 
       {/* US-19.1: one section, four tabs, each a compact table at full width.
           Everything above stays pinned so an alert or an open question is never
@@ -212,10 +220,7 @@ export default async function ThingsToDoPage() {
           agentItems={fAgent}
           featureRuns={featureRuns}
           interactiveByPrincipal={interactiveByPrincipal}
-          completedItems={fCompleted}
-          releaseRows={fReleases}
-          deployRows={fDeploy}
-          waitingCount={fWaitingCount}
+          releaseSuggestions={releaseSuggestions}
           orgId={orgId}
         />
       </Suspense>

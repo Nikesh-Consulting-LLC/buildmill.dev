@@ -348,15 +348,12 @@ export type FeatureRunInfo = {
 };
 
 export type ThingsToDoData = WaitingData & {
-  releaseRows: ReleaseRow[];
   agentItems: AgentItem[];
   /** US-86.2: keyed by feature issue id, present only while its run is live. */
   featureRuns: Record<string, FeatureRunInfo>;
   /** US-91.3: principal id → runs the `interactive` module, for the agents
    * currently holding a claim. Absent means no CLI window to offer. */
   interactiveByPrincipal: Record<string, boolean>;
-  deployRows: DeployRow[];
-  completedItems: CompletedItem[];
   stalledQueue: StalledQueue | null;
   /** US-13.6: runs that died holding their claim, most recent first. */
   incidents: IncidentRow[];
@@ -364,6 +361,33 @@ export type ThingsToDoData = WaitingData & {
   projects: ProjectChip[];
   /** US-37.3: projects whose budget is exhausted, so no new run will start. */
   exhaustedBudgets: ExhaustedBudget[];
+  /** US-91.18: projects with merged work that no release has shipped. */
+  releaseSuggestions: ReleaseSuggestion[];
+};
+
+/** US-91.18: a project holding merged work that no release has shipped.
+ *
+ * The claim is deliberately the cheap one: work items whose status moved to
+ * `merged` since the last release that actually SHIPPED. `previous_release`
+ * in the API means exactly that — a rejected or rolled-back release leaves
+ * its commits unreleased, so the next cut includes them again.
+ *
+ * The truth of what a cut contains is the commit range, which only
+ * `GET /projects/{id}/releases/preview` can answer, and it costs GitHub calls
+ * per project — precisely what Phase 87 removed from page loads. So this is a
+ * prompt, the dialog is the authority, and the card says so. */
+export type ReleaseSuggestion = {
+  projectId: string;
+  project: string;
+  /** The version this is measured from; null when nothing has ever shipped. */
+  sinceVersion: string | null;
+  /** The first few items, for a claim that can be checked. */
+  items: { id: string; displayId: string | null; title: string; type: string }[];
+  total: number;
+  /** True when `total` hit the query cap and is an understatement. */
+  capped: boolean;
+  /** Why a cut would be refused right now — no button when set. */
+  blocker: string | null;
 };
 
 /** US-37.3: a project that cannot start work because its budget is spent.
@@ -1395,55 +1419,11 @@ export async function loadThingsToDo(
   // distinguishable from "still going" without reading a terminal.
   const incidentCutoff = new Date(Date.now() - 48 * 3600_000).toISOString();
 
-  const [
-    { data: deployRuns },
-    { data: completedRunRows },
-    { data: deployedEvents },
-    { data: incidentEvents },
-    { data: dismissedRows },
-    health,
-  ] = await Promise.all([
-      supabase
-        .from("deployment_runs")
-        .select(
-          "id, status, created_at, deployment_id, deployments!deployment_runs_deployment_id_org_id_fkey!inner(name, project_id)"
-        )
-        .eq("org_id", orgId)
-        .in("status", ["queued", "running"]),
-      // US-15.4: every finished agent run, so the factory's output is visible
-      // as it accrues (not only at the final merge). Successful runs only.
-      // US-19.1: the merged/done issues query that used to sit here is gone —
-      // Completed is a run feed now, so nothing consumed it.
-      supabase
-        .from("runs")
-        .select(
-          // US-15.6: the issue's type + numbering so a finished run shows the id too.
-          // US-19.1: claimed_at + the worker's name back the Duration/Agent columns.
-          // US-91.14: cost_usd — what this run cost, on the row that reports it.
-          "id, kind, finished_at, claimed_at, issue_id, project_id, cost_usd, workers(name), issues!runs_issue_org_fk!inner(title, type, item_no, sub_no, epics(number), abandoned_at, projects!inner(archived_at))"
-        )
-        .eq("org_id", orgId)
-        .eq("status", "succeeded")
-        .not("finished_at", "is", null)
-        .is("issues.abandoned_at", null)
-        .is("issues.projects.archived_at", null)
-        .order("finished_at", { ascending: false })
-        .limit(15),
-      supabase
-        .from("releases")
-        .select(
-          "id, version, status, project_id, included_items, created_at, projects!releases_project_id_fkey!inner(name, archived_at)"
-        )
-        .eq("org_id", orgId)
-        .is("projects.archived_at", null)
-        // US-23.1: a cancelled release was abandoned before an agent started
-        // — nothing was ever built, deployed, or tested. This tab is "what is
-        // in flight and what is already out", so counting one here reports a
-        // release that does not exist. It stays in the Releases hub, which is
-        // the history and the place it belongs.
-        .neq("status", "cancelled")
-        .order("created_at", { ascending: false })
-        .limit(10),
+  // US-91.19: the deploy-in-flight, finished-run and released-version queries
+  // that fed the retired Completed and Releases tabs are gone with them.
+  // Deleting a tab while still paying for its data would be the worst of both.
+  const [{ data: incidentEvents }, { data: dismissedRows }, health] =
+    await Promise.all([
       supabase
         .from("issue_events")
         .select(
@@ -1523,17 +1503,6 @@ export async function loadThingsToDo(
       age: formatAge(e.created_at as string),
     });
   }
-
-  const releaseRows: ReleaseRow[] = (deployedEvents ?? []).map((r) => ({
-    id: r.id as string,
-    version: r.version as string,
-    status: r.status as string,
-    projectId: r.project_id as string,
-    project:
-      (r.projects as unknown as { name: string } | null)?.name ?? "Project",
-    itemCount: Array.isArray(r.included_items) ? r.included_items.length : 0,
-    age: formatAge(r.created_at as string),
-  }));
 
   const inFlightIssueIds = waiting.issues
     .filter(
@@ -1637,96 +1606,6 @@ export async function loadThingsToDo(
         lastNote: noteByIssue.get(i.id),
       };
     });
-
-  const deployRows: DeployRow[] = (deployRuns ?? []).map((r) => {
-    const dep = r.deployments as unknown as
-      | { name: string; project_id: string }
-      | { name: string; project_id: string }[]
-      | null;
-    const depOne = Array.isArray(dep) ? dep[0] : dep;
-    return {
-      id: r.id as string,
-      name: depOne?.name ?? "deployment",
-      projectId: depOne?.project_id ?? "",
-      status: r.status as string,
-      age: formatAge(r.created_at as string),
-    };
-  });
-
-  // US-19.1: every finished agent run, labelled by kind. Merged/shipped work
-  // items are deliberately absent — see the CompletedItem doc comment.
-  type CompletedRunIssue = {
-    title: string;
-    type: string;
-    item_no?: number | null;
-    sub_no?: number | null;
-    epics?: { number: number } | { number: number }[] | null;
-  };
-  type CompletedRunWorker = { name: string | null };
-  type CompletedRunRow = {
-    id: string;
-    kind: string;
-    finished_at: string | null;
-    claimed_at: string | null;
-    issue_id: string;
-    project_id: string;
-    cost_usd: number | null;
-    workers: CompletedRunWorker | CompletedRunWorker[] | null;
-    issues: CompletedRunIssue | CompletedRunIssue[] | null;
-  };
-  const runItems: CompletedItem[] = ((completedRunRows ?? []) as CompletedRunRow[])
-    .map((r) => {
-      const rel = Array.isArray(r.issues) ? r.issues[0] : r.issues;
-      const worker = Array.isArray(r.workers) ? r.workers[0] : r.workers;
-      // US-19.1: the attempt that produced this result — claimed → finished.
-      const claimedMs = r.claimed_at ? new Date(r.claimed_at).getTime() : null;
-      const finishedMs = r.finished_at ? new Date(r.finished_at).getTime() : null;
-      return {
-        id: r.id,
-        issueId: r.issue_id,
-        title: rel?.title ?? "Work item",
-        projectId: r.project_id,
-        type: rel?.type ?? "",
-        // US-15.6: the run row carries the issue's numbering; reuse the same
-        // display-id helper the rest of the dashboard uses.
-        displayId: rel
-          ? issueDisplayId({
-              id: r.issue_id,
-              title: rel.title,
-              type: rel.type,
-              status: "",
-              updated_at: "",
-              parent_id: null,
-              project_id: r.project_id,
-              item_no: rel.item_no ?? null,
-              sub_no: rel.sub_no ?? null,
-              epics: rel.epics ?? null,
-              projects: null,
-            })
-          : null,
-        label: COMPLETED_RUN_LABEL[r.kind] ?? "Run finished",
-        at: r.finished_at ?? new Date(0).toISOString(),
-        age: r.finished_at ? formatAge(r.finished_at) : "—",
-        workerName: worker?.name ?? "",
-        durationMs:
-          claimedMs != null && finishedMs != null && finishedMs >= claimedMs
-            ? finishedMs - claimedMs
-            : null,
-        costUsd: r.cost_usd,
-      };
-    });
-
-  // US-15.6: Completed reflects "nothing more happening right now", not
-  // "something finished once" — so an issue with any run still in flight
-  // (a running breakdown after its PRD succeeded, say) never shows here while
-  // that run is open. inFlightIssueIds already unions AGENT_STATUSES and the
-  // active PRD/breakdown runs.
-  const inFlight = new Set(inFlightIssueIds);
-  // One feed, most-recent first, bounded so a long history doesn't flood the tab.
-  const completedItems: CompletedItem[] = runItems
-    .filter((c) => !inFlight.has(c.issueId))
-    .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
-    .slice(0, 12);
 
   // Per-project waiting counts for the filter chips, from the unfiltered
   // groups + recommendations so a chip's count is independent of the filter.
@@ -1844,14 +1723,114 @@ export async function loadThingsToDo(
     }
   }
 
+
+  // US-91.18: merged work that is sitting unreleased. Three org-scoped reads,
+  // none of them per project and none of them touching GitHub.
+  const releaseSuggestions: ReleaseSuggestion[] = [];
+  {
+    const MERGED_CAP = 500;
+    const [{ data: relRows }, { data: projRows }, { data: mergedRows }] =
+      await Promise.all([
+        supabase
+          .from("releases")
+          .select("project_id, version, status, released_at")
+          .eq("org_id", orgId)
+          .in("status", [
+            "released",
+            "queued",
+            "running",
+            "uat-deployed",
+            "uat-signed-off",
+            "promoting",
+          ]),
+        supabase
+          .from("projects")
+          .select("id, name, release_uat_deployment_id")
+          .eq("org_id", orgId)
+          .is("archived_at", null),
+        supabase
+          .from("issues")
+          .select(
+            "id, title, type, item_no, sub_no, project_id, status_changed_at, epics(number)"
+          )
+          .eq("org_id", orgId)
+          .eq("status", "merged")
+          .is("abandoned_at", null)
+          .order("status_changed_at", { ascending: false })
+          .limit(MERGED_CAP),
+      ]);
+
+    type Rel = {
+      project_id: string;
+      version: string;
+      status: string;
+      released_at: string | null;
+    };
+    const rels = (relRows ?? []) as Rel[];
+    // The last release that actually shipped, per project.
+    const shipped = new Map<string, Rel>();
+    for (const r of rels) {
+      if (r.status !== "released") continue;
+      const prev = shipped.get(r.project_id);
+      if (!prev || (r.released_at ?? "") > (prev.released_at ?? ""))
+        shipped.set(r.project_id, r);
+    }
+    const inFlight = new Map<string, Rel>();
+    for (const r of rels) {
+      if (r.status === "released") continue;
+      if (!inFlight.has(r.project_id)) inFlight.set(r.project_id, r);
+    }
+
+    const merged = (mergedRows ?? []) as unknown as IssueRow[] &
+      { status_changed_at: string | null; project_id: string }[];
+    const cappedOverall = (mergedRows ?? []).length >= MERGED_CAP;
+
+    for (const proj of (projRows ?? []) as {
+      id: string;
+      name: string;
+      release_uat_deployment_id: string | null;
+    }[]) {
+      const last = shipped.get(proj.id) ?? null;
+      const cutoff = last?.released_at ?? null;
+      const mine = merged.filter(
+        (i) =>
+          i.project_id === proj.id &&
+          (!cutoff || (i.status_changed_at ?? "") > cutoff)
+      );
+      if (!mine.length) continue;
+
+      // AC5: a project that cannot cut is told why, and offered no button.
+      const flight = inFlight.get(proj.id);
+      const blocker = flight
+        ? `${flight.version} is still in flight (${flight.status})`
+        : !proj.release_uat_deployment_id
+          ? "no UAT deployment is designated for releases"
+          : null;
+
+      releaseSuggestions.push({
+        projectId: proj.id,
+        project: proj.name,
+        sinceVersion: last?.version ?? null,
+        items: mine.slice(0, 3).map((i) => ({
+          id: i.id,
+          displayId: issueDisplayId(i),
+          title: i.title,
+          type: i.type,
+        })),
+        total: mine.length,
+        capped: cappedOverall,
+        blocker,
+      });
+    }
+    releaseSuggestions.sort((a, b) => a.project.localeCompare(b.project));
+  }
+
   return {
     ...waiting,
-    releaseRows,
+    releaseSuggestions,
     agentItems,
     featureRuns,
     interactiveByPrincipal,
-    deployRows,
-    completedItems,
     stalledQueue: health.stalledQueue,
     incidents,
     projects,

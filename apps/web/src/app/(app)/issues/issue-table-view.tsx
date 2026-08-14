@@ -218,10 +218,15 @@ export function IssueTableView({
       </div>
 
       <div className="overflow-x-auto rounded-lg border">
-        <table className="w-full min-w-[52rem] border-collapse text-sm">
+        {/* US-92.2: `min-w-[52rem]` is 856px — more than twice a phone. Below
+            `md` the columns that cannot fit are dropped and their facts ride
+            the title cell's second line instead of scrolling sideways. */}
+        <table className="w-full border-collapse text-sm md:min-w-[52rem]">
           <thead>
             <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
-              <th className="w-8 px-3 py-2">
+              {/* US-92.2: bulk selection is a desktop affordance (its bar is
+                  desktop-only), so its column does not cost a phone 32px. */}
+              <th className="hidden w-8 px-3 py-2 md:table-cell">
                 <Checkbox
                   checked={allSelected}
                   indeterminate={someSelected && !allSelected}
@@ -235,15 +240,17 @@ export function IssueTableView({
                 active={sort === "title"}
                 onClick={() => setSort("title")}
               />
-              <th className="px-3 py-2 font-medium">Type</th>
+              <th className="hidden px-3 py-2 font-medium md:table-cell">Type</th>
               <SortableTh
                 label="Status"
                 active={sort === "status"}
                 onClick={() => setSort("status")}
               />
-              <th className="px-3 py-2 font-medium">Epic</th>
+              <th className="hidden px-3 py-2 font-medium md:table-cell">Epic</th>
               {showProjectColumn && (
-                <th className="px-3 py-2 font-medium">Project</th>
+                <th className="hidden px-3 py-2 font-medium md:table-cell">
+                  Project
+                </th>
               )}
               {/* US-91.14: what it cost. */}
               <th
@@ -252,10 +259,13 @@ export function IssueTableView({
               >
                 Cost
               </th>
+              {/* US-92.2: a date is the first thing to go at 375px — the
+                  row already truncates without it. */}
               <SortableTh
                 label="Updated"
                 active={sort === "updated"}
                 onClick={() => setSort("updated")}
+                className="hidden md:table-cell"
               />
             </tr>
           </thead>
@@ -292,13 +302,15 @@ function SortableTh({
   label,
   active,
   onClick,
+  className,
 }: {
   label: string;
   active: boolean;
   onClick: () => void;
+  className?: string;
 }) {
   return (
-    <th className="px-3 py-2 font-medium">
+    <th className={cn("px-3 py-2 font-medium", className)}>
       <button
         type="button"
         onClick={onClick}
@@ -385,7 +397,7 @@ function GroupBlock({
             data-changed={recentlyChanged?.has(i.id) ? "" : undefined}
             className="list-row border-b last:border-0 hover:bg-muted/30"
           >
-            <td className="px-3 py-2 align-middle">
+            <td className="hidden px-3 py-2 align-middle md:table-cell">
               <Checkbox
                 checked={selected.has(i.id)}
                 onCheckedChange={() => onToggle(i.id)}
@@ -404,13 +416,13 @@ function GroupBlock({
                 {i.title}
               </Link>
             </td>
-            <td className="px-3 py-2 align-middle">
+            <td className="hidden px-3 py-2 align-middle md:table-cell">
               <TypeBadge type={i.type as IssueType} />
             </td>
             <td className="px-3 py-2 align-middle">
               <StatusBadge status={i.status as IssueStatus} />
             </td>
-            <td className="max-w-[10rem] truncate px-3 py-2 align-middle text-muted-foreground">
+            <td className="hidden max-w-[10rem] truncate px-3 py-2 align-middle text-muted-foreground md:table-cell">
               {epic
                 ? epicLabel(epic.number, epic.title)
                 : i.epic_number != null
@@ -418,7 +430,7 @@ function GroupBlock({
                   : (i.epic_title ?? "")}
             </td>
             {showProjectColumn && (
-              <td className="max-w-[10rem] truncate px-3 py-2 align-middle text-muted-foreground">
+              <td className="hidden max-w-[10rem] truncate px-3 py-2 align-middle text-muted-foreground md:table-cell">
                 {projectName(i.project_id)}
               </td>
             )}
@@ -430,7 +442,7 @@ function GroupBlock({
                   are different facts and must look different. */}
               {i.cost_usd == null ? "—" : money(Number(i.cost_usd))}
             </td>
-            <td className="whitespace-nowrap px-3 py-2 align-middle text-xs text-muted-foreground">
+            <td className="hidden whitespace-nowrap px-3 py-2 align-middle text-xs text-muted-foreground md:table-cell">
               {formatIssueWhen(i.updated_at)}
             </td>
           </tr>

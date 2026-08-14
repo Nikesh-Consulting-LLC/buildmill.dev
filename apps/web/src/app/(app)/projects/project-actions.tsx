@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "@/lib/router-with-progress";
-import { Archive, ArchiveRestore, Loader2, Trash2 } from "lucide-react";
+import {
+  Archive,
+  ArchiveRestore,
+  Loader2,
+  MoreHorizontal,
+  Trash2,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -21,6 +27,8 @@ export function ProjectActions({
   const router = useRouter();
   const [toggling, setToggling] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
+  // US-92.6: the phone's overflow for Archive/Delete.
+  const [moreOpen, setMoreOpen] = useState(false);
 
   async function toggleArchive() {
     setArchiveError(null);
@@ -67,9 +75,10 @@ export function ProjectActions({
     }
   }
 
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex shrink-0 items-center gap-2">
+  // US-92.6: one definition, two placements — the phone disclosure and the
+  // desktop row must always offer the same two actions.
+  const actionButtons = (
+    <>
         <Button variant="outline" size="sm" onClick={toggleArchive} disabled={toggling}>
           {toggling ? (
             <Loader2 className="size-4 animate-spin" />
@@ -92,6 +101,35 @@ export function ProjectActions({
           confirmLabel="Delete project"
           onConfirm={handleDelete}
         />
+    </>
+  );
+
+  return (
+    <div className="flex flex-col gap-2">
+      {/* US-92.6: two destructive buttons at full prominence above the
+          content is a desktop affordance. Below `md` they fold behind a
+          disclosure — they are rare, and one of them is irreversible. */}
+      <div className="md:hidden">
+        <button
+          type="button"
+          onClick={() => setMoreOpen((v) => !v)}
+          aria-expanded={moreOpen}
+          aria-label="Project actions"
+          className="flex w-full items-center justify-center rounded-md border px-2 py-1.5 text-xs text-muted-foreground"
+        >
+          <MoreHorizontal className="size-4" />
+        </button>
+        {/* Conditional render, not a closed `details`: a closed details still
+            laid its children out here, so "hidden" destructive buttons were
+            still on screen at 34px. */}
+        {moreOpen && (
+          <div className="mt-2 flex flex-col gap-2 [&_button]:h-10 [&_button]:w-full">
+            {actionButtons}
+          </div>
+        )}
+      </div>
+      <div className="hidden shrink-0 items-center gap-2 md:flex">
+        {actionButtons}
       </div>
       {archiveError && (
         <p className="text-sm font-medium text-destructive">{archiveError}</p>

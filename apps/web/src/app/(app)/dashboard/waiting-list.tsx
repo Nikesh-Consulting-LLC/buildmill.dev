@@ -742,8 +742,8 @@ export function WaitingList({
     return (
       <EmptyState
         icon={ClipboardCheck}
-        title="Nothing needs you right now"
-        description="When a PRD, plan, review, or sign-off is waiting on your decision, it shows up here."
+        title="Inbox zero"
+        description="Nothing needs a decision."
       />
     );
   }

@@ -51,15 +51,24 @@ type Preview = {
  * to fix instead of finding out on submit. */
 export function CutReleaseDialog({
   projects,
+  defaultProjectId,
+  trigger,
 }: {
   /** US-23.2: the hub spans projects, so the dialog asks which one first.
    * The preview costs GitHub calls (branch head, commit range), so it loads
    * only once a project is chosen rather than eagerly for every project. */
   projects: { id: string; name: string }[];
+  /** US-91.18: opened from a card that already knows the project. */
+  defaultProjectId?: string;
+  /** US-91.18: the dashboard's card supplies its own button, so the two
+   *  entry points share this dialog rather than growing a second one. */
+  trigger?: React.ReactNode;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [projectId, setProjectId] = useState(projects[0]?.id ?? "");
+  const [projectId, setProjectId] = useState(
+    defaultProjectId ?? projects[0]?.id ?? ""
+  );
   const [preview, setPreview] = useState<Preview | null>(null);
   const [loading, setLoading] = useState(false);
   const [version, setVersion] = useState("");
@@ -119,10 +128,14 @@ export function CutReleaseDialog({
         if (next) load();
       }}
     >
-      <DialogTrigger render={<Button variant="create" size="sm" />}>
-        <Tag className="size-4" />
-        Cut release
-      </DialogTrigger>
+      {trigger ? (
+        <DialogTrigger render={<button type="button" />}>{trigger}</DialogTrigger>
+      ) : (
+        <DialogTrigger render={<Button variant="create" size="sm" />}>
+          <Tag className="size-4" />
+          Cut release
+        </DialogTrigger>
+      )}
       <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Cut a release</DialogTitle>

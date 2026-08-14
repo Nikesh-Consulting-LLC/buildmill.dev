@@ -282,6 +282,105 @@ export default async function ReleasesPage({
       </TableRow>
     ));
 
+  /** US-92.3: the deployed URL for one leg of the journey, as words. */
+  const envLabel = (runId: string | null) => {
+    const url = runId ? urlByRun.get(runId) : undefined;
+    if (!url) return "not yet";
+    return urlLabel(url);
+  };
+
+  /** US-92.3: the phone form. One build, its state, how far it has got, and
+   *  the buttons — full width, last, unmissable. Same data as the row. */
+  const cardsFor = (rows: typeof releases) =>
+    rows.map((r) => {
+      const items = Array.isArray(r.included_items)
+        ? r.included_items.length
+        : 0;
+      const actions = [
+        r.status === "queued" && (
+          <CancelReleaseButton
+            key="cancel"
+            releaseId={r.id}
+            version={r.version}
+          />
+        ),
+        (r.status === "failed" || r.status === "uat-deploy-failed") && (
+          <RetryReleaseButton key="retry" releaseId={r.id} />
+        ),
+        canDelete && DEAD.has(r.status) && (
+          <DeleteReleaseButton
+            key="delete"
+            releaseId={r.id}
+            version={r.version}
+            status={r.status}
+          />
+        ),
+      ].filter(Boolean);
+
+      return (
+        <div key={r.id} className="grid gap-2 rounded-lg border p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Link
+              href={`/projects/${r.project_id}/releases/${r.id}`}
+              className="font-mono text-sm font-medium tabular-nums underline-offset-4 hover:underline"
+            >
+              {r.version}
+            </Link>
+            <span className="flex flex-wrap items-center gap-1.5">
+              <StatusBadge status={r.status as IssueStatus} />
+              {currentUat.get(r.project_id) === r.id && (
+                <Badge variant="secondary" className="font-normal">
+                  on UAT now
+                </Badge>
+              )}
+              {currentProd.get(r.project_id) === r.id && (
+                <Badge variant="secondary" className="font-normal">
+                  in production now
+                </Badge>
+              )}
+            </span>
+          </div>
+
+          <Link
+            href={`/projects/${r.project_id}/releases`}
+            className="truncate text-sm text-muted-foreground underline-offset-4 hover:underline"
+          >
+            {projectName(r)}
+          </Link>
+
+          {/* AC2: the two environments read as a journey, because "how far
+              has this build got" is the question the page answers. */}
+          <div className="flex items-center gap-2 rounded-md bg-muted/40 px-2 py-1.5 text-xs">
+            <span className="shrink-0 font-medium">UAT</span>
+            <span className="min-w-0 flex-1 truncate text-muted-foreground">
+              {envLabel(r.uat_deployment_run_id)}
+            </span>
+            <span className="shrink-0 text-muted-foreground">→</span>
+            <span className="shrink-0 font-medium">Prod</span>
+            <span className="min-w-0 flex-1 truncate text-muted-foreground">
+              {envLabel(r.prod_deployment_run_id)}
+            </span>
+          </div>
+
+          {/* AC4: the diagnostics, in one muted line that does not compete
+              with the version. */}
+          <p className="truncate font-mono text-xs text-muted-foreground">
+            {(r.commit_sha ?? "").slice(0, 7)} · {items} item
+            {items === 1 ? "" : "s"} · cut{" "}
+            {new Date(r.created_at).toLocaleDateString()}
+          </p>
+
+          {/* AC3: the buttons are the reason for the visit — full width and
+              a real tap size, whatever the shared components default to. */}
+          {actions.length > 0 && (
+            <div className="flex flex-wrap gap-2 border-t pt-2 [&_button]:h-10 [&_button]:flex-1">
+              {actions}
+            </div>
+          )}
+        </div>
+      );
+    });
+
   const header = (
     <TableHeader>
       <TableRow>
@@ -362,7 +461,12 @@ export default async function ReleasesPage({
                   Cut and not yet finished — being built, tested, or promoted.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="min-w-0 overflow-x-auto">
+              {/* US-92.3: nine columns in 314px crushed every cell and
+                  detached the headers from their values. Cards below `md`. */}
+              <CardContent className="grid gap-2 md:hidden">
+                {cardsFor(inFlight)}
+              </CardContent>
+              <CardContent className="hidden min-w-0 overflow-x-auto md:block">
                 <Table>
                   {header}
                   <TableBody>{rowsFor(inFlight)}</TableBody>
@@ -379,7 +483,10 @@ export default async function ReleasesPage({
                   Released, rolled back, rejected or failed.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="min-w-0 overflow-x-auto">
+              <CardContent className="grid gap-2 md:hidden">
+                {cardsFor(settled)}
+              </CardContent>
+              <CardContent className="hidden min-w-0 overflow-x-auto md:block">
                 <Table>
                   {header}
                   <TableBody>{rowsFor(settled)}</TableBody>

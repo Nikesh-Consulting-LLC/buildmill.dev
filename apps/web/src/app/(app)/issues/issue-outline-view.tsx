@@ -93,9 +93,16 @@ export function IssueOutlineView({
     const projectEpics = epicsByProject.get(project.id) ?? [];
 
     // Epic buckets in numbering order, then a No-epic bucket if it has items.
-    const buckets: { id: string; epic: HubEpic | null }[] = projectEpics.map(
-      (e) => ({ id: e.id, epic: e })
-    );
+    //
+    // US-91.5 (UAT): an epic with nothing left after filtering is dropped
+    // entirely. With merged and done unchecked by default, a finished epic
+    // otherwise rendered as a header over nothing — the filter looked broken
+    // and the page stayed as long as it was before.
+    const bucketHasItems = (epicId: string) =>
+      projectIssues.some((i) => (i.epic_id ?? NO_EPIC) === epicId);
+    const buckets: { id: string; epic: HubEpic | null }[] = projectEpics
+      .filter((e) => bucketHasItems(e.id))
+      .map((e) => ({ id: e.id, epic: e }));
     const hasNoEpic = projectIssues.some((i) => !i.epic_id);
     if (hasNoEpic) buckets.push({ id: NO_EPIC, epic: null });
 
@@ -119,7 +126,9 @@ export function IssueOutlineView({
     if (!buckets.length) {
       return (
         <p className="px-3 py-2 text-xs text-muted-foreground">
-          No work items in this project.
+          {issues.length === 0
+            ? "No work items in this project."
+            : "Nothing matches these filters."}
         </p>
       );
     }

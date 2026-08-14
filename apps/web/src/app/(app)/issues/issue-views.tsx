@@ -260,6 +260,9 @@ export function LensSwitch({
           onClick={() => onChange(v.id)}
           className={cn(
             "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+            // US-92.2: five phase columns cannot be made to work at 375px, so
+            // Board is hidden below `md` rather than offered and broken.
+            v.id === "board" && "hidden md:inline-block",
             layout === v.id
               ? "border-primary bg-primary text-primary-foreground"
               : "border-input text-muted-foreground hover:bg-muted"

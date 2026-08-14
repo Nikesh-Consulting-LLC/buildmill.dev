@@ -88,6 +88,8 @@ export default async function AppLayout({
         displayName={profile?.display_name ?? null}
         avatarUrl={profile?.avatar_url ?? null}
         badgeCount={pendingCount}
+        orgs={orgs}
+        activeOrgId={orgId || null}
       />
       <AppSidebar
         isSuperadmin={isSuperadmin}

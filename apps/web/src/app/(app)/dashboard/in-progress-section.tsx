@@ -154,11 +154,51 @@ export function InProgressSection({
       {rows.length === 0 ? (
         <EmptyState
           icon={Bot}
-          title="Nothing is being worked on"
-          description="No agent is holding a run right now. Dispatch something below and it will appear here with the agent that claimed it."
+          title="Factory's idle"
+          description="Dispatch something below."
         />
       ) : (
-        <div className="min-w-0 rounded-lg border">
+        <>
+        {/* US-92.1: below `md` a table cannot hold six columns at 375px —
+            the list beneath this section has had cards since us-68.4, and
+            us-91.2 shipped without them. One card per running item. */}
+        <div className="grid gap-2 md:hidden">
+          {buckets.map((bucket) => {
+            const isCollapsed = grouped && collapsed.has(bucket.id);
+            return (
+              <div key={`m-${bucket.id}`} className="grid gap-2">
+                {grouped && (
+                  <button
+                    type="button"
+                    onClick={() => toggle(bucket.id)}
+                    aria-expanded={!isCollapsed}
+                    className="flex w-full items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                  >
+                    <ChevronRight
+                      className={cn(
+                        "size-3.5 transition-transform",
+                        !isCollapsed && "rotate-90"
+                      )}
+                    />
+                    {bucket.name} ({bucket.items.length})
+                  </button>
+                )}
+                {!isCollapsed &&
+                  bucket.items.map((r) => (
+                    <LiveCard
+                      key={`c-${r.runId}`}
+                      row={r}
+                      hasCli={
+                        !!r.workerPrincipalId &&
+                        !!interactiveByPrincipal[r.workerPrincipalId]
+                      }
+                    />
+                  ))}
+              </div>
+            );
+          })}
+        </div>
+        <div className="hidden min-w-0 rounded-lg border md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -220,8 +260,76 @@ export function InProgressSection({
             </TableBody>
           </Table>
         </div>
+        </>
       )}
     </section>
+  );
+}
+
+/** US-92.1: the phone form of a live row. Same facts, stacked, with the
+ *  actions at a real tap size instead of `size-6` icons at the table's edge. */
+function LiveCard({ row, hasCli }: { row: LiveRow; hasCli: boolean }) {
+  const router = useRouter();
+  return (
+    <div className="grid gap-2 rounded-lg border p-3">
+      <span className="flex min-w-0 flex-col gap-1">
+        <span className="flex min-w-0 items-center gap-2">
+          <TypeBadge type={row.type as IssueType} />
+          {row.displayId && (
+            <span className="shrink-0 font-mono text-xs text-muted-foreground">
+              {row.displayId}
+            </span>
+          )}
+          {row.stories != null ? (
+            <Badge variant="secondary">Building {row.stories}</Badge>
+          ) : (
+            <StatusBadge status="running" />
+          )}
+        </span>
+        <Link
+          href={`/issues/${row.id}?from=dashboard`}
+          className="font-medium hover:underline"
+        >
+          {row.title}
+        </Link>
+        <span className="truncate text-xs text-muted-foreground">
+          {row.workerPrincipalId ? (
+            <Link
+              href={`/team/${row.workerPrincipalId}/runner`}
+              className="hover:underline"
+            >
+              {row.workerName}
+            </Link>
+          ) : (
+            row.workerName
+          )}
+          {" · "}
+          {formatMinutes(row.runningMinutes)} elapsed · heard{" "}
+          <span
+            className={cn(row.isSilent && "text-amber-700 dark:text-amber-400")}
+          >
+            {row.silentMinutes === 0
+              ? "just now"
+              : formatMinutes(row.silentMinutes)}
+          </span>
+        </span>
+      </span>
+      {(hasCli || row.isSilent) && (
+        <span className="flex flex-wrap items-center gap-2">
+          {hasCli && row.workerPrincipalId && (
+            <Button
+              variant="outline"
+              className="h-10 flex-1"
+              onClick={() => router.push(`/team/${row.workerPrincipalId}/console`)}
+            >
+              <TerminalSquare className="size-4" />
+              CLI window
+            </Button>
+          )}
+          {row.isSilent && <RequeueButton runId={row.runId} />}
+        </span>
+      )}
+    </div>
   );
 }
 
