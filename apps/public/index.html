@@ -97,6 +97,11 @@
     .btn-ghost { background: transparent; color: var(--ink); border-color: var(--border); }
     .btn-ghost:hover { border-color: var(--green); color: var(--green-600); }
     @media (max-width: 480px) { .topbar .btn-ghost { display: none; } }
+    /* fingers, not cursors: keep every tap target at 44px minimum */
+    @media (pointer: coarse) {
+      .btn { min-height: 44px; }
+      .foot-links a { display: inline-block; padding: 11px 4px; }
+    }
 
     /* ---------- Hero ---------- */
     .hero {
@@ -383,7 +388,7 @@
       <div class="wrap premise-grid">
         <div class="premise-copy reveal">
           <p class="kicker">What it is</p>
-          <h2>A factory, not a free-for-all</h2>
+          <h2>A factory, not a free&#8209;for&#8209;all</h2>
           <p>
             AI coding agents are fast. Unsupervised, that speed is a liability: a wall of
             unreviewed diffs, changes nobody asked for, and no record of who decided what.

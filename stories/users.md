@@ -50,7 +50,7 @@ site (requested 2026-08-14), and the residue carried out of Phases 85–89:
 | 24 | [us-92.4](us-92.4-a-test-case-says-what-it-is.md) | A test case row says what it is | Testing |
 | 25 | [us-92.5](us-92.5-the-report-is-the-row.md) | On Bug Reports, the report is the row | Testing |
 | 26 | [us-92.6](us-92.6-a-project-card-leads-with-its-state.md) | A project card leads with its state | Testing |
-| 25 | [us-93.1](us-93.1-the-front-door-tells-the-story.md) | The front door tells the story | New |
+| 25 | [us-93.1](us-93.1-the-front-door-tells-the-story.md) | The front door tells the story | Testing |
 | 30 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
 | 31 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
 | 30 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
