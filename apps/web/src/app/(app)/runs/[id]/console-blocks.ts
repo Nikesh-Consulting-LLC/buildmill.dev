@@ -52,6 +52,31 @@ export function toBlocks(lines: Line[]): Block[] {
   const out: Block[] = [];
   for (let i = 0; i < lines.length; i++) {
     if (!WORKING.has(lines[i].kind)) {
+      // One agent message arrives as many consecutive `output` rows — the
+      // runner's coalescer flushes at newline boundaries (and on idle), so a
+      // streamed answer is a document split across rows. Rendered separately,
+      // each fragment became its own markdown island: a gutter glyph at every
+      // arbitrary break, lists shattered, tables never forming. Stitch the run
+      // of rows back into the one message the agent actually wrote; its key is
+      // the first row's index, which is stable while the transcript grows, so
+      // a streaming message keeps its identity as rows land.
+      if (lines[i].kind === "output") {
+        let end = i;
+        while (end + 1 < lines.length && lines[end + 1].kind === "output") end++;
+        out.push({
+          type: "line",
+          key: i,
+          line: {
+            kind: "output",
+            content: lines
+              .slice(i, end + 1)
+              .map((l) => l.content)
+              .join("\n"),
+          },
+        });
+        i = end;
+        continue;
+      }
       out.push({ type: "line", key: i, line: lines[i] });
       continue;
     }
@@ -61,6 +86,31 @@ export function toBlocks(lines: Line[]): Block[] {
     i = end;
   }
   return out;
+}
+
+/**
+ * Markdown treats a lone newline as a soft break and renders it as a space —
+ * correct for prose, wrong for a terminal, where a newline the agent printed
+ * is a line break the manager should see. Append markdown's two-space hard
+ * break to every line that needs one, leaving fenced code untouched (a `pre`
+ * already preserves newlines, and copied code should not grow trailing
+ * spaces). Blank lines already separate paragraphs and are left alone.
+ */
+export function withHardBreaks(md: string): string {
+  const lines = md.split("\n");
+  let inFence = false;
+  return lines
+    .map((l, i) => {
+      if (/^\s*(```|~~~)/.test(l)) {
+        inFence = !inFence;
+        return l;
+      }
+      if (inFence || i === lines.length - 1 || l.trim() === "") return l;
+      // A blank line follows: the paragraph break already separates them.
+      if (lines[i + 1].trim() === "") return l;
+      return l + "  ";
+    })
+    .join("\n");
 }
 
 /**

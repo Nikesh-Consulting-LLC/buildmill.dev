@@ -27,6 +27,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { cn } from "@/lib/utils";
+import { withHardBreaks } from "./console-blocks";
 
 export function TerminalMarkdown({
   children,
@@ -127,7 +128,7 @@ export function TerminalMarkdown({
           ),
         }}
       >
-        {children}
+        {withHardBreaks(children)}
       </ReactMarkdown>
     </div>
   );

@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
-import { toBlocks, groupTitle, type Line } from "./console-blocks.ts";
+import { toBlocks, groupTitle, withHardBreaks, type Line } from "./console-blocks.ts";
 
 const line = (kind: string, content = kind): Line => ({ kind, content });
 
@@ -109,4 +109,52 @@ test("the title is the opening line of the newest row", () => {
 test("the title skips rows that are only whitespace", () => {
   assert.equal(groupTitle([line("step", "a real thought"), line("step", "\n \n")]), "a real thought");
   assert.equal(groupTitle([line("step", " ")]), "working");
+});
+
+test("consecutive output rows stitch back into one message", () => {
+  // The runner's coalescer flushes a streamed answer at newline boundaries,
+  // so one message arrives as many rows. The manager's screenshot: a JSON
+  // deliverable shredded across rows, a gutter glyph at every arbitrary break.
+  const blocks = toBlocks([
+    line("you", "draft the stories"),
+    line("output", "Here are the stories:"),
+    line("output", '{"title":"Run Transcribe immediately",'),
+    line("output", '"body":"The existing action re-enqueues."}'),
+    line("step", "done thinking"),
+    line("output", "Anything else?"),
+  ]);
+  assert.deepEqual(
+    blocks.map((b) => (b.type === "group" ? "group" : b.line.kind)),
+    ["you", "output", "group", "output"],
+  );
+  const merged = blocks[1];
+  assert.equal(
+    merged.type === "line" && merged.line.content,
+    'Here are the stories:\n{"title":"Run Transcribe immediately",\n"body":"The existing action re-enqueues."}',
+  );
+});
+
+test("a stitched message keeps its key as rows stream in", () => {
+  const before = toBlocks([line("you", "go"), line("output", "First"), line("output", "second")]);
+  const after = toBlocks([
+    line("you", "go"),
+    line("output", "First"),
+    line("output", "second"),
+    line("output", "third"),
+  ]);
+  assert.equal(before[1].key, 1);
+  assert.equal(after[1].key, 1);
+  assert.equal(after[1].type === "line" && after[1].line.content, "First\nsecond\nthird");
+});
+
+test("hard breaks: a lone newline becomes a visible line break", () => {
+  // Markdown renders a single \n as a space; a terminal renders it as a new
+  // line. The console is a terminal.
+  assert.equal(withHardBreaks("line one\nline two"), "line one  \nline two");
+});
+
+test("hard breaks: blank lines and fenced code are left alone", () => {
+  assert.equal(withHardBreaks("para one\n\npara two"), "para one\n\npara two");
+  const fenced = "before\n```py\ncode line\ncode line 2\n```";
+  assert.equal(withHardBreaks(fenced), "before  \n```py\ncode line\ncode line 2\n```");
 });
