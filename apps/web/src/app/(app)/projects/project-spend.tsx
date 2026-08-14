@@ -1,7 +1,7 @@
 /**
  * US-37.4: what a project has spent, at the top right of its card.
  *
- * Settings → Spend answers "where did the money go" after the fact. This
+ * The Costs section answers "where did the money go" after the fact. This
  * answers "is this project about to stop", which is the question a manager has
  * while looking at the list — and since us-37.2 an exhausted budget really does
  * stop new work, so it decides whether anything will start.

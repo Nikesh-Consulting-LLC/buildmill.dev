@@ -161,7 +161,10 @@ export function BudgetCard({
                 with no rate are not in this figure
               </span>{" "}
               —{" "}
-              <Link href="/settings/spend" className="underline underline-offset-4">
+              <Link
+                href="/settings/llm-providers"
+                className="underline underline-offset-4"
+              >
                 set its rate
               </Link>{" "}
               so they count.{" "}

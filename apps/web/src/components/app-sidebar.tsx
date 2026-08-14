@@ -15,7 +15,12 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { UserMenu } from "@/components/user-menu";
 import { OrgSwitcher } from "@/components/org-switcher";
 import { NotificationBell, type NotificationRow } from "@/components/notification-bell";
-import { ADMIN_ENTRIES, NAV_ITEMS, type NavEntry } from "@/components/nav-items";
+import {
+  ADMIN_ENTRIES,
+  NAV_ITEMS,
+  navItemsFor,
+  type NavEntry,
+} from "@/components/nav-items";
 import { EnvBadge } from "@/components/env-badge";
 import { envLogoTint } from "@/lib/env-label";
 import type { OrgOption } from "@/lib/active-org";
@@ -33,6 +38,7 @@ export function AppSidebar({
   activeOrgId = null,
   principalId = "",
   notifications = [],
+  canViewCosts = false,
 }: {
   isSuperadmin: boolean;
   email: string;
@@ -46,6 +52,9 @@ export function AppSidebar({
   /** US-9.12: the caller's principal + notifications for the shell bell. */
   principalId?: string;
   notifications?: NotificationRow[];
+  /** us-95.1: whether the Costs entry renders (resolved server-side from the
+   * role_capabilities grid; the /costs page re-checks regardless). */
+  canViewCosts?: boolean;
 }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
@@ -71,16 +80,17 @@ export function AppSidebar({
     });
   }
 
+  const base = navItemsFor(NAV_ITEMS, canViewCosts);
   const items: NavEntry[] = isSuperadmin
     ? [
-        ...NAV_ITEMS,
+        ...base,
         { separator: true },
         // US-91.10: four menus under a section heading, not one drawer of
         // fifteen links. `/admin` itself keeps working by URL; it no longer
         // owns a row.
         ...ADMIN_ENTRIES,
       ]
-    : NAV_ITEMS;
+    : base;
 
   return (
     <aside
