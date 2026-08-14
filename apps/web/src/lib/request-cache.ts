@@ -60,6 +60,8 @@ export const getCallerPrincipal = cache(
 export type CallerProfile = {
   display_name: string | null;
   avatar_url: string | null;
+  // us-94.1: null = waiting at the beta gate; the (app) layout redirects.
+  approved_at: string | null;
 };
 
 export const getProfile = cache(
@@ -67,7 +69,7 @@ export const getProfile = cache(
     const supabase = await getServerClient();
     const { data } = await supabase
       .from("profiles")
-      .select("display_name, avatar_url")
+      .select("display_name, avatar_url, approved_at")
       .eq("id", userId)
       .maybeSingle();
     return (data as CallerProfile | null) ?? null;

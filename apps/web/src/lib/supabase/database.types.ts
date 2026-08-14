@@ -3480,6 +3480,8 @@ export type Database = {
       }
       profiles: {
         Row: {
+          approved_at: string | null
+          approved_by: string | null
           avatar_url: string | null
           created_at: string
           display_name: string | null
@@ -3487,6 +3489,8 @@ export type Database = {
           id: string
         }
         Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null
@@ -3494,6 +3498,8 @@ export type Database = {
           id: string
         }
         Update: {
+          approved_at?: string | null
+          approved_by?: string | null
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null
@@ -6134,6 +6140,7 @@ export type Database = {
         }[]
       }
       is_active_org_member: { Args: { org: string }; Returns: boolean }
+      is_approved_user: { Args: never; Returns: boolean }
       is_interactive_placement_legal: {
         Args: { p_worker_id: string }
         Returns: boolean

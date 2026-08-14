@@ -49,6 +49,16 @@ export default async function AppLayout({
     redirect("/change-password");
   }
 
+  // us-94.1: the beta gate. A new signup authenticates but waits for a
+  // platform admin's approval; until then every (app) route — deep links
+  // included — lands on /gate, which lives in the (auth) group so this
+  // redirect can never loop. Missing profile rows gate too: the safe
+  // default is the closed door. Re-read per request (React.cache spans one
+  // render pass), so approval takes effect on the next page load (AC4).
+  if (!profile?.approved_at) {
+    redirect("/gate");
+  }
+
   // US-9.12: the caller's principal + recent notifications for the shell bell.
   const principalId = principal?.id ?? "";
 

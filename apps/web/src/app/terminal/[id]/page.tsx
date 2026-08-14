@@ -21,6 +21,15 @@ export default async function TerminalPopoutPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // us-94.1: pop-outs live outside the (app) layout, so they carry the beta
+  // gate themselves — a pending account gets the gate, not a bare 404.
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("approved_at")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (!profile?.approved_at) redirect("/gate");
+
   const { data: server } = await supabase
     .from("servers")
     .select("id, name, host, port, username")

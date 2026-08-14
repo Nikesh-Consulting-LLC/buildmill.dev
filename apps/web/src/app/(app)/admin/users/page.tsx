@@ -30,6 +30,8 @@ type AdminUser = {
   email: string;
   display_name: string | null;
   created_at: string;
+  // us-94.1: null = waiting at the beta gate.
+  approved_at: string | null;
   organization_members: {
     org_id: string;
     role: string;
@@ -44,6 +46,16 @@ function formatDate(iso: string): string {
     year: "numeric",
     month: "short",
     day: "numeric",
+  });
+}
+
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
@@ -87,6 +99,20 @@ export default function AdminUsersPage() {
     await load();
   }
 
+  // us-94.1: open the beta gate for a waiting account.
+  async function handleApprove(user: AdminUser) {
+    setBusyId(user.id);
+    setError(null);
+    try {
+      await apiFetch(`/api/v1/admin/users/${user.id}/approve`, { method: "POST" });
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function handleDeactivateToggle(user: AdminUser, deactivated: boolean) {
     setBusyId(user.id);
     setError(null);
@@ -121,6 +147,13 @@ export default function AdminUsersPage() {
     });
   }, [users, query]);
 
+  // us-94.1: accounts waiting at the beta gate, oldest first (the list
+  // already arrives ordered created_at.asc).
+  const pending = useMemo(
+    () => (users ?? []).filter((u) => u.approved_at === null),
+    [users]
+  );
+
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const clampedPage = Math.min(page, pageCount - 1);
   const paged = filtered.slice(clampedPage * PAGE_SIZE, clampedPage * PAGE_SIZE + PAGE_SIZE);
@@ -131,6 +164,64 @@ export default function AdminUsersPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
         <p className="text-sm text-muted-foreground">Every user on the platform.</p>
       </div>
+
+      {/* us-94.1: the beta gate's queue. Every account below authenticates
+          into /gate and nothing else until someone here approves it. */}
+      <section className="flex flex-col gap-2">
+        <div>
+          <h2 className="text-base font-semibold">Pending approval</h2>
+          <p className="text-sm text-muted-foreground">
+            New signups wait at the beta gate until approved here.
+          </p>
+        </div>
+        {!users ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : pending.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No accounts waiting at the gate.
+          </p>
+        ) : (
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Signed up</TableHead>
+                  <TableHead className="w-28" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pending.map((u) => (
+                  <TableRow key={u.id}>
+                    <TableCell>
+                      <span className="text-xs font-medium">{u.email}</span>
+                    </TableCell>
+                    <TableCell>{u.display_name || "—"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {formatDateTime(u.created_at)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        size="sm"
+                        disabled={busyId === u.id}
+                        onClick={() => handleApprove(u)}
+                      >
+                        {busyId === u.id ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="size-4" />
+                        )}
+                        Approve
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </section>
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative ml-auto w-full max-w-xs">

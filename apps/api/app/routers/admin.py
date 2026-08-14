@@ -280,7 +280,7 @@ async def list_users(
         settings,
         "profiles",
         {
-            "select": "id,email,display_name,created_at,organization_members(org_id,role,organizations(name))",
+            "select": "id,email,display_name,created_at,approved_at,organization_members(org_id,role,organizations(name))",
             "order": "created_at.asc",
         },
     )
@@ -357,6 +357,34 @@ async def deactivate_user(
         await admin_auth.set_ban(settings, user_id, body.deactivated)
     except admin_auth.AdminAuthError as e:
         raise HTTPException(status_code=502, detail=e.message)
+    return {"ok": True}
+
+
+@router.post("/users/{user_id}/approve")
+async def approve_user(
+    user_id: str,
+    admin: AuthUser = Depends(require_platform_admin),
+    settings: Settings = Depends(get_settings),
+):
+    """us-94.1: open the beta gate for a waiting account. The patch is
+    filtered to still-pending rows, so a double-click or two admins racing
+    can't rewrite who actually approved it or when."""
+    rows = await admin_patch(
+        settings,
+        "profiles",
+        {"id": f"eq.{user_id}", "approved_at": "is.null"},
+        {
+            "approved_at": datetime.now(timezone.utc).isoformat(),
+            "approved_by": admin.id,
+        },
+    )
+    if not rows:
+        existing = await admin_get(
+            settings, "profiles", {"select": "approved_at", "id": f"eq.{user_id}", "limit": "1"}
+        )
+        if not existing:
+            raise HTTPException(status_code=404, detail="User not found")
+        return {"ok": True, "already_approved": True}
     return {"ok": True}
 
 
