@@ -260,3 +260,24 @@ def test_the_template_migration_verifies_its_own_backfill():
     )
     assert "raise exception" in src.lower()
     assert "rolling back" in src.lower()
+
+
+def test_the_template_editors_no_longer_offer_prompt_sections():
+    """us-100.4: retired from the editor, NOT from the database. Migration 265
+    deletes nothing, so reverting this commit restores the surface — no backup
+    involved."""
+    for path in TEMPLATE_EDITORS:
+        src = path.read_text(encoding="utf-8")
+        assert "const PROMPT_KINDS: string[] = [];" in src, (
+            f"{path.name} still offers prompt sections in a template"
+        )
+
+
+def test_a_new_project_inherits_its_templates_document():
+    src = (MIGRATIONS / "266_a_new_project_inherits_the_document.sql").read_text(
+        encoding="utf-8"
+    )
+    assert "agent_instructions = t.agent_instructions" in src
+    # Never overwrite a document the create supplied itself.
+    assert "coalesce(btrim(p.agent_instructions), '') = ''" in src
+    assert "delete from" not in src.lower()

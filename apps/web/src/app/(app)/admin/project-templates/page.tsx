@@ -62,7 +62,12 @@ type Section = {
 // projects silently fell through to the factory default for exactly the
 // kinds that exist to give each type its own words.
 const WORKER_INSTRUCTION_KINDS = Object.keys(KIND_FILES);
-const PROMPT_KINDS = ["test_case_elaborate", "deploy_script_generate"];
+// us-100.4: retired from the EDITOR, not from the database. These are
+// server-side LLM prompts (llm.LLM_FUNCTIONS) that no agent reads and that
+// are platform-global — they do not belong in a project template. Existing
+// rows are deliberately left in place (migration 265 deletes nothing), so
+// this is reversible by reverting this commit rather than restoring a backup.
+const PROMPT_KINDS: string[] = [];
 const PROMPT_LABELS: Record<string, string> = {
   test_case_elaborate: "Test-case elaboration",
   deploy_script_generate: "Deploy-script generation",
