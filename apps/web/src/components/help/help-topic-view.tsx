@@ -13,6 +13,7 @@ import { HelpToc } from "@/components/help/help-toc";
 import { HeroFlow } from "@/components/help/hero-flow";
 import { LifecycleFlowchart } from "@/components/help/lifecycle-flowchart";
 import { PipelineWalkthrough } from "@/components/help/pipeline-walkthrough";
+import { RoutingMap } from "@/components/help/routing-map";
 import { SetupGuides } from "@/components/help/setup-stepper";
 import { StatusLegend } from "@/components/help/status-legend";
 import { useHelpText, type HelpText } from "@/components/help/use-help-text";
@@ -79,6 +80,7 @@ function SectionBody({
       </div>
     ),
     pipeline: <PipelineWalkthrough text={text} />,
+    routing: <RoutingMap />,
     lifecycle: <LifecycleFlowchart />,
     statuses: <StatusLegend text={text} />,
     architecture: <ArchitectureMap text={text} />,
