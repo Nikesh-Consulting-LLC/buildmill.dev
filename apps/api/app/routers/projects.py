@@ -247,6 +247,109 @@ async def refresh_guidelines(
     return result
 
 
+@router.get("/{project_id}/instructions/status")
+async def instruction_publish_status(
+    project_id: UUID,
+    user: AuthUser = Depends(verify_token),
+    settings: Settings = Depends(get_settings),
+):
+    """US-99.4: is anything edited but not yet published, and what?
+
+    Publishing stopped being automatic (the dispatch-time write retired with
+    us-99.4), so "edited but not in the repository" became a real state a
+    manager can sit in without noticing. This is what makes it visible.
+
+    The comparison is the same content hash migration 135 already defined —
+    it survives edits that cancel out, reordering that changes nothing, and a
+    failed write that must be retried, which no timestamp comparison does.
+    """
+    rows = await postgrest_get(
+        settings,
+        user.token,
+        "projects",
+        {
+            "select": "id,repo_full_name,docs_tree_enabled,"
+            "instructions_synced_hash,instructions_synced_at,"
+            "instructions_synced_sha",
+            "id": f"eq.{project_id}",
+            "limit": "1",
+        },
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project = rows[0]
+
+    guidelines = await rpc(
+        settings, user.token, "assemble_project_guidelines",
+        {"p_project": str(project_id)},
+    )
+    instructions = await asyncio.to_thread(
+        db.get_project_instructions_for_publish, settings, str(project_id)
+    )
+    files, deletes = repo_docs.instruction_file_plan(
+        instructions, guidelines, bool(project.get("docs_tree_enabled"))
+    )
+    digest = repo_docs.publish_hash(files, deletes)
+    published = project.get("instructions_synced_hash") or ""
+
+    return {
+        "unpublished": digest != published,
+        "has_repo": bool(project.get("repo_full_name")),
+        # What a publish would write and remove — so the warning can say how
+        # many files differ rather than only that something does.
+        "files": sorted(files),
+        "deletes": sorted(deletes),
+        "hash": digest,
+        "published_hash": published or None,
+        "published_at": project.get("instructions_synced_at"),
+        "published_sha": project.get("instructions_synced_sha"),
+        # us-99.2 AC6 / us-99.4 AC6: true every time, so it is copy rather
+        # than a dialog somebody dismisses once.
+        "ownership_notice": (
+            "Build Mill owns AGENTS.md, CLAUDE.md and everything under "
+            ".buildmill/, and rewrites them whole on each publish."
+        ),
+    }
+
+
+@router.get("/{project_id}/instructions/template-offers")
+async def template_instruction_offers(
+    project_id: UUID,
+    user: AuthUser = Depends(verify_token),
+    settings: Settings = Depends(get_settings),
+):
+    """US-99.7: what this project's template has changed since it was seeded.
+
+    An offer, never a push. Each entry says which instruction differs and
+    whether the project has ever edited it — `safe_to_accept` is true only
+    when `updated_by` is null, meaning the seeding trigger wrote it and
+    nobody has touched it since, so taking the update reverts nothing.
+
+    RLS scopes the project read to the caller's orgs; a project they cannot
+    see answers 404 rather than leaking that it exists.
+    """
+    rows = await postgrest_get(
+        settings,
+        user.token,
+        "projects",
+        {"select": "id,org_template_id", "id": f"eq.{project_id}", "limit": "1"},
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not rows[0].get("org_template_id"):
+        return {"bound_to_template": False, "offers": []}
+
+    offers = await asyncio.to_thread(
+        db.get_template_instruction_offers, settings, str(project_id)
+    )
+    return {
+        "bound_to_template": True,
+        "offers": offers,
+        "safe_count": sum(1 for o in offers if o["safe_to_accept"]),
+        "conflicting_count": sum(1 for o in offers if not o["safe_to_accept"]),
+    }
+
+
 @router.post("/{project_id}/guidelines/save-instructions")
 async def save_instructions(
     project_id: UUID,
@@ -308,15 +411,18 @@ async def save_instructions(
             status_code=409, detail=f"GitHub not connected for this repo: {e.message}"
         )
 
+    # us-99.2 AC5: ONE writer. Pressing Save and dispatching a run go through
+    # the same pure planner, so they produce byte-identical files — the whole
+    # point of the single-door rule US-22.6 introduced, now covering the
+    # per-kind set as well as AGENTS.md.
+    instructions = await asyncio.to_thread(
+        db.get_project_instructions_for_publish, settings, str(project_id)
+    )
+    files, deletes = repo_docs.instruction_file_plan(
+        instructions, guidelines, bool(project.get("docs_tree_enabled"))
+    )
     try:
-        files, block = await repo_docs.build_instruction_file_contents(
-            token,
-            project["repo_full_name"],
-            branch,
-            guidelines,
-            bool(project.get("docs_tree_enabled")),
-        )
-        # One commit carrying both files: either both land or neither does,
+        # One commit carrying every file: either they all land or none does,
         # so the repo never holds a half-written instruction set.
         result = await repo_docs.commit_files(
             token,
@@ -324,6 +430,7 @@ async def save_instructions(
             branch,
             "docs: build mill instructions (save)",
             files,
+            deletes,
         )
     except GitHubError as e:
         raise HTTPException(status_code=502, detail=f"GitHub commit failed: {e.message}")
@@ -331,7 +438,10 @@ async def save_instructions(
     commit_sha = result.get("commit_sha")
     if commit_sha and not result.get("unchanged"):
         db.record_instructions_sync(
-            settings, str(project_id), repo_docs.block_hash(block), commit_sha
+            settings,
+            str(project_id),
+            repo_docs.publish_hash(files, deletes),
+            commit_sha,
         )
 
     owner, repo = project["repo_full_name"].split("/", 1)

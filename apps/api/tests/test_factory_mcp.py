@@ -113,12 +113,14 @@ def test_all_tools_listed(mcp_client):
         # us-98.5: a merge that cannot finish must have a way to say so —
         # before this, an MCP agent could only release the claim silently.
         "report_merge_failure",
+        "get_instruction_file",
     ):
         assert tool in resp.text
 
 
 # The pure reads — clients may call these speculatively (prefetch, poll).
 _READ_ONLY_TOOLS = {
+    "get_instruction_file",
     "list_available_work",
     "list_factory_queue",
     "list_my_work",

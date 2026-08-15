@@ -80,13 +80,13 @@ Phases 85–89:
 | 47 | [us-98.4](us-98.4-a-merge-hands-back-a-branch-and-a-pull-request.md) | A merge hands back a branch and a pull request | Testing |
 | 48 | [us-98.5](us-98.5-an-unresolved-branch-fails-the-whole-merge.md) | An unresolved branch fails the whole merge | Testing |
 | 49 | [us-98.6](us-98.6-the-manager-reviews-the-merge-summary.md) | The manager reviews the merge summary | Testing |
-| 50 | [us-99.1](us-99.1-every-instruction-kind-has-a-file.md) | Every instruction kind has a file, and one map says which | New |
-| 51 | [us-99.2](us-99.2-agents-md-is-the-index.md) | AGENTS.md is the index, and Build Mill owns it whole | New |
-| 52 | [us-99.3](us-99.3-project-conventions-become-guidelines-md.md) | Project conventions become Guidelines.md | New |
-| 53 | [us-99.4](us-99.4-an-unpublished-edit-says-so.md) | An unpublished edit says so, and the manager pushes it | New |
-| 54 | [us-99.5](us-99.5-the-agent-reads-the-file-and-mcp-fills-the-gap.md) | The agent reads the file, and MCP fills the gap | New |
-| 55 | [us-99.6](us-99.6-a-template-carries-the-whole-file-set.md) | A template carries the whole file set | New |
-| 56 | [us-99.7](us-99.7-a-template-edit-offers-itself.md) | A template edit offers itself to the projects using it | New |
+| 50 | [us-99.1](us-99.1-every-instruction-kind-has-a-file.md) | Every instruction kind has a file, and one map says which | Testing |
+| 51 | [us-99.2](us-99.2-agents-md-is-the-index.md) | AGENTS.md is the index, and Build Mill owns it whole | Testing |
+| 52 | [us-99.3](us-99.3-project-conventions-become-guidelines-md.md) | Project conventions become Guidelines.md | Testing |
+| 53 | [us-99.4](us-99.4-an-unpublished-edit-says-so.md) | An unpublished edit says so, and the manager pushes it | Testing |
+| 54 | [us-99.5](us-99.5-the-agent-reads-the-file-and-mcp-fills-the-gap.md) | The agent reads the file, and MCP fills the gap | Testing |
+| 55 | [us-99.6](us-99.6-a-template-carries-the-whole-file-set.md) | A template carries the whole file set | Testing |
+| 56 | [us-99.7](us-99.7-a-template-edit-offers-itself.md) | A template edit offers itself to the projects using it | Testing |
 | 57 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
 | 58 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
 | 59 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |

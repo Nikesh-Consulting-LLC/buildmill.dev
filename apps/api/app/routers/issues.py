@@ -52,22 +52,27 @@ async def complexity_score(
 async def _sync_repo_before_dispatch(
     settings: Settings, project_id: str | None
 ) -> None:
-    """US-22.7 / US-22.4: bring the repo up to date before the agent reads it.
+    """US-22.4: bring the docs tree up to date before the agent reads it.
 
     A coding agent gets the workspace as a zip pinned to a commit, so
-    AGENTS.md, CLAUDE.md and docs/factory/ reach it as files on disk —
-    whatever was last committed is what it obeys for the whole run. Dispatch
-    is the last moment a write still reaches the agent that needs it; at
-    claim time the zip may already have been cut.
+    docs/factory/ reaches it as files on disk. Dispatch is the last moment a
+    write still reaches the agent that needs it; at claim time the zip may
+    already have been cut.
+
+    **us-99.4: instructions are NOT written here any more.** They used to be
+    (US-22.7), back when a sync meant merging a fenced block into AGENTS.md.
+    A publish now rewrites AGENTS.md, CLAUDE.md and every `.buildmill/` file
+    whole, and deletes the ones a kind no longer needs — that is far too much
+    to happen unattended, as a side effect of somebody pressing Dispatch.
+    Publishing became the manager's own click; us-99.5's fallback is what
+    keeps a run correct in the meantime.
 
     Never raises and never blocks: availability of the factory beats
-    freshness of a markdown file. A failure leaves the recorded hash
-    untouched, so the next dispatch retries.
+    freshness of a markdown file.
     """
     if not project_id:
         return
     try:
-        await repo_docs.sync_instruction_files(settings, project_id, "dispatch")
         await repo_docs.sync_tree(settings, project_id, trigger="dispatch")
     except Exception:  # noqa: BLE001 — best-effort by contract
         pass
