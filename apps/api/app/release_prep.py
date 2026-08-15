@@ -36,6 +36,8 @@ async def submit(
     notes_summary: str,
     notes_detail: str,
     test_cases: list[dict[str, str]] | None = None,
+    proposed_version: str | None = None,
+    version_rationale: str | None = None,
 ) -> dict[str, Any]:
     prep = db.get_release_prep(settings, prep_id, str(worker["org_id"]))
     if not prep:
@@ -89,6 +91,16 @@ async def submit(
             "notes_summary": notes_summary,
             "notes_detail": notes_detail,
             "status": "notes-ready",
+            # us-100.6: advisory. `releases.version` is untouched — a proposal
+            # is an input to the manager's cut, never the cut itself.
+            **(
+                {
+                    "proposed_version": proposed_version,
+                    "version_rationale": version_rationale,
+                }
+                if proposed_version
+                else {}
+            ),
         },
     )
     db.stamp_release_milestones(

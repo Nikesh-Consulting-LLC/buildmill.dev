@@ -67,10 +67,23 @@ never hand-pick one mid-flight.
 
 ### Version scheme
 
-A release is versioned **`YYYY.MM.DD.N`**: the date it was cut plus a
-same-day counter. The manager may override the proposal when cutting, and
+A release is versioned **`YYYY.MM.DD.N`** by default: the date it was cut plus
+a same-day counter. The manager may override the proposal when cutting, and
 from that moment the version is fixed — an agent reads it off the release and
-never chooses one.
+never changes one.
+
+**us-100.6 changed who proposes it.** A project can now write its own
+versioning rules in its Agent Instructions, and the release agent reads them
+and proposes a version with its reasoning. The older rule — *"the factory
+computes the version; you never hand-pick one"* — no longer holds for the
+proposal, only for what happens after the cut. Three things still do:
+
+- the manager's override at cut is final, and the version is immutable after;
+- a project whose Agent Instructions say nothing about versioning gets
+  `YYYY.MM.DD.N`, unchanged;
+- a proposal that collides with an existing version, or could not be a git
+  tag, is refused and the computed version is used instead. The factory never
+  ships a release with no version because an agent had an opinion.
 
 ### What a release is
 

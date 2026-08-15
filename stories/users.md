@@ -95,7 +95,7 @@ Phases 85–89:
 | 59 | [us-100.3](us-100.3-the-tabs-say-what-they-hold.md) | The tabs say what they hold | Testing |
 | 60 | [us-100.4](us-100.4-a-template-defines-the-agent-instructions.md) | A template defines the Agent Instructions | New |
 | 61 | [us-100.5](us-100.5-the-refresh-run-proposes-a-document.md) | The refresh run proposes a document, not sections | New |
-| 62 | [us-100.6](us-100.6-versioning-is-agent-work.md) | Versioning is agent work | New |
+| 62 | [us-100.6](us-100.6-versioning-is-agent-work.md) | Versioning is agent work | Testing |
 | 63 | [us-101.1](us-101.1-the-release-agent-reads-the-whole-story.md) | The release agent reads the whole story, not just its title | New |
 | 64 | [us-101.2](us-101.2-a-release-case-knows-its-section-and-its-story.md) | A release case knows its section, its story, and whether it is critical | New |
 | 65 | [us-101.3](us-101.3-every-check-is-a-step-and-an-expectation.md) | Every check is a step and an expectation | New |

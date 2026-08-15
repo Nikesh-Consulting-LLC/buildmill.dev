@@ -4183,6 +4183,7 @@ export type Database = {
           project_id: string
           promoted_at: string | null
           promoted_by: string | null
+          proposed_version: string | null
           rejected_at: string | null
           rejected_reason: string | null
           released_at: string | null
@@ -4195,6 +4196,7 @@ export type Database = {
           uat_deployment_run_id: string | null
           updated_at: string
           version: string
+          version_rationale: string | null
         }
         Insert: {
           cancelled_at?: string | null
@@ -4216,6 +4218,7 @@ export type Database = {
           project_id: string
           promoted_at?: string | null
           promoted_by?: string | null
+          proposed_version?: string | null
           rejected_at?: string | null
           rejected_reason?: string | null
           released_at?: string | null
@@ -4228,6 +4231,7 @@ export type Database = {
           uat_deployment_run_id?: string | null
           updated_at?: string
           version: string
+          version_rationale?: string | null
         }
         Update: {
           cancelled_at?: string | null
@@ -4249,6 +4253,7 @@ export type Database = {
           project_id?: string
           promoted_at?: string | null
           promoted_by?: string | null
+          proposed_version?: string | null
           rejected_at?: string | null
           rejected_reason?: string | null
           released_at?: string | null
@@ -4261,6 +4266,7 @@ export type Database = {
           uat_deployment_run_id?: string | null
           updated_at?: string
           version?: string
+          version_rationale?: string | null
         }
         Relationships: [
           {

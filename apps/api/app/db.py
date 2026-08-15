@@ -5538,6 +5538,23 @@ def get_template_instruction_offers(
     ]
 
 
+def release_versions_for_prep(settings: Settings, prep_id: str) -> list[str]:
+    """US-100.6: every version already used on the project this release-prep
+    belongs to, so a proposal cannot collide. A version names exactly one
+    build, forever."""
+    if not _valid_uuid(prep_id):
+        return []
+    with _connect(settings) as conn:
+        rows = conn.execute(
+            "select r2.version from public.release_preps p "
+            "join public.releases r on r.id = p.release_id "
+            "join public.releases r2 on r2.project_id = r.project_id "
+            "where p.id = %s and r2.version is not null",
+            (prep_id,),
+        ).fetchall()
+    return [r["version"] for r in rows]
+
+
 def get_approved_plans(
     settings: Settings, issue_id: str, org_id: str
 ) -> dict[str, str | None]:

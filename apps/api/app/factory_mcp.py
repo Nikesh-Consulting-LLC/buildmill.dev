@@ -2024,6 +2024,60 @@ async def get_instruction_file(
     }
 
 
+def version_proposal_error(
+    proposed: str, rationale: str, taken: list[str] | None = None
+) -> dict[str, Any] | None:
+    """US-100.6: is this version proposal usable? None if yes, an error if no.
+
+    Deliberately NOT a format check. The whole reason versioning moved to an
+    agent is that a project can now write its own rules in its Agent
+    Instructions — semantic, a train, a date scheme, anything — so validating
+    against `YYYY.MM.DD.N` here would re-impose exactly the constraint this
+    story removes. What is checked is what is true of any version in any
+    scheme: it exists, it is a single token, it is not absurdly long, it does
+    not collide, and it comes with a reason.
+
+    The factory never ships a release with no version because an agent had an
+    opinion: a refused proposal falls back to the computed scheme rather than
+    failing the cut.
+    """
+    text = (proposed or "").strip()
+    if not text:
+        return _err(
+            "no version proposed",
+            "omit the field entirely to accept the computed version",
+        )
+    if len(text) > 64:
+        return _err(
+            f"proposed version is {len(text)} characters",
+            "a version is a label, not a sentence — 64 characters at most",
+        )
+    if any(c.isspace() for c in text):
+        return _err(
+            f"proposed version '{text}' contains whitespace",
+            "a version is a single token; it becomes a git tag",
+        )
+    # It becomes a git tag, and these are the characters git refuses.
+    if any(c in text for c in "~^:?*[\\") or ".." in text:
+        return _err(
+            f"proposed version '{text}' cannot be a git tag",
+            "no ~ ^ : ? * [ \\ or .. — the release is tagged with this",
+        )
+    if text in {v for v in (taken or []) if v}:
+        return _err(
+            f"version '{text}' already exists for this project",
+            "a version names exactly one build, forever — propose the next "
+            "one, or omit the field to accept the computed version",
+        )
+    if not (rationale or "").strip():
+        return _err(
+            "say why this is the next version",
+            "name which rule in the project's Agent Instructions you applied "
+            "— this is read months later to explain the number",
+        )
+    return None
+
+
 def _merge_refs(run: dict[str, Any]) -> tuple[str, list[str]] | None:
     """US-98.3: the refs a merge run is licensed to read — its base and the
     branches the manager named — or None when this is not a merge run.
@@ -5479,6 +5533,8 @@ async def submit_release_notes(
     notes_summary: str,
     notes_detail: str,
     test_cases: list[dict[str, str]] | None = None,
+    proposed_version: str = "",
+    version_rationale: str = "",
 ) -> dict[str, Any]:
     """Complete a claimed release-prep job (US-63.1).
 
@@ -5495,8 +5551,20 @@ async def submit_release_notes(
     call succeeds. There is nothing left for you to trigger or verify."""
     settings = get_settings()
     worker = _worker()
+    # us-100.6: an optional version proposal, read from the project's Agent
+    # Instructions. Validated BEFORE the notes land, so a bad proposal never
+    # half-completes the job — and omitted entirely means "the computed
+    # version is right", which stays the normal case.
+    if (proposed_version or "").strip() or (version_rationale or "").strip():
+        taken = db.release_versions_for_prep(settings, prep_id)
+        bad = version_proposal_error(proposed_version, version_rationale, taken)
+        if bad:
+            return bad
+
     result = await release_prep.submit(
-        settings, prep_id, worker, notes_summary, notes_detail, test_cases
+        settings, prep_id, worker, notes_summary, notes_detail, test_cases,
+        proposed_version=(proposed_version or "").strip() or None,
+        version_rationale=(version_rationale or "").strip() or None
     )
     if "error" in result:
         return _err(result["error"])
