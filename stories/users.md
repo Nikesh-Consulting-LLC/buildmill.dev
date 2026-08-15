@@ -19,10 +19,13 @@ phases did *not* prove, the Phase 78 known gaps, and the
 retired-unbuilt-do-not-re-propose list — is in
 [APPLICATION.md → Delivery history](../APPLICATION.md#delivery-history).
 
-Thirty-six stories are open — Phase 91's usability work first (requested
+Forty-eight stories are open — Phase 91's usability work first (requested
 2026-08-13), then Phase 92's phone work, the public site and its beta gate
 (requested 2026-08-14), Phase 95's cost management (requested 2026-08-14),
-and the residue carried out of Phases 85–89:
+Phase 97's GitHub linkage repair (requested 2026-08-15, ahead of Phase 96
+because it is costing live runs today), Phase 96's per-type work-item paths
+and its runner-health addendum from the 2026-08-14 run-log analysis, and
+the residue carried out of Phases 85–89:
 
 | Order | Story | Title | Status |
 |---|---|---|---|
@@ -57,11 +60,23 @@ and the residue carried out of Phases 85–89:
 | 29 | [us-95.2](us-95.2-spend-is-a-curve-not-a-number.md) | Spend is a curve, not a number | Testing |
 | 30 | [us-95.3](us-95.3-every-dollar-names-the-work.md) | Every dollar names the work that bought it | Testing |
 | 31 | [us-95.4](us-95.4-a-slice-narrows-and-a-view-travels.md) | A slice narrows, and a view travels | Testing |
-| 32 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
-| 33 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
-| 34 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
-| 35 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
-| 36 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+| 32 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
+| 33 | [us-96.1](us-96.1-a-chore-is-one-shot.md) | A chore is one shot | New |
+| 34 | [us-96.2](us-96.2-a-bug-explains-itself-before-the-fix.md) | A bug explains itself before the fix | New |
+| 35 | [us-96.3](us-96.3-every-kind-of-work-gets-its-own-words.md) | Every kind of work gets its own words | New |
+| 36 | [us-96.4](us-96.4-the-feature-holds-the-steering-wheel.md) | The feature holds the steering wheel | New |
+| 37 | [us-96.7](us-96.7-the-workbench-triages-the-feature.md) | The workbench triages the feature, not its stories | New |
+| 38 | [us-96.5](us-96.5-the-buttons-match-the-work.md) | The buttons match the work | New |
+| 39 | [us-96.6](us-96.6-a-failed-breakdown-gets-another-try.md) | A failed breakdown gets another try | New |
+| 40 | [us-96.10](us-96.10-the-stage-shapes-the-model.md) | The stage shapes the model | New |
+| 41 | [us-96.8](us-96.8-the-hand-back-speaks-with-one-voice.md) | The hand-back speaks with one voice | New |
+| 42 | [us-96.9](us-96.9-a-stop-is-an-answer-not-a-breakdown.md) | A stop is an answer, not a breakdown | New |
+| 43 | [us-96.11](us-96.11-a-key-never-rides-the-trace.md) | A key never rides the trace | New |
+| 44 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
+| 45 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
+| 46 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
+| 47 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
+| 48 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
 
 **Phase 91 — Usability: the dashboard reads like the job** (drafted 2026-08-13,
 the manager's own list). Nothing here is broken; all of it is friction the
@@ -130,6 +145,75 @@ attributed shown as a named bucket rather than dropped or pro-rated
 (us-95.3); and how to narrow a view and hand it over — Project/Agent/Type
 filters that compose with any grouping and window, the whole slice carried
 in the URL (us-95.4).
+
+**Phase 97 — GitHub linkage stays true** (drafted 2026-08-15, from the
+run-`ff9ef2be` incident). A repository rename/transfer on GitHub answers
+REST calls with `301 Moved Permanently`; the factory's client neither
+follows nor names it, so every MCP hand-back tool on the Demo project failed
+with stringified `KeyError`s (`'sha'`, `'commit'`) while the git proxy —
+git follows redirects — pushed fine, and the worker parked on a
+clarification with finished work in hand. us-97.1 makes the REST client
+redirect-aware through one shared helper, stops broken payloads from
+leaking as riddles, and closes the loop the manager asked for: a detected
+move **relinks the project automatically** when the GitHub App can see the
+repo at its new path (audited, org notified), and **asks** — a named
+broken-link state on the project page, plain words in every tool answer —
+when it can't. The Edit dialog also stops pretending a stale path is
+selectable when the installation no longer offers it.
+
+**Phase 96 — The type shapes the path** (drafted 2026-08-14, the manager's
+request). All four work-item types ride one pipeline today — plan run, plan
+review, code run, code review — and the manager called it: the sameness is
+ceremony for some types and the wrong shape for others. The state machine
+stays shared (decided 2026-08-14); what changes is which gates each type
+passes and what words the worker receives. A chore becomes single-shot —
+dispatch builds it, the code-review gate stays, retry never re-plans
+(us-96.1). A bug's think-first phase becomes a root cause analysis in plain
+language — what broke, why, and the proposed fix in words, no diffs — whose
+approval unlocks the fix run, reusing the plan machinery whole (us-96.2).
+The instruction family grows to match: `chore`, `bug_rca`, `bug_fix` land
+with their lifecycles, us-96.3 adds the standalone-story pair (no PRD, no
+breakdown — the story is the whole contract) and teaches the Settings
+editor to name every member for what it steers. us-96.4 gives the feature
+the whole steering wheel: the individual-dispatch refusal extends from the
+build phase to planning, plan approvals are worked from the feature page,
+and only a child in trouble routes alone — while every child keeps its own
+run, branch, and PR. us-96.7 carries that to where work is triaged: on the
+Workbench waiting list and the Factory queue a feature with children is
+**one** row — batch progress in a line, attention named on the row, the
+feature the reorder unit — retiring the US-24.1/24.2 header nesting and
+counting one pending item in `org_pending_count`, so the badge and the list
+keep agreeing. us-96.5 makes the UI stop dressing all four types in
+the same clothes: per-type stage trackers, labels ("Analyzing", not
+"Planning", for a bug), and action sets, with the help flowchart brought
+along. us-96.6 closes the documented breakdown dead end: a failed breakdown
+run leaves its feature at `ready` and dispatchable — the run fails, not the
+work item — with stranded features repaired by migration. us-96.10 turns the
+same lens on the models: the Anthropic picker catches up to the Claude 5
+generation (Opus 5 in, Opus 4.8 out) and each stage is routed to the model
+its leverage deserves — Opus 5 at `xhigh` where a bad answer burns gates
+(planning, coding), Sonnet 5 for scoped expansion (elaboration), Haiku for
+restatement (TLDRs) — applied through the routes and presets the factory
+already has, no new plumbing.
+
+The phase carries a **runner-health addendum** (drafted 2026-08-14, from
+that day's run-log analysis — three faults the traces named, none of them
+the agent's). us-96.8 makes the hand-back speak with one voice: run
+`51cd4fd3` spent eight of fifteen minutes deliberating between "leave
+changes uncommitted" and `submit_changeset` — both delivered to the same
+agent — then had its first submit rejected for containing the
+`.factory-out/test_cases.json` the prompt itself ordered written; scratch
+becomes filtered-not-fatal, the submit echoes what it received, and the
+harness sweeps for modified-but-never-submitted files. us-96.9 makes a
+manager stop terminal: run `22b807a5` was stopped at 17:33 and the repair
+ladder answered with a wait, a workspace-destroying reclone, and a zombie
+CLI boot on a revoked claim — five minutes of probing that closed as
+`runner-fault: "no enabled module"` plus two spurious failure rows, for a
+run nobody's code broke. us-96.11 extends us-89.1's "files travel; secrets
+must not ride them" to telemetry: that same zombie's curl probes landed the
+broker's `X-Factory-Local-Key` value verbatim in `run_trace`, twice, on a
+table the dashboard renders — redaction at the runner's emit choke point,
+a pattern scrub at `record_run_trace`, and a one-off sweep of the ledger.
 
 **Phase 85 residue — us-85.3** (drafted 2026-08-12) closes the loop on the incident
 that motivated us-85.1's workspace verification. A run that fails on a broken bench —
