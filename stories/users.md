@@ -74,7 +74,7 @@ Phases 85–89:
 | 41 | [us-96.8](us-96.8-the-hand-back-speaks-with-one-voice.md) | The hand-back speaks with one voice | Testing |
 | 42 | [us-96.9](us-96.9-a-stop-is-an-answer-not-a-breakdown.md) | A stop is an answer, not a breakdown | Testing |
 | 43 | [us-96.11](us-96.11-a-key-never-rides-the-trace.md) | A key never rides the trace | Testing |
-| 44 | [us-98.1](us-98.1-the-factory-learns-a-merge-run.md) | The factory learns a merge run | New |
+| 44 | [us-98.1](us-98.1-the-factory-learns-a-merge-run.md) | The factory learns a merge run | Testing |
 | 45 | [us-98.2](us-98.2-a-merge-names-the-branches-it-will-land.md) | A merge names the branches it will land | New |
 | 46 | [us-98.3](us-98.3-the-agent-reads-every-branch-it-must-merge.md) | The agent reads every branch it must merge | New |
 | 47 | [us-98.4](us-98.4-a-merge-hands-back-a-branch-and-a-pull-request.md) | A merge hands back a branch and a pull request | New |

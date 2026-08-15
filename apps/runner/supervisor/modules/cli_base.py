@@ -70,6 +70,12 @@ HANDBACK_SHAPE: dict[str, str] = {
     "guidelines": HANDBACK_MCP,
     "elaborate": HANDBACK_MCP,
     "wireframe": HANDBACK_MCP,
+    # us-98.1: a merge submits over MCP, not as a worktree. The harness
+    # cannot produce what a merge hand-back has to carry — a per-branch
+    # account of what happened to each branch — so collecting a working
+    # tree would deliver the diff and lose the only part a manager reads
+    # to check nothing was dropped.
+    "merge": HANDBACK_MCP,
 }
 
 
