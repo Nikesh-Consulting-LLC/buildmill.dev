@@ -4,14 +4,14 @@ import {
   ComplexitySection,
   DescriptionSection,
   ParentPrdSection,
-  PlanSection,
   commonSlots,
   type WorkItemViewData,
 } from "./work-item-sections";
 
-/** US-15.20: a chore is the plainest of the four — a description and a plan.
- * Chores carry no acceptance criteria today, so Overview shows none rather
- * than an empty card. */
+/** US-15.20: a chore is the plainest of the four — a description, built in
+ * one shot. us-96.5: the Plan tab retired with the plan phase (us-96.1);
+ * dispatch builds a chore directly. Chores carry no acceptance criteria
+ * today, so Overview shows none rather than an empty card. */
 export function ChoreView({
   data,
   defaultTab,
@@ -34,7 +34,6 @@ export function ChoreView({
             <DescriptionSection data={data} title="Description" />
           </div>
         ),
-        plan: <PlanSection data={data} />,
         ...commonSlots(data),
       }}
     />

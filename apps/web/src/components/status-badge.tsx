@@ -178,16 +178,43 @@ export function statusLabel(status: string): string {
   return STATUS_STYLES[status as IssueStatus]?.label ?? status;
 }
 
+/** us-96.5: the words a status wears when the work-item type gives them a
+ * more honest name — a bug's think-first phase is a root cause analysis
+ * (us-96.2), so "Planning" would be a small lie on its row. The tone stays
+ * the status's own; only the label changes. */
+const TYPE_STATUS_LABELS: Record<string, Record<string, string>> = {
+  bug: {
+    planning: "Analyzing",
+    "plan-review": "RCA review",
+    planned: "Fix ready",
+  },
+};
+
+export function issueStatusLabel(
+  type: string | null | undefined,
+  status: string
+): string | undefined {
+  return type ? TYPE_STATUS_LABELS[type]?.[status] : undefined;
+}
+
 export function StatusBadge({
   status,
   className,
+  issueType,
 }: {
   status: IssueStatus;
   className?: string;
+  /** us-96.5: pass the work-item type where it is known and the badge
+   * speaks it ("Analyzing", not "Planning", on a bug). */
+  issueType?: string | null;
 }) {
-  const style = STATUS_STYLES[status] ?? {
+  const base = STATUS_STYLES[status] ?? {
     label: status,
     className: UNKNOWN_STATUS.className,
+  };
+  const style = {
+    ...base,
+    label: issueStatusLabel(issueType, status) ?? base.label,
   };
   return (
     <span

@@ -42,6 +42,9 @@ const FIRST_TAB_LABELS: Record<string, string> = {
 
 export function tabLabel(tab: WorkItemTab, type: string): string {
   if (tab === "overview") return FIRST_TAB_LABELS[type] ?? TAB_LABELS.overview;
+  // us-96.5: a bug's think-first artifact is a root cause analysis
+  // (us-96.2) — the tab says what it holds.
+  if (tab === "plan" && type === "bug") return "RCA";
   return TAB_LABELS[tab];
 }
 
@@ -61,7 +64,13 @@ export function tabsForType(
   { hasRelease }: { hasRelease: boolean }
 ): WorkItemTab[] {
   const middle: WorkItemTab[] =
-    type === "feature" ? ["prd", "stories"] : ["wireframe", "plan"];
+    type === "feature"
+      ? ["prd", "stories"]
+      : type === "chore"
+        ? // us-96.5: a chore has no plan phase (us-96.1), so no Plan tab —
+          // a tab whose only content is an empty state is a broken promise.
+          ["wireframe"]
+        : ["wireframe", "plan"];
   return [
     "overview",
     ...middle,

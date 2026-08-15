@@ -46,7 +46,10 @@ const RECTS: Rect[] = [
   { x: 480, y: 98, tone: "agent", label: "PRD draft", sub: "the factory writes it" },
   { x: 480, y: 278, tone: "agent", label: "Story breakdown", sub: "the factory splits it" },
   { x: 165, y: 278, tone: "person", label: "Dispatch planning", sub: "you" },
-  { x: 165, y: 370, tone: "agent", label: "Plan", sub: "impl + test plans" },
+  // us-96.5: the think-first stage speaks per type — a bug's artifact is a
+  // root cause analysis (us-96.2), and a chore has no such stage at all
+  // (us-96.1; see the edge label below).
+  { x: 165, y: 370, tone: "agent", label: "Plan", sub: "plans · a bug's RCA" },
   { x: 165, y: 550, tone: "person", label: "Dispatch code", sub: "you" },
   { x: 165, y: 630, tone: "agent", label: "Build", sub: "code on a branch" },
   { x: 165, y: 713, tone: "agent", label: "Test", sub: "runs the test plan" },
@@ -86,7 +89,7 @@ type Edge = {
 
 const EDGES: Edge[] = [
   { d: "M250 64 V92" },
-  { d: "M250 148 V274", label: "story · bug · chore", at: [258, 205], anchor: "start" },
+  { d: "M250 148 V274", label: "story · bug (a chore skips to Build)", at: [258, 205], anchor: "start" },
   { d: "M325 120 H476", label: "feature", at: [400, 112], anchor: "middle" },
   { d: "M565 142 V176" },
   { d: "M640 208 H684 V120 H654", label: "send back", at: [694, 164], rotate: true },

@@ -789,8 +789,11 @@ export async function loadWaiting(
             return {
               ...toItem(
                 i,
-                "Plan ready for your review",
-                "Approve Plan",
+                // us-96.5: a bug's gate holds an RCA, and the row says so.
+                i.type === "bug"
+                  ? "Root cause analysis ready for your review"
+                  : "Plan ready for your review",
+                i.type === "bug" ? "Approve RCA" : "Approve Plan",
                 `/review/${i.id}`
               ),
               peekKind: "plan" as const,

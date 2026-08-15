@@ -66,7 +66,7 @@ the residue carried out of Phases 85–89:
 | 35 | [us-96.3](us-96.3-every-kind-of-work-gets-its-own-words.md) | Every kind of work gets its own words | Testing |
 | 36 | [us-96.4](us-96.4-the-feature-holds-the-steering-wheel.md) | The feature holds the steering wheel | Testing |
 | 37 | [us-96.7](us-96.7-the-workbench-triages-the-feature.md) | The workbench triages the feature, not its stories | Testing |
-| 38 | [us-96.5](us-96.5-the-buttons-match-the-work.md) | The buttons match the work | New |
+| 38 | [us-96.5](us-96.5-the-buttons-match-the-work.md) | The buttons match the work | Testing |
 | 39 | [us-96.6](us-96.6-a-failed-breakdown-gets-another-try.md) | A failed breakdown gets another try | New |
 | 40 | [us-96.10](us-96.10-the-stage-shapes-the-model.md) | The stage shapes the model | New |
 | 41 | [us-96.8](us-96.8-the-hand-back-speaks-with-one-voice.md) | The hand-back speaks with one voice | New |

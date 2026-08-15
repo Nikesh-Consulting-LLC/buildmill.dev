@@ -639,6 +639,9 @@ export default async function IssueDetailPage({
     status: issue.status,
     latestRunKind: (runs?.[0]?.kind ?? null) as "plan" | "code" | null,
     hasApprovedPlan,
+    // us-96.4/96.5: any plan artifact at all — the tracker's line between
+    // initial planning (the feature's) and revision (the story's own).
+    hasAnyPlan: planArtifacts.length > 0,
     hasApprovedPrd,
     hasPrd: prdArtifacts.length > 0,
     hasChildren,
@@ -752,7 +755,7 @@ export default async function IssueDetailPage({
             <h1 className="truncate text-xl font-semibold tracking-tight">
               {issue.title}
             </h1>
-            <StatusBadge status={issue.status as IssueStatus} />
+            <StatusBadge status={issue.status as IssueStatus} issueType={issue.type} />
             <AssigneePicker
               issueId={issue.id}
               orgId={issue.org_id}

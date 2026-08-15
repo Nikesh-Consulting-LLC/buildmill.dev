@@ -392,6 +392,7 @@ export function PlanSection({ data }: { data: WorkItemViewData }) {
       issueId={data.issue.id}
       status={data.issue.status}
       artifacts={data.planArtifacts}
+      isBug={data.type === "bug"}
     />
   );
 }
