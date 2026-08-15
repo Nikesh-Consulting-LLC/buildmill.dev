@@ -70,7 +70,7 @@ the residue carried out of Phases 85–89:
 | 39 | [us-96.6](us-96.6-a-failed-breakdown-gets-another-try.md) | A failed breakdown gets another try | Testing |
 | 40 | [us-96.10](us-96.10-the-stage-shapes-the-model.md) | The stage shapes the model | Testing |
 | 41 | [us-96.8](us-96.8-the-hand-back-speaks-with-one-voice.md) | The hand-back speaks with one voice | Testing |
-| 42 | [us-96.9](us-96.9-a-stop-is-an-answer-not-a-breakdown.md) | A stop is an answer, not a breakdown | New |
+| 42 | [us-96.9](us-96.9-a-stop-is-an-answer-not-a-breakdown.md) | A stop is an answer, not a breakdown | Testing |
 | 43 | [us-96.11](us-96.11-a-key-never-rides-the-trace.md) | A key never rides the trace | New |
 | 44 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
 | 45 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
