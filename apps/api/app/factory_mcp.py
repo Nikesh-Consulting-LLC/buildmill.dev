@@ -713,6 +713,17 @@ async def get_work_context(run_id: str, ctx: Context) -> dict[str, Any]:
         run["kind"],
         issue_id=str(run.get("issue_id") or "") or None,
     )
+    # us-99.5: the FILE governs, not this text. The instruction now lives in
+    # the repository the agent is already holding, so the context names it
+    # rather than carrying a second copy that can disagree with it — a
+    # manager can save an instruction and not publish it (us-99.4), and two
+    # copies would leave the agent deciding which one is real.
+    #
+    # The text still travels as a fallback, because a pointer to a file that
+    # is not there is worse than the prose was: a project that has never
+    # published, or a workspace fetched before the publish landed, must still
+    # get its instruction.
+    template = _instruction_pointer(run["kind"], template)
     # US-5.12: the work item's comment thread — the whole prior discussion,
     # visible to any claimer including one picking up a retry.
     comments = db.list_issue_comments_for_run(
@@ -1907,6 +1918,110 @@ async def _held_run_and_token(
     except github.GitHubError as e:
         return None, None, _github_err(e)
     return run, token, None
+
+
+def _instruction_pointer(kind: str, resolved: str | None) -> str:
+    """US-99.5: name the file that governs, and carry the text behind it.
+
+    The file wins when the two differ. That is the point of moving
+    instructions into the repository — it is what an agent works in, what a
+    human reads, and what carries the instruction beside the code it
+    describes. But a project that has never published has no file, so the
+    resolved text still travels: a pointer to something absent is worse than
+    the prose was.
+    """
+    from .instruction_files import path_for
+
+    path = path_for(kind)
+    body = (resolved or "").strip()
+    if not path:
+        # A kind with no file (an excluded LLM-function prompt) behaves
+        # exactly as it always did.
+        return body
+    header = (
+        f"Your instruction for this run lives at `{path}` in the repository "
+        "you are holding. **Read it there first** — it is the current one. "
+        "If the file is missing (this project may never have published), "
+        "call `get_instruction_file` for it. The copy below is that "
+        "fallback, and may lag what a manager has saved."
+    )
+    if not body:
+        return (
+            header
+            + "\n\n_No instruction text is configured for this kind._"
+        )
+    return f"{header}\n\n---\n\n{body}"
+
+
+@mcp.tool(**_read("Read an instruction file's current text"))
+async def get_instruction_file(
+    run_id: str = "", kind: str = "", project_id: str = ""
+) -> dict[str, Any]:
+    """The current text of an instruction, when the file is not in your
+    workspace — us-99.5.
+
+    Instructions live in the repository under `.buildmill/`, and that copy is
+    the one that governs. This is the fallback for when it is not there: a
+    project whose manager has never published, a workspace fetched before a
+    publish landed, or a repository where the directory was removed.
+
+    Give `run_id` and the kind is implied by your run. Give `project_id` and
+    `kind` to read any one of them. The answer comes from the factory's own
+    resolution chain, so it is correct whether or not anything was ever
+    published.
+    """
+    from .instruction_files import KIND_FILES, path_for
+
+    settings = get_settings()
+    worker = _worker()
+
+    resolved_kind = (kind or "").strip()
+    project = (project_id or "").strip()
+
+    if (run_id or "").strip():
+        run = db.get_worker_run(settings, run_id, str(worker["org_id"]))
+        if not run:
+            return _err("run not found", "list_my_work shows what you hold")
+        project = str(run.get("project_id") or "")
+        resolved_kind = resolved_kind or str(run.get("kind") or "")
+        issue_id = str(run.get("issue_id") or "") or None
+    else:
+        issue_id = None
+        if not project:
+            return _err(
+                "give a run_id, or a project_id and kind",
+                "run_id implies both",
+            )
+        if not db.worker_allowed_for_project(settings, str(worker["id"]), project):
+            return _err(
+                "this worker is not scoped to that project",
+                "pass the run_id of work you hold instead",
+            )
+
+    if resolved_kind not in KIND_FILES:
+        return _err(
+            f"'{resolved_kind}' has no instruction file",
+            "known kinds: " + ", ".join(sorted(KIND_FILES)),
+        )
+
+    text = db.get_worker_instruction(
+        settings, project, resolved_kind, issue_id=issue_id
+    )
+    body = (text or "").strip()
+    if not body:
+        # us-99.5 AC5: named, never silently empty. An agent proceeding on no
+        # instruction at all is the failure this whole phase is about.
+        return _err(
+            f"no instruction text resolves for '{resolved_kind}'",
+            "the project, its template and the factory default are all "
+            "blank — report this rather than guessing what to do",
+        )
+    return {
+        "markdown": body,
+        "kind": resolved_kind,
+        "path": path_for(resolved_kind),
+        "content": body,
+    }
 
 
 def _merge_refs(run: dict[str, Any]) -> tuple[str, list[str]] | None:

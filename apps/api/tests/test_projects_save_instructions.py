@@ -44,6 +44,13 @@ def _patch_deps(monkeypatch, *, project=None, guidelines="## Stack\n\nNode."):
         "app.routers.projects.db.record_instructions_sync",
         lambda *a, **k: None,
     )
+    # us-99.2: the button publishes every kind's resolved instruction, so it
+    # reads them. Two with content, the rest blank — which exercises the
+    # delete list as well as the write list.
+    monkeypatch.setattr(
+        "app.routers.projects.db.get_project_instructions_for_publish",
+        lambda s, p: {"code": "Build it well.", "plan": "Think first."},
+    )
 
 
 def _patch_github(monkeypatch, *, token="gh-token", current=None):
@@ -100,35 +107,59 @@ def test_save_instructions_writes_both_files_in_one_commit(
     assert body["agents_md"]["html_url"].endswith("/AGENTS.md")
     assert body["claude_md"]["html_url"].endswith("/CLAUDE.md")
 
-    # One commit — either both files land or neither does.
+    # One commit — either the whole set lands or none of it does.
     assert len(commits) == 1
     files = commits[0]["files"]
-    assert sorted(files) == ["AGENTS.md", "CLAUDE.md"]
-    assert "Node + Supabase." in files["AGENTS.md"]
-    assert repo_docs.BLOCK_START in files["AGENTS.md"]
+    assert sorted(files) == [
+        ".buildmill/Code.md",
+        ".buildmill/Guidelines.md",
+        ".buildmill/Plan.md",
+        "AGENTS.md",
+        "CLAUDE.md",
+    ]
+    # us-99.3: the conventions are their own file now, not inlined.
+    assert "Node + Supabase." in files[".buildmill/Guidelines.md"]
+    assert "Node + Supabase." not in files["AGENTS.md"]
+    # AGENTS.md is the index: it points at what was written.
+    assert ".buildmill/Code.md" in files["AGENTS.md"]
+    assert ".buildmill/Guidelines.md" in files["AGENTS.md"]
+    assert repo_docs.BLOCK_START not in files["AGENTS.md"]
     assert files["CLAUDE.md"] == repo_docs.CLAUDE_MD_POINTER
+    # Kinds with no content are deleted, never written empty.
+    assert ".buildmill/RCA.md" in commits[0]["deletes"]
 
 
-def test_save_instructions_preserves_hand_written_content(
+def test_save_instructions_destroys_hand_written_content(
     client, make_token, monkeypatch
 ):
-    """The defect this story fixes: pressing the button used to erase
-    everything the factory did not write."""
+    """us-99.2 REVERSES us-22.6 deliberately.
+
+    us-22.6 made this button stop erasing what the factory did not write.
+    Phase 99 takes whole-file ownership of AGENTS.md and CLAUDE.md, so that
+    protection is gone by design — the accepted cost of a single owner, and
+    the reason the publish surface carries a standing line saying so.
+
+    This test exists so the destruction is a decision on the record rather
+    than a regression somebody discovers in a customer's repository.
+    """
     _patch_deps(monkeypatch, project=_SAMPLE_PROJECT)
     commits = _patch_github(
         monkeypatch,
         current={
-            "AGENTS.md": "# Our rules\n\nKEEP ME.\n",
-            "CLAUDE.md": "# My CLAUDE.md\n\nKEEP ME TOO.\n",
+            "AGENTS.md": "# Our rules\n\nGONE.\n",
+            "CLAUDE.md": "# My CLAUDE.md\n\nALSO GONE.\n",
         },
     )
 
     resp = _post(client, make_token)
     assert resp.status_code == 200
     files = commits[0]["files"]
-    assert "KEEP ME." in files["AGENTS.md"]
-    assert "KEEP ME TOO." in files["CLAUDE.md"]
-    assert repo_docs.BLOCK_START in files["CLAUDE.md"]
+    assert "GONE." not in files["AGENTS.md"]
+    assert "ALSO GONE." not in files["CLAUDE.md"]
+    assert files["CLAUDE.md"] == repo_docs.CLAUDE_MD_POINTER
+    # And it says so in the file itself, so a human reading the repo learns
+    # the rule without having to lose something first.
+    assert "owns this file" in files["AGENTS.md"]
 
 
 def test_save_instructions_no_longer_overwrites_agents_md_wholesale(
@@ -149,19 +180,21 @@ def test_save_instructions_no_longer_overwrites_agents_md_wholesale(
 def test_save_instructions_matches_what_a_sync_would_write(
     client, make_token, monkeypatch
 ):
-    """Both writers, one block: pressing the button and approving a plan must
-    produce byte-identical files."""
+    """us-99.2 AC5 — ONE writer: pressing the button and dispatching a run go
+    through the same pure planner, so they produce byte-identical files."""
     guidelines = "## Stack\n\nNode + Supabase."
     _patch_deps(monkeypatch, project=_SAMPLE_PROJECT, guidelines=guidelines)
     commits = _patch_github(monkeypatch)
     assert _post(client, make_token).status_code == 200
     from_button = commits[0]["files"]
+    button_deletes = commits[0]["deletes"]
 
-    # What sync_tree assembles for the same project state.
-    block = repo_docs.build_instruction_block(guidelines, True)
-    from_sync = repo_docs.instruction_files(block, None, None)
+    from_sync, sync_deletes = repo_docs.instruction_file_plan(
+        {"code": "Build it well.", "plan": "Think first."}, guidelines, True
+    )
 
     assert from_button == from_sync
+    assert set(button_deletes) == sync_deletes
 
 
 def test_save_instructions_project_not_found_is_404(client, make_token, monkeypatch):
@@ -205,7 +238,10 @@ def test_save_instructions_github_write_failure_is_502(client, make_token, monke
         raise github_module.GitHubError("could not write AGENTS.md: 403")
 
     monkeypatch.setattr(github_tokens_module, "token_for_user", fake_token_for_user)
-    monkeypatch.setattr(repo_docs, "_current_instruction_files", boom)
+    # us-99.2: the publish no longer reads the current files first — it owns
+    # them outright — so the only GitHub touchpoint left is the commit, and
+    # that is where a write failure now surfaces.
+    monkeypatch.setattr(repo_docs, "commit_files", boom)
 
     resp = _post(client, make_token)
     assert resp.status_code == 502

@@ -444,11 +444,35 @@ def _project(**over):
     return base
 
 
+# us-99.2: a publish now reads every kind's RESOLVED instruction, so these
+# tests must fake that read or they reach a real connection pool. Two kinds
+# with content and the rest blank is the interesting shape — it exercises the
+# write list and the delete list in the same pass.
+PUBLISHED = {"code": "Build it well.", "plan": "Think first."}
+
+
+@pytest.fixture(autouse=True)
+def _fake_published_instructions(monkeypatch):
+    monkeypatch.setattr(
+        "app.repo_docs.db.get_project_instructions_for_publish",
+        lambda s, p: dict(PUBLISHED),
+    )
+
+
+def _expected_digest(guidelines=None, tree=True):
+    if guidelines is None:
+        guidelines = _project()["guidelines"]
+    files, deletes = repo_docs.instruction_file_plan(
+        dict(PUBLISHED), guidelines, tree
+    )
+    return repo_docs.publish_hash(files, deletes)
+
+
 def test_matching_hash_makes_no_github_call(monkeypatch):
-    block = repo_docs.build_instruction_block("## House style\n\nUse tabs.", True)
+    digest = _expected_digest()
     monkeypatch.setattr(
         "app.repo_docs.db.get_project_docs_config",
-        lambda s, p: _project(instructions_synced_hash=repo_docs.block_hash(block)),
+        lambda s, p: _project(instructions_synced_hash=digest),
     )
 
     async def boom(*a, **k):
@@ -456,7 +480,7 @@ def test_matching_hash_makes_no_github_call(monkeypatch):
 
     monkeypatch.setattr("app.repo_docs.github_tokens.token_for_org", boom)
     out = asyncio.run(repo_docs.sync_instruction_files(None, str(uuid.uuid4())))
-    assert out == {"unchanged": True, "hash": repo_docs.block_hash(block)}
+    assert out == {"unchanged": True, "hash": digest}
 
 
 def test_differing_hash_writes_and_records(monkeypatch):
@@ -486,7 +510,16 @@ def test_differing_hash_writes_and_records(monkeypatch):
 
     out = asyncio.run(repo_docs.sync_instruction_files(None, str(uuid.uuid4())))
     assert out["commit_sha"] == "deadbee"
-    assert recorded["files"] == ["AGENTS.md", "CLAUDE.md"]
+    # us-99.2: a publish is the whole set now, not two files. The two kinds
+    # with content get a file each, the conventions get theirs, and the two
+    # entry-point files are rewritten whole.
+    assert recorded["files"] == [
+        ".buildmill/Code.md",
+        ".buildmill/Guidelines.md",
+        ".buildmill/Plan.md",
+        "AGENTS.md",
+        "CLAUDE.md",
+    ]
     assert recorded["sha"] == "deadbee"
     assert recorded["hash"] != "stale"
 
