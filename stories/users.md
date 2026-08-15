@@ -77,9 +77,9 @@ Phases 85–89:
 | 44 | [us-98.1](us-98.1-the-factory-learns-a-merge-run.md) | The factory learns a merge run | Testing |
 | 45 | [us-98.2](us-98.2-a-merge-names-the-branches-it-will-land.md) | A merge names the branches it will land | Testing |
 | 46 | [us-98.3](us-98.3-the-agent-reads-every-branch-it-must-merge.md) | The agent reads every branch it must merge | Testing |
-| 47 | [us-98.4](us-98.4-a-merge-hands-back-a-branch-and-a-pull-request.md) | A merge hands back a branch and a pull request | New |
+| 47 | [us-98.4](us-98.4-a-merge-hands-back-a-branch-and-a-pull-request.md) | A merge hands back a branch and a pull request | Testing |
 | 48 | [us-98.5](us-98.5-an-unresolved-branch-fails-the-whole-merge.md) | An unresolved branch fails the whole merge | New |
-| 49 | [us-98.6](us-98.6-the-manager-reviews-the-merge-summary.md) | The manager reviews the merge summary | New |
+| 49 | [us-98.6](us-98.6-the-manager-reviews-the-merge-summary.md) | The manager reviews the merge summary | Testing |
 | 50 | [us-99.1](us-99.1-every-instruction-kind-has-a-file.md) | Every instruction kind has a file, and one map says which | New |
 | 51 | [us-99.2](us-99.2-agents-md-is-the-index.md) | AGENTS.md is the index, and Build Mill owns it whole | New |
 | 52 | [us-99.3](us-99.3-project-conventions-become-guidelines-md.md) | Project conventions become Guidelines.md | New |

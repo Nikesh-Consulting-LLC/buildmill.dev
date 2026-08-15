@@ -1956,6 +1956,76 @@ def _refused_ref(run: dict[str, Any], ref: str) -> dict[str, Any] | None:
     )
 
 
+def _merge_declaration_error(
+    run: dict[str, Any],
+    merged_branches: list[dict[str, str]] | None,
+    allow_partial: bool,
+) -> dict[str, Any] | None:
+    """US-98.4/98.5: a merge accounts for every branch, or for none.
+
+    None when the submission may proceed, an error answer when it may not.
+
+    A partial merge is the kind of result that looks like progress and costs
+    more than starting over: ask for six branches, get five, and the pull
+    request in front of the manager now means something nobody asked for.
+    This runs BEFORE a single blob is written — us-98.5's "nothing partial
+    survives a failure" is only true if nothing was created in the first
+    place.
+    """
+    if (run.get("kind") or "") != "merge":
+        if merged_branches:
+            return _err(
+                f"merged_branches means nothing on a {run.get('kind')} run",
+                "only a merge run declares what it landed",
+            )
+        return None
+
+    licence = _merge_refs(run)
+    asked = set(licence[1] if licence else [])
+    entries = [e for e in (merged_branches or []) if isinstance(e, dict)]
+    declared = {
+        (e.get("branch") or "").strip()
+        for e in entries
+        if (e.get("branch") or "").strip()
+    }
+
+    if allow_partial:
+        return _err(
+            "allow_partial is not available on a merge",
+            "a merge lands every branch it was given or none of them — if "
+            "one defeats you, say which and stop rather than submitting "
+            "the rest",
+        )
+    if not declared:
+        return _err(
+            "a merge submission must declare what it merged",
+            "pass merged_branches: one {branch, head_sha, outcome} per "
+            "branch you were asked to land — " + ", ".join(sorted(asked)),
+        )
+    missing = sorted(asked - declared)
+    if missing:
+        return _err(
+            "this merge does not account for every branch: "
+            + ", ".join(missing),
+            "a merge is all or nothing. Merge them and declare each one, or "
+            "report which branch defeated you and stop — a partial merge is "
+            "not a smaller success, it is a different result.",
+        )
+    extra = sorted(declared - asked)
+    if extra:
+        return _err(
+            "these branches are not part of this run: " + ", ".join(extra),
+            "this merge was asked for: " + ", ".join(sorted(asked)),
+        )
+    if any(not (e.get("outcome") or "").strip() for e in entries):
+        return _err(
+            "every branch needs an outcome",
+            'say what happened to each: "clean", or the reconciliation you '
+            "made and why. The manager reads this before the diff.",
+        )
+    return None
+
+
 async def _project_repo_and_token(
     project_id: str,
     tool: str = "repo_read",
@@ -4175,6 +4245,7 @@ async def submit_changeset(
     notes: str = "",
     stdout: str = "",
     test_cases: list[dict[str, str]] | None = None,
+    merged_branches: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Hand back code as changed files — the factory does all the git:
     builds the commit from base_sha, pushes the work branch with the
@@ -4195,7 +4266,16 @@ async def submit_changeset(
     deliberately. A single-story run needs none of this: omit all three.
     notes reaches the manager at the review gate (and the item's
     thread) — flag risks and open questions there; it is part of
-    finishing the work."""
+    finishing the work.
+
+    **Merge runs** (us-98.4/98.5) hand back through here too: the merged tree
+    is a changeset. You must also pass `merged_branches` — one entry per
+    branch you were asked to land, `{branch, head_sha, outcome}`, where
+    `outcome` says what happened: "clean", or the reconciliation you made and
+    why. It is **all or nothing**: a declaration that does not cover every
+    branch in your run is refused, and `allow_partial` is not available. The
+    manager reads that account before the diff, because it is the only place
+    a silently dropped change would show."""
     settings = get_settings()
     worker = _worker()
     run = db.get_worker_run(settings, run_id, str(worker["org_id"]))
@@ -4203,12 +4283,16 @@ async def submit_changeset(
         return _err("run not found", "list_available_work shows valid run ids")
     if str(run.get("worker_id") or "") != str(worker["id"]):
         return _err("you do not hold this run", "claim_work it first")
-    if run["kind"] != "code":
+    if run["kind"] not in ("code", "merge"):
         return _err(
             f"this is a {run['kind']} run — changesets are for code runs",
             "hand back with "
             + ("submit_plan" if run["kind"] == "plan" else "submit_prd"),
         )
+
+    gate = _merge_declaration_error(run, merged_branches, allow_partial)
+    if gate:
+        return gate
 
     # US-27.1: attribution and finality are settled BEFORE anything touches
     # GitHub. A commit that cannot be attributed to a story in this run is a
@@ -4461,6 +4545,24 @@ async def submit_changeset(
     # review pipeline regardless of transport.
     from .routers.worker import Submit, perform_submit
 
+    # us-98.4 AC3: the per-branch account rides the notes, which is what
+    # becomes the pull request body and what the manager reads at the review
+    # gate. It leads, ahead of the agent's own summary: a plain diff cannot
+    # distinguish "resolved by taking one side" from "merged cleanly", so the
+    # account is the only place a silent loss would show.
+    submit_notes = notes
+    if run["kind"] == "merge" and merged_branches:
+        account = "\n".join(
+            f"- `{e.get('branch')}` @ `{(e.get('head_sha') or '')[:7]}` — "
+            f"{(e.get('outcome') or '').strip()}"
+            for e in merged_branches
+        )
+        submit_notes = (
+            "## Branches landed\n\n"
+            + account
+            + ("\n\n## Notes\n\n" + notes if (notes or "").strip() else "")
+        )
+
     try:
         sub = await perform_submit(
             settings,
@@ -4468,7 +4570,7 @@ async def submit_changeset(
             run_id,
             Submit(
                 branch_ref=branch,
-                notes=notes or None,
+                notes=submit_notes or None,
                 stdout=stdout or None,
                 # us-96.8 AC2: the MCP transport's ONE route for test cases —
                 # a structured field on the submit, never a scratch file the
