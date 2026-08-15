@@ -1236,6 +1236,75 @@ async def get_work_context(run_id: str, ctx: Context) -> dict[str, Any]:
             ),
         )
 
+    if run["kind"] == "merge":
+        # US-98.3: the one kind whose subject is several refs. Everything the
+        # agent needs to know is the base, the branches, and the heads frozen
+        # at dispatch — a sha recorded here rather than read live is what
+        # makes "the branch moved under me" impossible to miss later.
+        m_base = ic.get("merge_base") or {}
+        m_base_branch = m_base.get("branch") or ic.get("default_branch") or "main"
+        m_branches = [
+            b for b in (ic.get("merge_branches") or []) if isinstance(b, dict)
+        ]
+        md = (
+            f"# {run.get('issue_title') or ic.get('title', 'Work item')}\n\n"
+            "- Kind: **merge** (land these branches onto the base)\n\n"
+            "## What to land\n\n"
+            f"- Base: `{m_base_branch}`"
+            + (f" @ `{m_base['head_sha']}`" if m_base.get("head_sha") else "")
+            + "\n"
+        )
+        for b in m_branches:
+            md += (
+                f"- `{b.get('branch')}`"
+                + (f" @ `{b.get('head_sha')}`" if b.get("head_sha") else "")
+                + "\n"
+            )
+        md += (
+            f"\nRead any of them with `get_workspace(run_id, ref=...)` — your "
+            f"claim licenses these "
+            f"{len(m_branches)} branch(es) and the base, and nothing else.\n"
+            "\n**All or nothing.** Every branch above must be merged, or you "
+            "submit none of them. If one defeats you, report which, the "
+            "paths that conflicted, and what you tried.\n"
+        )
+        if (template or "").strip():
+            md += f"\n\n## Instructions\n\n{template}"
+        if (run.get("instruction_set") or "").strip():
+            md += f"\n\n## Instruction set\n\n{run['instruction_set']}"
+        md += docs_md + discussion_md
+        return _next(
+            {
+                "markdown": md,
+                "kind": "merge",
+                "repo_full_name": ic.get("repo_full_name")
+                or run.get("project_repo_full_name"),
+                "default_branch": ic.get("default_branch")
+                or run.get("default_branch"),
+                "merge_base": {
+                    "branch": m_base_branch,
+                    "head_sha": m_base.get("head_sha"),
+                },
+                "merge_branches": [
+                    {"branch": b.get("branch"), "head_sha": b.get("head_sha")}
+                    for b in m_branches
+                ],
+                "instructions": template,
+                "instruction_set": run.get("instruction_set"),
+                "documents": docs_out,
+                "comments": comments_out,
+            },
+            (
+                "get_workspace",
+                "fetch each branch by name with `ref=` — and the base — then "
+                "merge them locally",
+            ),
+            (
+                "report_progress",
+                "narrate as you go; a note also extends your lease",
+            ),
+        )
+
     request = ctx.request_context.request if ctx.request_context else None
     base = str(request.base_url).rstrip("/") if request is not None else ""
     # US-7.3: the working branch derives from the project's dev branching
@@ -1840,6 +1909,53 @@ async def _held_run_and_token(
     return run, token, None
 
 
+def _merge_refs(run: dict[str, Any]) -> tuple[str, list[str]] | None:
+    """US-98.3: the refs a merge run is licensed to read — its base and the
+    branches the manager named — or None when this is not a merge run.
+
+    A merge is the first kind of work that is inherently about several refs
+    at once, and every repo-reading tool serves one. The obvious shortcut is
+    `get_project_workspace`, which already takes an arbitrary ref — but that
+    is gated on the worker's standing `no_claim_checkout` capability, which
+    is a permission to browse ANY ref of any project it can see. A worker
+    trusted to land a merge should not have to be trusted with that.
+
+    So the CLAIM is the authority instead: the run declared its branches at
+    dispatch (us-98.2), and the licence is exactly that set plus the base.
+    It is as wide as the job and no wider, and it expires with the claim.
+    """
+    if (run.get("kind") or "") != "merge":
+        return None
+    ic = run.get("_repo_ic") or run.get("input_context") or {}
+    base = (ic.get("merge_base") or {}).get("branch") or ic.get(
+        "default_branch"
+    ) or "main"
+    branches = [
+        b.get("branch")
+        for b in (ic.get("merge_branches") or [])
+        if isinstance(b, dict) and b.get("branch")
+    ]
+    return base, branches
+
+
+def _refused_ref(run: dict[str, Any], ref: str) -> dict[str, Any] | None:
+    """None when `ref` is allowed, an error answer when it is not.
+
+    Silent on every non-merge run, so no existing kind's reach changes."""
+    licence = _merge_refs(run)
+    if licence is None or not (ref or "").strip():
+        return None
+    base, branches = licence
+    allowed = [base, *branches]
+    if ref.strip() in allowed:
+        return None
+    return _err(
+        f"this merge run is not licensed to read '{ref}'",
+        "a merge may read only its base and the branches it was asked to "
+        "land: " + ", ".join(allowed),
+    )
+
+
 async def _project_repo_and_token(
     project_id: str,
     tool: str = "repo_read",
@@ -1979,6 +2095,9 @@ async def get_repo_tree(
     run, token, err = await _held_run_and_token(run_id, "get_repo_tree")
     if err:
         return err
+    refused = _refused_ref(run, ref)
+    if refused:
+        return refused
     ic = run["_repo_ic"]
     repo_full = run["_repo_full_name"]
     owner, repo = repo_full.split("/", 1)
@@ -2210,6 +2329,9 @@ async def read_repo_file(
     run, token, err = await _held_run_and_token(run_id, "read_repo_file")
     if err:
         return err
+    refused = _refused_ref(run, ref)
+    if refused:
+        return refused
     ic = run["_repo_ic"]
     repo_full = run["_repo_full_name"]
     owner, repo = repo_full.split("/", 1)
@@ -2360,7 +2482,7 @@ async def _workspace_delta(
 
 
 @mcp.tool(**_read("Get workspace snapshot"))
-async def get_workspace(run_id: str) -> dict[str, Any]:
+async def get_workspace(run_id: str, ref: str = "") -> dict[str, Any]:
     """Get your claimed run's working tree — with zero git tooling and zero
     GitHub access.
 
@@ -2380,12 +2502,30 @@ async def get_workspace(run_id: str) -> dict[str, Any]:
     later declares as its base. Bases follow the get_repo_tree rules (work
     branch when it exists, else the default branch), so a continuing branch is
     never reset to main. Calling again is always safe.
+
+    `ref` — **merge runs only** (us-98.3). A merge is asked to land several
+    branches, so it needs to read several: pass the branch you want. Your
+    claim licenses exactly the branches the manager named plus the base, and
+    nothing else. An explicit ref always answers `full`, never `delta`.
+    On any other run kind a `ref` is refused rather than ignored, so no
+    existing run gains reach it did not have.
     """
     import base64 as _b64
 
     run, token, err = await _held_run_and_token(run_id, "get_workspace")
     if err:
         return err
+    wanted = (ref or "").strip()
+    if wanted and _merge_refs(run) is None:
+        return _err(
+            "get_workspace does not take a ref on this run",
+            "only a merge run reads more than one branch; everything else "
+            "gets its own working tree",
+        )
+    refused = _refused_ref(run, wanted)
+    if refused:
+        return refused
+
     settings = get_settings()
     ic = run["_repo_ic"]
     repo_full = run["_repo_full_name"]
@@ -2395,7 +2535,7 @@ async def get_workspace(run_id: str) -> dict[str, Any]:
     project_id = str(run.get("project_id") or "")
     try:
         base_ref = await repo_browse.resolve_ref(
-            token, ic, str(run["issue_id"]), "",
+            token, ic, str(run["issue_id"]), wanted,
             run_branch=db.resolve_working_branch(settings, run)[0],
         )
         commit = await github.get_commit(token, owner, repo, base_ref)
@@ -2403,10 +2543,19 @@ async def get_workspace(run_id: str) -> dict[str, Any]:
     except github.GitHubError as e:
         return _github_err(e)
 
+    # US-98.3: an explicit ref NEVER takes the delta path, and never records a
+    # delivery. The delta manifest is keyed on (worker, project) and means
+    # "the tree you last held" — fetching branch B after branch A would answer
+    # a diff BETWEEN TWO BRANCHES dressed as a workspace update, and then
+    # record B's paths as what the worker holds. The failure would not be an
+    # error; it would be a silently wrong tree, which is the one outcome a
+    # merge cannot survive.
+    multi_ref = bool(wanted)
+
     # US-31.6: try the incremental answer first.
     prior = (
         db.get_workspace_delivery(settings, str(worker["id"]), project_id)
-        if project_id
+        if project_id and not multi_ref
         else None
     )
     if prior and prior["base_sha"]:
@@ -2511,7 +2660,8 @@ async def get_workspace(run_id: str) -> dict[str, Any]:
     # US-31.6: remember the full tree we just served, so the NEXT call can be
     # a delta. The path list comes from the tree at this sha, not from the zip
     # — the zip is opaque here and the tree is one API call.
-    if project_id:
+    # US-98.3: skipped for an explicit ref — see `multi_ref` above.
+    if project_id and not multi_ref:
         try:
             tree = await github.get_tree(token, owner, repo, base_sha)
             paths = [
