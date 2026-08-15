@@ -331,6 +331,41 @@ Instructions **and** revised per-task instructions, accepted or rejected
 whole, because after Phase 99 improving what agents are told means more than
 one file.
 
+**Phase 101 — A release explains itself** (drafted 2026-08-15, the manager's
+request, against a hand-written UAT page as the quality bar). A release hands
+the manager two paragraphs of prose and an unchecked pile of test cases, and
+what he wants is the page he writes by hand: facts at the top, numbered
+sections in the order they must be worked, and one line per check that reads
+*do this → expect that*, tagged with the story that put it there. The gap is
+not prompt polish. The release agent's entire input is a version string, the
+`{issue_id, title, type, display_id}` snapshot from the cut, the **first line**
+of each commit message, and changed paths with `+`/`-` counts — no acceptance
+criteria, no plan, and no sight of the per-story test cases the server copies
+onto the release seconds after it submits. So us-101.1 gives it the
+requirement, the cases it is about to inherit, the modules the cut already
+computed and never showed it, and the migrations in the range — and fixes
+three defects found in that payload, of which the loudest is that every commit
+message arrives as a one-element **list**. us-101.2 gives a case the section,
+position and criticality a running order needs, and lets an agent tag its own
+case with the story it tests — `issue_id` has always existed on the row and
+`attach_release_test_cases` has never set it, so an agent-authored case is
+permanently unattributable. us-101.3 refuses a check that is a title with
+nothing behind it: `test_cases` on hand-back is optional and completely
+unvalidated today, so a release can ship with fifteen titles and no steps and
+every layer above calls it done. us-101.4 makes the notes a declaration the
+app renders rather than markdown or agent-authored HTML — not for taste, but
+because the UAT deploy fires *after* the notes are stored, so a masthead an
+agent writes claiming a deploy result is a fabrication, and because the only
+safe frame for agent HTML has an opaque origin and could never carry the
+verdict buttons that gate sign-off. us-101.5 assembles the page — and finds
+every masthead number already loaded by that page's own queries, making it a
+rendering story rather than a data one. us-101.6 closes the loop the others
+depend on: the project's **Release** worker instruction reaches nobody today,
+because instruction delivery is keyed on a `runs` row and a release prep has
+none — while the text sitting in that editable box still tells the agent to
+finish with `submit_release_run`, a tool that no longer exists, and to deploy
+to UAT itself, which the system does for it.
+
 **Phase 85 residue — us-85.3** (drafted 2026-08-12) closes the loop on the incident
 that motivated us-85.1's workspace verification. A run that fails on a broken bench —
 no usable shell, an unreachable or token-rejecting factory MCP, a corrupt workspace —
