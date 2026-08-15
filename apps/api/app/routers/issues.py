@@ -196,6 +196,145 @@ async def dispatch(
     return {"run_id": run_id, "status": "queued"}
 
 
+@router.post("/{issue_id}/dispatch-merge", status_code=202)
+async def dispatch_merge(
+    issue_id: UUID,
+    user: AuthUser = Depends(verify_token),
+    settings: Settings = Depends(get_settings),
+):
+    """US-98.2: dispatch a merge run for a chore that names branches.
+
+    The heads are resolved HERE rather than in SQL, and frozen into the run's
+    context by `dispatch_merge`. Two reasons, both deliberate:
+
+    * SQL cannot call GitHub, and a sha stored on the issue when the manager
+      picked the branches would be stale by the time an agent claimed the run.
+    * A branch that has been deleted since it was listed must fail the
+      dispatch by name, not sixty seconds into an agent's checkout. Resolving
+      every head first is what makes that possible.
+
+    RLS is still the authorization: the reads and the RPC all travel on the
+    caller's own JWT, and `dispatch_merge` is security *invoker* like every
+    other dispatcher.
+    """
+    rows = await postgrest_get(
+        settings,
+        user.token,
+        "issues",
+        {
+            "select": (
+                "id,org_id,project_id,type,merge_branches,"
+                "projects!issues_project_id_org_id_fkey(repo_full_name,default_branch)"
+            ),
+            "id": f"eq.{issue_id}",
+            "limit": "1",
+        },
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Issue not found")
+    issue = rows[0]
+
+    branches: list[str] = list(issue.get("merge_branches") or [])
+    if not branches:
+        raise HTTPException(
+            status_code=409,
+            detail="this chore names no branches to merge — add at least one first",
+        )
+
+    project = issue.get("projects") or {}
+    repo_full = project.get("repo_full_name")
+    if not repo_full or "/" not in repo_full:
+        raise HTTPException(
+            status_code=409, detail="This project has no GitHub repository linked"
+        )
+    owner, repo = repo_full.split("/", 1)
+    base_branch = project.get("default_branch") or "main"
+
+    try:
+        token = await github_tokens.token_for_user(
+            settings, user.token, issue["org_id"], repo_full
+        )
+    except github.GitHubError:
+        raise HTTPException(
+            status_code=409, detail="No GitHub connection for this org"
+        )
+
+    # The base first: a merge with no base to land on is not a merge.
+    try:
+        base = await github.get_branch(token, owner, repo, base_branch)
+        base_head = (base.get("commit") or {}).get("sha")
+    except github.GitHubError as e:
+        raise HTTPException(
+            status_code=409,
+            detail=f"could not resolve the base branch '{base_branch}': {e}",
+        )
+    if not base_head:
+        raise HTTPException(
+            status_code=409,
+            detail=f"GitHub returned no head for the base branch '{base_branch}'",
+        )
+
+    heads: list[dict[str, str]] = []
+    missing: list[str] = []
+    for branch in branches:
+        try:
+            data = await github.get_branch(token, owner, repo, branch)
+        except github.GitHubError:
+            missing.append(branch)
+            continue
+        sha = (data.get("commit") or {}).get("sha")
+        if not sha:
+            missing.append(branch)
+            continue
+        heads.append({"branch": branch, "head_sha": sha, "base_head": base_head})
+
+    # Named, and naming every one of them — a manager fixing a stale list
+    # should not have to rediscover it a branch at a time.
+    if missing:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "these branches are no longer on the repository: "
+                + ", ".join(missing)
+                + " — remove them from the list, or restore them, then dispatch"
+            ),
+        )
+
+    try:
+        run_id = await rpc(
+            settings,
+            user.token,
+            "dispatch_merge",
+            {"p_issue": str(issue_id), "p_branch_heads": heads},
+        )
+    except RpcError as e:
+        if "not found" in e.message:
+            raise HTTPException(status_code=404, detail="Issue not found")
+        if (
+            "not dispatchable" in e.message
+            or "only a chore" in e.message
+            or "names no branches" in e.message
+            or "do not match" in e.message
+            or "head sha" in e.message
+        ):
+            raise HTTPException(status_code=409, detail=e.message)
+        raise HTTPException(status_code=400, detail=e.message)
+
+    repo_docs.spawn_background(
+        _sync_repo_before_dispatch(
+            settings, str(issue["project_id"]) if issue.get("project_id") else None
+        )
+    )
+
+    return {
+        "run_id": run_id,
+        "status": "queued",
+        "kind": "merge",
+        "base": {"branch": base_branch, "head_sha": base_head},
+        "branches": heads,
+    }
+
+
 class BatchDispatchBody(BaseModel):
     issue_ids: list[UUID]
 

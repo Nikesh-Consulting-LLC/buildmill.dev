@@ -2356,6 +2356,7 @@ export type Database = {
           id: string
           instruction_set: string | null
           item_no: number | null
+          merge_branches: string[]
           org_id: string
           parent_id: string | null
           project_id: string
@@ -2394,6 +2395,7 @@ export type Database = {
           id?: string
           instruction_set?: string | null
           item_no?: number | null
+          merge_branches?: string[]
           org_id: string
           parent_id?: string | null
           project_id: string
@@ -2432,6 +2434,7 @@ export type Database = {
           id?: string
           instruction_set?: string | null
           item_no?: number | null
+          merge_branches?: string[]
           org_id?: string
           parent_id?: string | null
           project_id?: string
@@ -6105,6 +6108,10 @@ export type Database = {
       }
       dispatch_kind_for: {
         Args: { p_issue: string; p_kind?: string }
+        Returns: string
+      }
+      dispatch_merge: {
+        Args: { p_branch_heads: Json; p_issue: string }
         Returns: string
       }
       dispatch_prd_draft: { Args: { p_issue: string }; Returns: string }
