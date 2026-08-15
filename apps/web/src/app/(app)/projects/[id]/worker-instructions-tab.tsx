@@ -87,6 +87,26 @@ const KIND_META: Record<string, { title: string; description: string }> = {
     description:
       "How a worker should trigger, observe and verify one deployment — never claiming an outcome it did not see.",
   },
+  merge: {
+    title: "Merge runs",
+    description:
+      "How a worker should land named branches onto the default branch: read both sides of every conflict, never drop a change it did not understand, and account for every branch — all of them or none.",
+  },
+  elaborate: {
+    title: "Elaboration runs",
+    description:
+      "How a worker should expand a rough story into a body and acceptance criteria without widening its scope.",
+  },
+  wireframe: {
+    title: "Wireframe runs",
+    description:
+      "How a worker should draw a story's UI surface before it is built — or declare that it has none.",
+  },
+  guidelines: {
+    title: "Guidelines refresh runs",
+    description:
+      "How a worker should propose changes to this project's guidelines. Steers the run that proposes them — it is not the guidelines themselves.",
+  },
   test_case_elaborate: {
     title: "Test-case elaboration",
     description:
@@ -121,8 +141,8 @@ const SECTIONS: {
     key: "requirements",
     label: "Requirements",
     blurb:
-      "Turning an idea into a specification, and a specification into stories.",
-    kinds: ["prd", "breakdown"],
+      "Turning an idea into a specification, a specification into stories, and a story into the surface it will have.",
+    kinds: ["prd", "breakdown", "elaborate", "wireframe"],
   },
   {
     key: "planning",
@@ -137,6 +157,13 @@ const SECTIONS: {
     blurb:
       "Writing the change and handing it back for review — each work-item type in its own words (us-96.3).",
     kinds: ["code", "standalone_code", "bug_fix", "chore"],
+  },
+  {
+    key: "integration",
+    label: "Integration",
+    blurb:
+      "Landing finished branches onto the default branch, conflicts and all (us-98.1).",
+    kinds: ["merge"],
   },
   {
     key: "testing",

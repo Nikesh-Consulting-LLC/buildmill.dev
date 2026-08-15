@@ -9132,6 +9132,28 @@ def resolve_working_branch(
         submit_mode = "pr"
 
     stored = (run.get("branch_ref") or "").strip()
+
+    # us-98.4: a merge ALWAYS lands behind a pull request, whatever the
+    # project's dev strategy says. Conflict resolution is exactly the work
+    # where an agent most easily drops somebody's change, and "the merge
+    # succeeded" is not evidence it kept everything — a merged file that
+    # compiles and reads cleanly can still have lost a whole function. The
+    # `main` strategy's direct-commit mode would put that on the default
+    # branch unreviewed, so it is overridden here rather than obeyed.
+    if (run.get("kind") or "") == "merge":
+        if stored:
+            return stored, strategy, "pr"
+        display = work_item_display_id(
+            run.get("issue_type"),
+            run.get("epic_number"),
+            run.get("item_no"),
+            run.get("sub_no"),
+        )
+        suffix = (
+            display.lower() if display else str(run.get("issue_id") or "")[:6]
+        )
+        return f"factory/merge-{_branch_slug(suffix)}", strategy, "pr"
+
     if stored:
         return stored, strategy, submit_mode
 

@@ -770,7 +770,7 @@ def validate_model_provider_pairing(
 # (us-48) were dispatchable but could not be routed or gated.
 ROUTE_KINDS = (
     "prd", "breakdown", "plan", "code", "test", "release", "deploy",
-    "guidelines", "elaborate", "wireframe",
+    "guidelines", "elaborate", "wireframe", "merge",
 )
 
 

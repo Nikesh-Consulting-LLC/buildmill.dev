@@ -186,7 +186,10 @@ def test_approve_records_merged_unapproved_when_rpc_fails_after_merge(
             return None
         raise RpcError('issue is not in review (status "merged")')
 
-    async def fake_merge(token, owner, repo, number):
+    # us-98.6: the real merge_pull_request has always taken merge_method;
+    # approve now passes it explicitly (squash for code, merge for a merge
+    # run), so the double has to be as wide as the function it stands in for.
+    async def fake_merge(token, owner, repo, number, merge_method="squash"):
         return "deadbeef"
 
     async def fake_token(settings, user_token, org_id, repo_full):
@@ -331,7 +334,10 @@ def test_approve_real_pr_uses_installation_token(client, make_token, monkeypatch
         calls["repo_full_name"] = repo_full_name
         return "installation-token", "the org's GitHub App installation (id 1)"
 
-    async def fake_merge(token, owner, repo, number):
+    # us-98.6: the real merge_pull_request has always taken merge_method;
+    # approve now passes it explicitly (squash for code, merge for a merge
+    # run), so the double has to be as wide as the function it stands in for.
+    async def fake_merge(token, owner, repo, number, merge_method="squash"):
         calls["token"] = token
         calls["pr"] = (owner, repo, number)
 
@@ -377,7 +383,10 @@ def test_approve_real_pr_falls_back_to_static_token(
         assert path == "github_connections"
         return []
 
-    async def fake_merge(token, owner, repo, number):
+    # us-98.6: the real merge_pull_request has always taken merge_method;
+    # approve now passes it explicitly (squash for code, merge for a merge
+    # run), so the double has to be as wide as the function it stands in for.
+    async def fake_merge(token, owner, repo, number, merge_method="squash"):
         calls["token"] = token
 
     async def fake_rpc(settings, token, fn, args):

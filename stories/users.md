@@ -19,13 +19,15 @@ phases did *not* prove, the Phase 78 known gaps, and the
 retired-unbuilt-do-not-re-propose list — is in
 [APPLICATION.md → Delivery history](../APPLICATION.md#delivery-history).
 
-Forty-eight stories are open — Phase 91's usability work first (requested
+Sixty-one stories are open — Phase 91's usability work first (requested
 2026-08-13), then Phase 92's phone work, the public site and its beta gate
 (requested 2026-08-14), Phase 95's cost management (requested 2026-08-14),
 Phase 97's GitHub linkage repair (requested 2026-08-15, ahead of Phase 96
 because it is costing live runs today), Phase 96's per-type work-item paths
-and its runner-health addendum from the 2026-08-14 run-log analysis, and
-the residue carried out of Phases 85–89:
+and its runner-health addendum from the 2026-08-14 run-log analysis, then
+Phase 98's merge kind and Phase 99's move of the instructions into the
+repository (both requested 2026-08-15), and the residue carried out of
+Phases 85–89:
 
 | Order | Story | Title | Status |
 |---|---|---|---|
@@ -72,11 +74,24 @@ the residue carried out of Phases 85–89:
 | 41 | [us-96.8](us-96.8-the-hand-back-speaks-with-one-voice.md) | The hand-back speaks with one voice | Testing |
 | 42 | [us-96.9](us-96.9-a-stop-is-an-answer-not-a-breakdown.md) | A stop is an answer, not a breakdown | Testing |
 | 43 | [us-96.11](us-96.11-a-key-never-rides-the-trace.md) | A key never rides the trace | Testing |
-| 44 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
-| 45 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
-| 46 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
-| 47 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
-| 48 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+| 44 | [us-98.1](us-98.1-the-factory-learns-a-merge-run.md) | The factory learns a merge run | Testing |
+| 45 | [us-98.2](us-98.2-a-merge-names-the-branches-it-will-land.md) | A merge names the branches it will land | Testing |
+| 46 | [us-98.3](us-98.3-the-agent-reads-every-branch-it-must-merge.md) | The agent reads every branch it must merge | Testing |
+| 47 | [us-98.4](us-98.4-a-merge-hands-back-a-branch-and-a-pull-request.md) | A merge hands back a branch and a pull request | Testing |
+| 48 | [us-98.5](us-98.5-an-unresolved-branch-fails-the-whole-merge.md) | An unresolved branch fails the whole merge | Testing |
+| 49 | [us-98.6](us-98.6-the-manager-reviews-the-merge-summary.md) | The manager reviews the merge summary | Testing |
+| 50 | [us-99.1](us-99.1-every-instruction-kind-has-a-file.md) | Every instruction kind has a file, and one map says which | New |
+| 51 | [us-99.2](us-99.2-agents-md-is-the-index.md) | AGENTS.md is the index, and Build Mill owns it whole | New |
+| 52 | [us-99.3](us-99.3-project-conventions-become-guidelines-md.md) | Project conventions become Guidelines.md | New |
+| 53 | [us-99.4](us-99.4-an-unpublished-edit-says-so.md) | An unpublished edit says so, and the manager pushes it | New |
+| 54 | [us-99.5](us-99.5-the-agent-reads-the-file-and-mcp-fills-the-gap.md) | The agent reads the file, and MCP fills the gap | New |
+| 55 | [us-99.6](us-99.6-a-template-carries-the-whole-file-set.md) | A template carries the whole file set | New |
+| 56 | [us-99.7](us-99.7-a-template-edit-offers-itself.md) | A template edit offers itself to the projects using it | New |
+| 57 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
+| 58 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
+| 59 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
+| 60 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
+| 61 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
 
 **Phase 91 — Usability: the dashboard reads like the job** (drafted 2026-08-13,
 the manager's own list). Nothing here is broken; all of it is friction the
@@ -214,6 +229,66 @@ must not ride them" to telemetry: that same zombie's curl probes landed the
 broker's `X-Factory-Local-Key` value verbatim in `run_trace`, twice, on a
 table the dashboard renders — redaction at the runner's emit choke point,
 a pattern scrub at `record_run_trace`, and a one-off sweep of the ledger.
+
+**Phase 98 — Many branches, one landing** (drafted 2026-08-15, the manager's
+request). Work accumulates on branches faster than it lands, and folding
+several of them into the default branch has real judgement in it — two agents
+touched the same file and only a reader who understands both changes can say
+what the merged file should be. That is agent work, and the factory has no
+kind for it: there is no merge, rebase or three-way logic anywhere in the api
+today, only detection (`MergeConflict`) and a path that hands the conflict
+back to an agent. So `merge` becomes a run kind, dispatched on a chore, which
+keeps the chore's single-shot shape. us-98.1 adds the kind end to end and
+must not be half-done — a kind the database accepts but the runner has never
+heard of leaves every such run `queued` forever, which has shipped three
+times and is why `test_runner_kind_coverage.py` exists; it also repairs
+`run-kinds.ts`, stale by three kinds. us-98.2 gives a chore the branch list
+that is the merge's whole subject, validated where it is written rather than
+discovered forty minutes into a run, and frozen into `input_context` with
+each head sha. us-98.3 makes the claim the authority for reading several refs
+at once — the declared branches and the base, nothing else — rather than
+requiring the standing `no_claim_checkout` capability a merge should not
+need. us-98.4 lands the result on a factory branch behind a pull request, not
+straight onto main: conflict resolution is exactly where an agent silently
+drops somebody's change, and "the merge succeeded" is not evidence it kept
+everything. us-98.5 makes it all-or-nothing — a partial merge looks like
+progress and costs more than starting over — and us-98.6 gives the manager a
+review that leads with the per-branch account rather than the diff, and
+approves with a **merge commit** rather than a squash, for the same reason
+release PRs to `prod` are never squashed.
+
+**Phase 99 — The instructions live in the repo** (drafted 2026-08-15, the
+manager's request). Worker instructions live in a database and reach agents
+as prose inside a context payload, which means the repository — the thing an
+agent works in and a human opens — says nothing about how work is done in
+it, and the instructions are unversioned against the code they describe and
+unreviewable as a diff. They move into the repository: one markdown file per
+instruction kind under `.buildmill/`, indexed from `AGENTS.md`. us-99.1 fixes
+the map first, in one place, because Phase 96 spent three migrations proving
+that a mapping with two homes is a mapping that disagrees with itself —
+sixteen kinds get files; `story_breakdown`, `test_case_elaborate` and
+`deploy_script_generate` do not, being server-side LLM prompts no agent reads.
+us-99.2 gives Build Mill whole ownership of `AGENTS.md` (retiring the fenced
+`merge_block` region) and makes `CLAUDE.md` permanently the `@AGENTS.md`
+pointer — hand-written `AGENTS.md` content is destroyed on first publish, an
+accepted consequence of single ownership, stated rather than discovered.
+us-99.3 settles the two-things-called-guidelines collision: `Guidelines.md`
+is the project's conventions, `Guidelines_Refresh.md` is the run that
+proposes changes to them. us-99.4 turns the invisible pre-dispatch sync into
+the manager's own click — the hash column from migration 135 stops gating a
+silent commit and starts driving a visible "unpublished" badge — and dispatch
+stops writing to GitHub entirely. us-99.5 makes the file authoritative:
+`get_work_context` carries a pointer instead of the prose, MCP serves the
+content as the fallback for a file that is missing or a project that never
+published, and `issues.instruction_set` survives as the per-item contract
+layered on top. us-99.6 makes the template set and the file set the same set,
+closing a live gap — the template editor's kind list omits **all five** Phase
+96 kinds, in two verbatim-duplicated constants, so a new project silently
+falls through to factory defaults for exactly the kinds that were added to
+give each type its own words. us-99.7 lets a corrected template reach the
+projects already using it by **offering**, per instruction, using the
+`updated_by` stamp to say which ones the project has never touched and which
+would lose a local edit — and never publishing on the superadmin's behalf.
 
 **Phase 85 residue — us-85.3** (drafted 2026-08-12) closes the loop on the incident
 that motivated us-85.1's workspace verification. A run that fails on a broken bench —

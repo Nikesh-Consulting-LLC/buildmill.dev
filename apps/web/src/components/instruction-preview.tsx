@@ -15,6 +15,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { MarkdownView } from "@/components/markdown-view";
+import { RUN_KIND_RUN_PHRASES } from "@/lib/run-kinds";
 
 /** US-49.1: what the agent will read, before it reads it.
  *
@@ -47,16 +48,15 @@ export const CONFIRM_LABELS: Record<string, string> = {
   breakdown: "Break it down",
   elaborate: "Elaborate it",
   wireframe: "Draw it",
+  merge: "Merge them",
 };
 
-export const RUN_KIND_LABELS: Record<string, string> = {
-  plan: "Plan run",
-  code: "Code run",
-  prd: "PRD run",
-  breakdown: "Breakdown run",
-  elaborate: "Elaboration run",
-  wireframe: "Wireframe run",
-};
+/** us-98.1: this module used to export its own `RUN_KIND_LABELS` holding
+ * "Plan run" while `lib/run-kinds` exported one holding "Plan" — two
+ * different contents behind one name, which is how a caller ends up
+ * importing the wrong vocabulary from the wrong place. The phrases now live
+ * beside the labels in `lib/run-kinds`, named for what they are, and
+ * nothing outside this file ever imported the shadowed export. */
 
 export function InstructionPreview({
   issueId,
@@ -257,7 +257,9 @@ export function DispatchPreviewDialog({
   const label =
     title ??
     (effectiveKind
-      ? (RUN_KIND_LABELS[effectiveKind] ?? `${effectiveKind} run`)
+      ? (RUN_KIND_RUN_PHRASES[
+            effectiveKind as keyof typeof RUN_KIND_RUN_PHRASES
+          ] ?? `${effectiveKind} run`)
       : "Dispatch");
 
   return (
