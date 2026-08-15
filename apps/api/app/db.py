@@ -315,6 +315,11 @@ def complete_run(
     merged directly.
     US-59.1: `claude_session_id` rides every callback, success or not, and is
     written with coalesce so it is never blanked once captured."""
+    # us-96.11: runs.stdout is rendered by the dashboard like a trace —
+    # header-shaped credentials are masked at write time, same as
+    # record_run_trace.
+    stdout = scrub_credential_patterns(stdout)
+    error = scrub_credential_patterns(error)
     metrics = compute_diff_metrics(diff) if outcome == "succeeded" else None
 
     # US-31.1: Postgres text refuses NUL; one 0x00 in a CLI's output must
@@ -361,16 +366,16 @@ def complete_run(
             return False
 
         kind = run.get("kind") or "code"
-        if outcome in ("failed", "stopped"):
+        if outcome == "failed":
             # US-31.5: a failed run consumes an attempt. `cancelled` never
             # reaches here (cancel_run has its own path) and deliberately
             # consumes nothing — the manager withdrew it.
-            # US-37.2: `stopped` no longer has a producer. Its only one was
-            # us-33.2's per-run spend ceiling, which is gone — money is bounded
-            # per project now, before a run is created, and a budget refusal
-            # deliberately consumes no attempt (raising the budget has to be
-            # enough to resume). The branch stays because runs stopped before
-            # that change still exist and still land through here.
+            # us-96.9: `stopped` has a producer again — the manager's own
+            # session stop (set_run_stopped_reason + the submit route's
+            # US-33.2 mapping) — and it consumes nothing and writes NO
+            # agent-failure row: a decision is not a malfunction, and on
+            # 2026-08-14 one stop produced two spurious failure records and
+            # a 42-minute "failure" in the effort rollup.
             record_run_attempt(
                 conn,
                 str(run["org_id"]),
@@ -378,10 +383,7 @@ def complete_run(
                 run_id,
                 str(run["worker_id"]) if run.get("worker_id") else None,
                 kind,
-                # `run_attempts.reason` carries 'ceiling' in its check
-                # constraint (migration 152) — the attempt log names the CAUSE,
-                # which is not the same vocabulary as the run status.
-                "ceiling" if outcome == "stopped" else outcome,
+                outcome,
             )
             # US-79.8: the failure also lands in the superadmin's Agent
             # failures console, with the error the agent reported and the
@@ -433,7 +435,25 @@ def complete_run(
             # rewrite is exactly as good as it was before the run started,
             # and marking the item `failed` would block the dispatch paths
             # that only accept draft/ready.
-            issue_status = None if kind in ("prd", "test", "elaborate") else "failed"
+            # us-96.6: breakdown joins them. A failed split is the RUN's
+            # failure, not the feature's: 'failed' stranded the feature
+            # outright (dispatch_breakdown only accepts 'ready', the
+            # stories panel only renders there, and dispatch_issue would
+            # re-plan — the wrong kind). The feature stays 'ready' and the
+            # manager just dispatches the breakdown again.
+            issue_status = (
+                None if kind in ("prd", "test", "elaborate", "breakdown") else "failed"
+            )
+            # us-96.9: a manager stop returns the item to where it stood at
+            # dispatch (prev_issue_status, migration 120) so re-dispatching
+            # is one step — landing it 'failed' would colour a decision as
+            # a defect everywhere failure data is read.
+            if outcome == "stopped" and issue_status is not None:
+                prev = conn.execute(
+                    "select prev_issue_status from public.runs where id = %s",
+                    (run_id,),
+                ).fetchone()
+                issue_status = (prev or {}).get("prev_issue_status") or issue_status
             # US-33.2: a distinct event, because a stop is a distinct outcome —
             # the feed should not read as if the work failed.
             event = "run-stopped" if outcome == "stopped" else "run-failed"
@@ -1582,10 +1602,15 @@ def reap_orphaned_provider_runs(settings: Settings) -> int:
             """,
         ).fetchall()
         for row in rows:
-            conn.execute(
-                "update public.issues set status = 'failed' where id = %s",
-                (row["issue_id"],),
-            )
+            # us-96.6: the think-phase kinds whose failure never moves the
+            # issue (see perform_submit's exemption) are exempt here too —
+            # the reaper previously forced prd/breakdown issues to 'failed'
+            # unconditionally, the second dead end lifecycles.md documented.
+            if row["kind"] not in ("prd", "test", "elaborate", "breakdown"):
+                conn.execute(
+                    "update public.issues set status = 'failed' where id = %s",
+                    (row["issue_id"],),
+                )
             conn.execute(
                 """
                 insert into public.issue_events (org_id, issue_id, type, payload)
@@ -6067,6 +6092,26 @@ RUN_TRACE_KINDS = (
 DEFAULT_RUN_TRACE_KIND = "progress"
 
 
+def scrub_credential_patterns(text: str | None) -> str | None:
+    """us-96.11: credentials the API can recognise WITHOUT knowing their
+    values — header shapes — masked before anything is stored. The runner
+    scrubs the values it holds; this assumes the runner failed. Known
+    shapes only, no entropy guessing: hashes and shas legitimately ride
+    traces, and flagging them would bury the signal."""
+    if not text:
+        return text
+    for pattern in _CREDENTIAL_HEADER_PATTERNS:
+        text = pattern.sub(r"\1[redacted]", text)
+    return text
+
+
+_CREDENTIAL_HEADER_PATTERNS = (
+    re.compile(r"(?i)(x-factory-local-key['\"]?\s*[:=]\s*['\"]?)([^\s'\"]+)"),
+    re.compile(r"(?i)(x-worker-token['\"]?\s*[:=]\s*['\"]?)([^\s'\"]+)"),
+    re.compile(r"(?i)(authorization['\"]?\s*[:=]\s*['\"]?bearer\s+)([^\s'\"]+)"),
+)
+
+
 def record_run_trace(
     settings: Settings,
     run_id: str,
@@ -6081,11 +6126,16 @@ def record_run_trace(
 
     US-36.1: an unrecognised `kind` is coerced to `progress`. A trace is
     diagnostic output; losing the line AND the socket because a caller invented
-    a label is the worst of both outcomes."""
+    a label is the worst of both outcomes.
+
+    us-96.11: stored scrubbed — redaction happens at write time, so reading
+    the row with service role already shows the mask and no render-time
+    masking exists to forget."""
     if not (_valid_uuid(run_id) and _valid_uuid(worker_id)):
         return None
     if kind not in RUN_TRACE_KINDS:
         kind = DEFAULT_RUN_TRACE_KIND
+    content = scrub_credential_patterns(content) or ""
     with _connect(settings) as conn:
         row = conn.execute(
             "select public.record_run_trace(%s, %s, %s, %s) as id",
@@ -9000,18 +9050,33 @@ def get_project_environment_websites(
 
 
 def get_worker_instruction(
-    settings: Settings, project_id: str, kind: str
+    settings: Settings,
+    project_id: str,
+    kind: str,
+    issue_id: str | None = None,
 ) -> str | None:
     """The project's behavioral instruction text for a run kind — the
     manager-edited template, falling back to the factory default when blank
-    (US-5.14). A live read at context-serve time, never frozen at dispatch."""
+    (US-5.14). A live read at context-serve time, never frozen at dispatch.
+
+    With issue_id, the kind first resolves through instruction_kind_for
+    (us-96.1) so a type-differentiated item reads its own text — a chore's
+    code run reads 'chore', not 'code'. Same SQL mapping the dispatch-time
+    seed uses, so the two can never disagree."""
     if not _valid_uuid(project_id):
         return None
     with _connect(settings) as conn:
-        row = conn.execute(
-            "select public.worker_instruction_for(%s, %s) as instruction",
-            (project_id, kind),
-        ).fetchone()
+        if issue_id and _valid_uuid(issue_id):
+            row = conn.execute(
+                "select public.worker_instruction_for("
+                "%s, public.instruction_kind_for(%s, %s)) as instruction",
+                (project_id, issue_id, kind),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "select public.worker_instruction_for(%s, %s) as instruction",
+                (project_id, kind),
+            ).fetchone()
     return row["instruction"] if row else None
 
 
@@ -9092,6 +9157,22 @@ def resolve_working_branch(
 
     branch = f"factory/{_branch_slug(base_title)}-{base_id[:6]}"
     return branch, strategy, submit_mode
+
+
+def set_run_stopped_reason(settings: Settings, run_id: str, reason: str) -> None:
+    """us-96.9: mark a running session the manager stopped, BEFORE the
+    runner's hand-back arrives. The submit route already lands a failure
+    report as outcome 'stopped' when the row carries a stopped_reason
+    (US-33.2's mapping) — this gives that mapping its producer back, so a
+    deliberate stop never reads as a malfunction. Best-effort by contract:
+    callers must not fail the stop over this label."""
+    with _connect(settings) as conn:
+        conn.execute(
+            "update public.runs set stopped_reason = %s "
+            "where id = %s and status = 'running' and stopped_reason is null",
+            (reason, run_id),
+        )
+        conn.commit()
 
 
 def set_run_branch_ref(settings: Settings, run_id: str, branch: str) -> None:

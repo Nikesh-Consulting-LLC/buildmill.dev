@@ -377,7 +377,10 @@ async def context(
     # US-5.14: instructions = code-generated mechanics (always present,
     # edit-proof) + the project's editable behavioral template, read live.
     template = db.get_worker_instruction(
-        settings, str(run.get("project_id") or ""), run["kind"]
+        settings,
+        str(run.get("project_id") or ""),
+        run["kind"],
+        issue_id=str(run.get("issue_id") or "") or None,
     )
     # US-5.12: the work item's comment thread, oldest first.
     comments = db.list_issue_comments_for_run(

@@ -125,6 +125,38 @@ async def checkout_branch(
         await git(prim, ["checkout", "-B", branch], cwd=str(workdir))  # empty repo
 
 
+async def unsubmitted_paths(
+    prim: Primitives, workdir: Path, branch: str
+) -> list[str]:
+    """us-96.8 AC5: locally-modified paths whose changes never reached the
+    remote branch — the files an MCP hand-back (submit_changeset) left
+    behind. The factory's commit is on origin/<branch>; anything dirty here
+    that its diff does not cover was modified and never submitted. Factory
+    scratch is excluded — it is legitimately never submitted."""
+    await git(prim, ["fetch", "origin", branch], cwd=str(workdir), timeout=300)
+    landed_raw = await git(
+        prim,
+        ["diff", "--name-only", f"HEAD..origin/{branch}"],
+        cwd=str(workdir),
+    )
+    landed = {p.strip() for p in landed_raw.splitlines() if p.strip()}
+    dirty_raw = await git(prim, ["status", "--porcelain"], cwd=str(workdir))
+    scratch_prefixes = (OUT_DIR + "/", ".factory-", ".grok/")
+    out: list[str] = []
+    for line in dirty_raw.splitlines():
+        if len(line) < 4:
+            continue
+        path = line[3:].strip().strip('"')
+        if " -> " in path:
+            path = path.split(" -> ")[-1].strip().strip('"')
+        if not path or path in landed:
+            continue
+        if path.startswith(scratch_prefixes) or path == OUT_DIR:
+            continue
+        out.append(path)
+    return sorted(out)
+
+
 async def commit_all_and_push(
     prim: Primitives, workdir: Path, branch: str, message: str
 ) -> bool:

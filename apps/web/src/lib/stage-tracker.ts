@@ -59,6 +59,16 @@ export function featureOwnsBuildReason(
   }`;
 }
 
+/** us-96.4/96.5: the sibling refusal for the plan phase, same voice. */
+export function featureOwnsPlanReason(
+  featureLabel: string,
+  storyCount: number
+): string {
+  return `${featureLabel} owns the plan — dispatch the feature to plan all ${storyCount} ${
+    storyCount === 1 ? "story" : "stories"
+  }`;
+}
+
 /** US-12.1: who the work item is waiting on right now. The primary slot
  * always says something — a blank slot reads as "nothing to do" when the
  * truth is usually "the factory is working" or "you haven't looked yet". */
@@ -102,6 +112,10 @@ export type TrackerInput = {
    * while it exists. Mirrors featureOwnsBuild's shape so the primary slot
    * can disable the same way. */
   sequentialBlockedBy?: { id: string; label: string } | null;
+  /** us-96.4: whether ANY plan artifact exists (approved, draft or
+   * superseded). The line between initial planning — the feature's — and
+   * revision, which stays the story's own. */
+  hasAnyPlan?: boolean;
 };
 
 /** US-22.10: what the story needs to know about the feature above it. */
@@ -395,9 +409,24 @@ function featureOwnsBuild(input: TrackerInput): ParentFeature | null {
   return batched && input.parent ? input.parent : null;
 }
 
+/** us-96.4: the feature owns the INITIAL plan of a child that has never
+ * been planned — mirrors issue_dispatch_refusal's plan branch (migration
+ * 258): draft/ready only, lifted by any existing plan artifact. */
+function featureOwnsInitialPlan(input: TrackerInput): ParentFeature | null {
+  if (input.hasAnyPlan) return null;
+  if (!["draft", "ready"].includes(input.status)) return null;
+  const batched = input.buildMode === "feature" || input.buildMode === "epic";
+  return batched && input.parent ? input.parent : null;
+}
+
 function dispatchableRail(input: TrackerInput): TrackerModel {
   const { issueId, status: s, latestRunKind, hasApprovedPlan } = input;
   const done = s === "done";
+  // us-96.5: a bug's think-first phase is a root cause analysis (us-96.2) —
+  // same rail, honest words.
+  const isBug = input.type === "bug";
+  const planLabel = isBug ? "RCA" : "Plan";
+  const dispatchPlanLabel = isBug ? "Dispatch RCA" : "Dispatch planning";
 
   const draftDone = s !== "draft" || latestRunKind !== null;
   const draft: Stage = {
@@ -417,7 +446,7 @@ function dispatchableRail(input: TrackerInput): TrackerModel {
   else if (s === "queued" && !hasApprovedPlan) planState = "in-progress";
   else if (s === "plan-review") planState = "waiting";
   else if (s === "failed" && latestRunKind === "plan") planState = "failed";
-  const plan: Stage = { key: "plan", label: "Plan", actor: "agent", state: planState };
+  const plan: Stage = { key: "plan", label: planLabel, actor: "agent", state: planState };
 
   const buildDone = ["merged", "done"].includes(s);
   let buildState: StageState = "not-started";
@@ -428,7 +457,26 @@ function dispatchableRail(input: TrackerInput): TrackerModel {
   else if (s === "needs-fixes") buildState = "waiting";
   else if (s === "planned") buildState = "waiting";
   else if (s === "failed" && latestRunKind === "code") buildState = "failed";
-  const build: Stage = { key: "build", label: "Build", actor: "agent", state: buildState };
+  const build: Stage = {
+    key: "build",
+    label: isBug ? "Fix" : "Build",
+    actor: "agent",
+    state: buildState,
+  };
+
+  // us-96.4/96.5: initial planning belongs to the feature; the button says
+  // so instead of erroring (the trouble/revision exemptions never land here
+  // — failed/needs-fixes and any existing artifact bypass this branch).
+  const planOwner = featureOwnsInitialPlan(input);
+  const dispatchPlan: StageAction = planOwner
+    ? {
+        kind: "dispatch",
+        label: dispatchPlanLabel,
+        disabled: true,
+        reason: featureOwnsPlanReason(planOwner.label, planOwner.storyCount),
+        reasonHref: `/issues/${planOwner.id}`,
+      }
+    : { kind: "dispatch", label: dispatchPlanLabel };
 
   let context = "";
   let action: StageAction | null = null;
@@ -437,23 +485,36 @@ function dispatchableRail(input: TrackerInput): TrackerModel {
     context = "Done";
     waitingOn = "nobody";
   } else if (!draftDone) {
-    context = "Draft — flesh out the story, then dispatch planning";
-    action = { kind: "dispatch", label: "Dispatch planning" };
+    context = isBug
+      ? "Draft — describe the bug, then dispatch the root cause analysis"
+      : "Draft — flesh out the story, then dispatch planning";
+    action = dispatchPlan;
   } else if (planState === "in-progress") {
-    context =
-      s === "planning"
+    context = isBug
+      ? s === "planning"
+        ? "RCA — the agent is diagnosing the cause"
+        : "RCA — queued for the runner"
+      : s === "planning"
         ? "Plan — the agent is writing the implementation and test plans"
         : "Plan — queued for the runner";
     waitingOn = "factory";
   } else if (planState === "waiting") {
-    context = "Plan — implementation and test plans await your review";
-    action = { kind: "link", label: "Review plan", href: `/review/${issueId}` };
+    context = isBug
+      ? "RCA — the analysis awaits your review"
+      : "Plan — implementation and test plans await your review";
+    action = {
+      kind: "link",
+      label: isBug ? "Review RCA" : "Review plan",
+      href: `/review/${issueId}`,
+    };
   } else if (planState === "failed") {
-    context = "Plan — the plan run failed";
+    context = isBug ? "RCA — the analysis run failed" : "Plan — the plan run failed";
     action = { kind: "dispatch", label: "Re-dispatch" };
   } else if (planState === "not-started") {
-    context = "Ready — dispatch planning when you are";
-    action = { kind: "dispatch", label: "Dispatch planning" };
+    context = isBug
+      ? "Ready — dispatch the root cause analysis when you are"
+      : "Ready — dispatch planning when you are";
+    action = dispatchPlan;
   } else if (buildState === "in-progress") {
     context =
       s === "running"
@@ -478,6 +539,9 @@ function dispatchableRail(input: TrackerInput): TrackerModel {
         reasonHref: `/issues/${owner.id}`,
       };
       waitingOn = "you";
+    } else if (isBug) {
+      context = "Fix — RCA approved; dispatch the fix run";
+      action = { kind: "dispatch", label: "Dispatch fix" };
     } else {
       context = "Build — plan approved; dispatch the code run";
       action = { kind: "dispatch", label: "Dispatch code" };
@@ -489,7 +553,7 @@ function dispatchableRail(input: TrackerInput): TrackerModel {
     context = "Build — rejected in review; dispatch a fix run";
     action = { kind: "dispatch", label: "Dispatch fix" };
   } else if (buildState === "failed") {
-    context = "Build — the code run failed";
+    context = isBug ? "Fix — the fix run failed" : "Build — the code run failed";
     action = { kind: "dispatch", label: "Re-dispatch" };
   } else if (buildDone) {
     // US-21.7: a work item ends at merged. Where the change is deployed is a
@@ -498,11 +562,69 @@ function dispatchableRail(input: TrackerInput): TrackerModel {
     context = "Merged — done";
     waitingOn = "nobody";
   } else {
-    context = "Ready — dispatch planning when you are";
-    action = { kind: "dispatch", label: "Dispatch planning" };
+    context = isBug
+      ? "Ready — dispatch the root cause analysis when you are"
+      : "Ready — dispatch planning when you are";
+    action = dispatchPlan;
   }
 
   return { stages: [draft, plan, build], context, action, waitingOn };
+}
+
+/** us-96.1/96.5: a chore is single-shot — there is no plan stage to draw.
+ * Draft → Build, with code review living inside Build's waiting state the
+ * way it does on the story rail. planning/plan-review/planned never occur
+ * for a chore (migration 255 refuses them). */
+function choreRail(input: TrackerInput): TrackerModel {
+  const { issueId, status: s } = input;
+  const draftDone = s !== "draft" || input.latestRunKind !== null;
+  const draft: Stage = {
+    key: "draft",
+    label: "Draft",
+    actor: "person",
+    state: draftDone ? "complete" : "waiting",
+  };
+  const buildDone = ["merged", "done"].includes(s);
+  let buildState: StageState = "not-started";
+  if (buildDone) buildState = "complete";
+  else if (s === "running" || s === "queued") buildState = "in-progress";
+  else if (s === "in-review" || s === "needs-fixes") buildState = "waiting";
+  else if (s === "failed") buildState = "failed";
+  const build: Stage = {
+    key: "build",
+    label: "Build",
+    actor: "agent",
+    state: buildState,
+  };
+
+  let context = "Ready — dispatch the build when you are";
+  let action: StageAction | null = { kind: "dispatch", label: "Dispatch build" };
+  let waitingOn: WaitingOn = "you";
+  if (buildDone) {
+    context = "Merged — done";
+    action = null;
+    waitingOn = "nobody";
+  } else if (s === "queued") {
+    context = "Build — queued for the runner";
+    action = null;
+    waitingOn = "factory";
+  } else if (s === "running") {
+    context = "Build — the agent is building it";
+    action = null;
+    waitingOn = "factory";
+  } else if (s === "in-review") {
+    context = "Build — the diff is ready and waiting on your review";
+    action = { kind: "link", label: "Review the diff", href: `/review/${issueId}` };
+  } else if (s === "needs-fixes") {
+    context = "Build — rejected in review; dispatch a fix run";
+    action = { kind: "dispatch", label: "Dispatch fix" };
+  } else if (s === "failed") {
+    context = "Build — the run failed";
+    action = { kind: "dispatch", label: "Re-dispatch" };
+  } else if (!draftDone) {
+    context = "Draft — describe the chore, then dispatch the build";
+  }
+  return { stages: [draft, build], context, action, waitingOn };
 }
 
 /** Sequential build mode's refusal — worded to match dispatch_issue's own
@@ -532,7 +654,11 @@ function withSequentialGate(
 }
 
 export function deriveTracker(input: TrackerInput): TrackerModel {
-  const model = usesFeatureRail(input) ? featureRail(input) : dispatchableRail(input);
+  const model = usesFeatureRail(input)
+    ? featureRail(input)
+    : input.type === "chore"
+      ? choreRail(input)
+      : dispatchableRail(input);
   return withSequentialGate(model, input.sequentialBlockedBy);
 }
 

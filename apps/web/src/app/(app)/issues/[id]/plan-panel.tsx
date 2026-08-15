@@ -26,10 +26,14 @@ export function PlanPanel({
   issueId,
   status,
   artifacts,
+  isBug = false,
 }: {
   issueId: string;
   status: string;
   artifacts: PlanArtifactRow[];
+  /** us-96.5: a bug's plan artifact is an RCA (us-96.2) — same panel,
+   * honest heading. */
+  isBug?: boolean;
 }) {
   const plan = artifacts.find((a) => a.kind === "plan");
   const testPlan = artifacts.find((a) => a.kind === "test_plan");
@@ -45,10 +49,12 @@ export function PlanPanel({
         <div className="space-y-1.5">
           <CardTitle className="flex items-center gap-2 text-base">
             <ClipboardList className="size-4 text-muted-foreground" />
-            Plan
+            {isBug ? "Root cause analysis" : "Plan"}
           </CardTitle>
           <CardDescription>
-            The approach and test plan the factory is working from.
+            {isBug
+              ? "The diagnosis and proposed fix the factory is working from."
+              : "The approach and test plan the factory is working from."}
           </CardDescription>
         </div>
         <div className="flex items-center gap-2">

@@ -31,6 +31,9 @@ export type StoryDispatchState = {
   orgId: string;
   status: string;
   hasApprovedPlan: boolean;
+  /** us-96.4: a plan artifact in ANY state — the line between initial
+   * planning (the feature's) and revision (the story's own). */
+  hasAnyPlan: boolean;
   /** The story's display id, for the toast. Falls back to the title. */
   label: string;
   /** Feature/epic mode means the FEATURE owns the code build (us-22.10). */
@@ -60,6 +63,16 @@ function sequentialRefusal(s: StoryDispatchState): string | null {
 function planRefusal(s: StoryDispatchState): string | null {
   const sequential = sequentialRefusal(s);
   if (sequential) return sequential;
+  // us-96.4: the feature owns the INITIAL plan. A story that has never been
+  // planned flows through the batch; remediation (failed/needs-fixes) and
+  // revision (any existing plan artifact) stay individual.
+  if (
+    s.buildMode !== "story" &&
+    ["draft", "ready"].includes(s.status) &&
+    !s.hasAnyPlan
+  ) {
+    return `${s.featureLabel} owns the plan`;
+  }
   if (PLANNABLE.includes(s.status)) return null;
   if (s.status === "queued" || s.status === "running")
     return "A run is already in flight";

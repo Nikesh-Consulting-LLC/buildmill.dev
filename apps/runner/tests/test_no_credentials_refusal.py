@@ -44,6 +44,10 @@ class FakeClient:
     async def heartbeat(self, run_id):
         self.beats += 1
 
+    async def claim_alive(self, run_id):
+        # us-96.9 AC4: the preflight probe — this double's claims are live.
+        return True, None
+
 
 class FakeConnection:
     def __init__(self):

@@ -56,7 +56,10 @@ export const PROVIDER_TYPES = [
 ];
 
 const MODEL_SUGGESTIONS: Record<string, string[]> = {
-  anthropic: ["claude-sonnet-5", "claude-opus-4-8", "claude-haiku-4-5"],
+  // us-96.10: the current generation — Opus 5 in (same price as 4-8, real
+  // capability step, its own rate-limit pool), opus-4-8 out. Suggestions
+  // only; existing org provider rows are data and stay untouched.
+  anthropic: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"],
   openai: ["gpt-5.1", "gpt-4o", "gpt-4o-mini"],
   google: ["gemini-2.5-pro", "gemini-2.5-flash"],
   groq: ["llama-3.3-70b-versatile", "openai/gpt-oss-120b"],

@@ -91,6 +91,14 @@ def turn_limit_hit(result: ModuleResult) -> bool:
 
 def classify(result: ModuleResult) -> str:
     """Map a failed result to a recovery action."""
+    # us-96.9: a manager stop is a decision, not a malfunction — checked
+    # before any keyword loop, because the words "the session was
+    # cancelled" match the transient list and on 2026-08-14 that bought a
+    # 60-second wait, a reclone that invalidated the workspace's source
+    # record, and a zombie boot on a dead claim. Terminal: no wait, no
+    # reinstall, no reclone, no retry.
+    if getattr(result, "stopped", False):
+        return "unrecoverable"
     if usage_cap_hit(result) or turn_limit_hit(result):
         return "unrecoverable"
     text = f"{result.error or ''}\n{result.stdout or ''}".lower()
@@ -110,6 +118,12 @@ def classify_fault(result: ModuleResult) -> str:
     """Tag a failure work-fault vs runner-fault (US-10.11). Environmental signals
     (bad checkout, missing dep/CLI, transient) are runner-faults — fix the box;
     everything else defaults to work-fault — fix the story."""
+    # us-96.9: a stop is neither fault — the box did not break and the
+    # story did not fail. The payload builder omits fault_class entirely
+    # for stopped results; this guard only keeps the keyword logic out if
+    # anything else ever asks.
+    if getattr(result, "stopped", False):
+        return "work-fault"
     # US-52.4: a capped subscription is an agent-side resource condition, not
     # a defect in the story — the same work succeeds after the reset.
     if usage_cap_hit(result):
@@ -276,6 +290,7 @@ async def execute_with_repair(
     max_attempts: int = 2,
     diagnose=None,
     on_attempt=None,
+    preflight=None,
 ) -> ModuleResult:
     """Run the module, repairing and retrying up to `max_attempts` times.
 
@@ -295,6 +310,11 @@ async def execute_with_repair(
     reinstall/unrecoverable attempts, and a `"wait (Ns)"` string for wait
     attempts — on_attempt only ever interpolates it into a message.
     """
+    # us-96.9 AC4: never boot a CLI on a claim that is no longer ours —
+    # first attempt or retry. `preflight` raises to abort (the caller
+    # owns what an abort means); a live claim returns quietly.
+    if preflight is not None:
+        await preflight()
     result = await module.execute(ctx, prim)
     attempts = 0
     wait_seconds = 0
@@ -322,6 +342,8 @@ async def execute_with_repair(
             )
             changed = await apply_repair(action, ctx, prim)
             wait_seconds += _WAIT_RETRY_SECONDS
+            if preflight is not None:
+                await preflight()
             result = await module.execute(ctx, prim)
             if on_attempt:
                 on_attempt(f"wait ({wait_seconds}s)", action, changed, result.outcome)
@@ -343,6 +365,8 @@ async def execute_with_repair(
             if on_attempt:
                 on_attempt(attempts, action, None, "skipped — nothing to change")
             break
+        if preflight is not None:
+            await preflight()
         result = await module.execute(ctx, prim)
         if on_attempt:
             on_attempt(attempts, action, changed, result.outcome)

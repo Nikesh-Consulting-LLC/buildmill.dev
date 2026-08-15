@@ -265,11 +265,24 @@ class RunnerConnection:
         return str(token) if token else None
 
     async def notify(self, method: str, params: dict[str, Any] | None = None) -> None:
-        """Fire-and-forget server notification (no reply expected)."""
+        """Fire-and-forget server notification (no reply expected).
+
+        us-96.11: THE choke point for off-box telemetry — run traces,
+        session narration, incidents all leave through here, so every
+        string field is scrubbed of the live secrets the supervisor holds.
+        One place, never per call site."""
         if self._ws is None:
             return
+        from . import redact
+
         await self._ws.send(
-            json.dumps({"jsonrpc": "2.0", "method": method, "params": params or {}})
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "method": method,
+                    "params": redact.scrub_params(params or {}),
+                }
+            )
         )
 
     async def reply(

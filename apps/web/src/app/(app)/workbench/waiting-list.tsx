@@ -431,6 +431,23 @@ export function WaitingList({
                             <span className="min-w-0">{held}</span>
                           </span>
                         )}
+                        {/* us-96.7: trouble inside the batch is named on the
+                            feature row, never expanded into rows of its own.
+                            The chip leads to the feature page, where the
+                            trouble exemption's own dispatch lives. */}
+                        {item.rollup && item.rollup.attention.length > 0 && (
+                          <span className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                            {item.rollup.attention.map((a) => (
+                              <Link
+                                key={a.id}
+                                href={item.href}
+                                className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 hover:underline dark:bg-amber-950 dark:text-amber-300"
+                              >
+                                {a.label} needs attention
+                              </Link>
+                            ))}
+                          </span>
+                        )}
                       </span>
                       <span
                         className={cn(
@@ -478,6 +495,16 @@ export function WaitingList({
                         issueId={item.id}
                         peekKind={item.peekKind}
                         workItem={{ title: item.title, displayId: item.displayId }}
+                      />
+                    )}
+                    {/* us-96.7: the feature row acts at feature level — the
+                        unanimous batch gate, when one exists, sits beside
+                        the door to the feature page. */}
+                    {item.rollup?.batchGate && (
+                      <FeatureBatchAction
+                        featureId={item.id}
+                        orgId={orgId}
+                        gate={item.rollup.batchGate}
                       />
                     )}
                     {item.mode === "navigate" ? (
@@ -637,6 +664,20 @@ export function WaitingList({
                               <span className="min-w-0">{held}</span>
                             </span>
                           )}
+                          {/* us-96.7: trouble named on the feature row. */}
+                          {item.rollup && item.rollup.attention.length > 0 && (
+                            <span className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                              {item.rollup.attention.map((a) => (
+                                <Link
+                                  key={a.id}
+                                  href={item.href}
+                                  className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 hover:underline dark:bg-amber-950 dark:text-amber-300"
+                                >
+                                  {a.label} needs attention
+                                </Link>
+                              ))}
+                            </span>
+                          )}
                         </span>
                       </TableCell>
                       <TableCell className="hidden truncate text-xs text-muted-foreground lg:table-cell">
@@ -655,6 +696,15 @@ export function WaitingList({
                       </TableCell>
                       <TableCell>
                         <span className="flex items-center justify-end gap-1.5">
+                          {/* us-96.7: feature-level batch gate on the row. */}
+                          {item.rollup?.batchGate && (
+                            <FeatureBatchAction
+                              featureId={item.id}
+                              orgId={orgId}
+                              gate={item.rollup.batchGate}
+                              compact
+                            />
+                          )}
                           {item.peekKind && (
                             <Button
                               variant="ghost"

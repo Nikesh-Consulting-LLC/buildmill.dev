@@ -708,7 +708,10 @@ async def get_work_context(run_id: str, ctx: Context) -> dict[str, Any]:
     # US-5.14: the project's editable behavioral template, read live — the
     # mechanics lines around it stay code-generated.
     template = db.get_worker_instruction(
-        settings, str(run.get("project_id") or ""), run["kind"]
+        settings,
+        str(run.get("project_id") or ""),
+        run["kind"],
+        issue_id=str(run.get("issue_id") or "") or None,
     )
     # US-5.12: the work item's comment thread — the whole prior discussion,
     # visible to any claimer including one picking up a retry.
@@ -2734,7 +2737,20 @@ async def validate_submission(
             }
         # Shared code path with submit_changeset — same function, same
         # findings, same ordering (base_sha first, then message).
+        # us-96.8: the same scratch filter the real submit applies, echoed
+        # here so the dry run and the submit can never disagree about it.
+        kept_files, dropped_scratch = changesets.split_scratch(files or [])
+        if dropped_scratch:
+            findings_note = (
+                "factory scratch is dropped, not committed: "
+                + ", ".join(dropped_scratch)
+            )
+        else:
+            findings_note = None
+        files = kept_files
         findings = changesets.validate_changeset(files or [])
+        if findings_note:
+            findings = [findings_note] + findings
         if not (message or "").strip():
             findings = ["commit message is empty"] + findings
         if not (base_sha or "").strip():
@@ -4008,6 +4024,7 @@ async def submit_changeset(
     allow_partial: bool = False,
     notes: str = "",
     stdout: str = "",
+    test_cases: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Hand back code as changed files — the factory does all the git:
     builds the commit from base_sha, pushes the work branch with the
@@ -4082,19 +4099,22 @@ async def submit_changeset(
         # Single-story runs behave exactly as they did before this story.
         final = True if final is None else final
 
+    # US-31.7 → us-96.8: the factory's own scratch never lands, regardless
+    # of any .gitignore — but it is now FILTERED, not fatal. The dropped
+    # paths are named in the response so the agent knows; only a changeset
+    # that is nothing but scratch is refused (there is nothing to commit).
+    files, dropped_scratch = changesets.split_scratch(files)
+    if dropped_scratch and not files:
+        return _err(
+            "changeset rejected — every file was factory scratch; there is "
+            "nothing to commit",
+            "factory scratch never lands: " + ", ".join(dropped_scratch),
+        )
     findings = changesets.validate_changeset(files)
     if not (message or "").strip():
         findings = ["commit message is empty"] + findings
     if not (base_sha or "").strip():
         findings = ["base_sha is required — get_workspace answers it"] + findings
-    # US-31.7: the factory's own scratch never lands, regardless of any
-    # .gitignore. Checked here (not in validate_changeset) because it needs no
-    # repo read and must apply even when the ignore lookup below is skipped.
-    for path in changesets.scratch_paths(files):
-        findings.append(
-            f"{path}: the factory's own scratch is never committed — "
-            "drop it from the changeset"
-        )
     # US-89.2 AC5: a delivered SECRET value never rides a commit — the exact
     # failure the worker token had on 2026-08-13, closed for the project's
     # own credentials before the first one leaks. Exact-match sweep over the
@@ -4249,6 +4269,16 @@ async def submit_changeset(
                 ),
                 "commit_sha": commit_sha,
                 "branch_ref": branch,
+                # us-96.8 AC4: the submit answers with exactly what it took,
+                # so a partial hand-back is visible the moment it happens.
+                "received": [
+                    {"path": f.get("path"), "op": f.get("op")} for f in files
+                ],
+                "received_count": len(files),
+                "dropped": [
+                    {"path": p, "reason": "factory scratch never lands"}
+                    for p in dropped_scratch
+                ],
                 "final": False,
                 "coverage": members,
                 "next_base_sha": commit_sha,
@@ -4290,6 +4320,17 @@ async def submit_changeset(
                 branch_ref=branch,
                 notes=notes or None,
                 stdout=stdout or None,
+                # us-96.8 AC2: the MCP transport's ONE route for test cases —
+                # a structured field on the submit, never a scratch file the
+                # changeset would have refused (and now names as dropped).
+                # Shape-tolerant like the runner's own submit: a case with no
+                # title is dropped rather than failing the hand-back.
+                test_cases=[
+                    t
+                    for t in (test_cases or [])
+                    if isinstance(t, dict) and str(t.get("title") or "").strip()
+                ]
+                or None,
             ),
         )
     except HTTPException as e:
@@ -4304,11 +4345,27 @@ async def submit_changeset(
         else f"Changeset committed as `{commit_sha}` on `{branch}` and "
         f"submitted — PR {sub.get('pr_url')} is in review."
     )
+    # us-96.8 AC4: state the count plainly and name every path taken and
+    # dropped — the agent's instruction says to check this echo against its
+    # own list of changed files before reporting done.
+    landed_md += f" Received {len(files)} file(s)."
+    if dropped_scratch:
+        landed_md += (
+            " Dropped factory scratch (never lands): "
+            + ", ".join(f"`{p}`" for p in dropped_scratch)
+            + "."
+        )
     out: dict[str, Any] = {
         "markdown": landed_md,
         "commit_sha": commit_sha,
         "branch_ref": branch,
         "submit_mode": submit_mode,
+        "received": [{"path": f.get("path"), "op": f.get("op")} for f in files],
+        "received_count": len(files),
+        "dropped": [
+            {"path": p, "reason": "factory scratch never lands"}
+            for p in dropped_scratch
+        ],
         **sub,
     }
     if multi:

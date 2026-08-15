@@ -128,7 +128,12 @@ export function toLiveRows(
       projectId: i.projectId,
       project: i.project,
       type: i.type,
-      displayId: i.displayId,
+      // us-96.7 AC6: an agent's live work stays visible per run, but the
+      // row names the batch it belongs to — "FEAT-2.3 › US-2.3.4".
+      displayId:
+        i.parent?.displayId && i.displayId
+          ? `${i.parent.displayId} › ${i.displayId}`
+          : i.displayId,
       title: i.title,
       status: i.status,
       stories: null,

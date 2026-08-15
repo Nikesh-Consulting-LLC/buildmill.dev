@@ -157,10 +157,15 @@ class LiveSession:
     the manager's text becomes a prompt on the conversation already in flight.
     """
 
-    def __init__(self, client: Any, session_id: str, emit: Any):
+    def __init__(
+        self, client: Any, session_id: str, emit: Any, run_id: str | None = None
+    ):
         self.client = client
         self.session_id = session_id
         self._emit = emit
+        # us-96.9: so cancel() can mark the RUN stopped, not just say so in
+        # a line of text that dies on the way out.
+        self.run_id = run_id
         # One turn at a time. Two managers typing at once would otherwise
         # interleave into a single garbled prompt (US-78.8 AC8).
         self._lock = asyncio.Lock()
@@ -173,11 +178,21 @@ class LiveSession:
 
     async def cancel(self) -> None:
         self._emit("decision", "the manager stopped this session")
+        # us-96.9: the stop is a fact on the result, not a phrase in the
+        # text — execute() reads this set and marks the ModuleResult, which
+        # is what keeps the repair ladder's keyword classifier out of a
+        # decision the manager already made.
+        if self.run_id:
+            STOPPED_RUNS.add(self.run_id)
         await self.client.cancel(self.session_id)
 
 
 # run_id -> LiveSession, for the runs this machine is currently holding.
 LIVE: dict[str, LiveSession] = {}
+
+# us-96.9: runs whose live session the manager stopped, consumed by
+# execute() when the module result comes home.
+STOPPED_RUNS: set[str] = set()
 
 
 class InteractiveModule(CLIModule):
@@ -187,6 +202,13 @@ class InteractiveModule(CLIModule):
     # US-78.9: resume is `session/load`, gated at runtime on the agent actually
     # declaring `loadSession` — this flag only says the module knows how to ask.
     RESUME_SUPPORTED = True
+
+    # us-96.8: this module's agent hands code back over factory MCP
+    # (submit_changeset) — run 51cd4fd3 proved it does, and the factory
+    # accepted it. One voice: the prompt says MCP, the harness never
+    # commits the tree a second time, and the post-run sweep names any
+    # file modified but never submitted.
+    MCP_HANDBACK_KINDS = frozenset({"code"})
 
     settings = (
         Knob(
@@ -251,8 +273,18 @@ class InteractiveModule(CLIModule):
     async def execute(self, ctx, prim):
         self._run_id = ctx.run_id
         try:
-            return await super().execute(ctx, prim)
+            result = await super().execute(ctx, prim)
+            # us-96.9: a manager stop is an answer. The fact rides the
+            # result as a field so the repair ladder short-circuits before
+            # any keyword loop, and the words the manager reads are their
+            # own decision — never "no enabled module can do 'code' work".
+            if ctx.run_id in STOPPED_RUNS:
+                result.stopped = True
+                if result.outcome != "succeeded":
+                    result.error = "stopped by the manager"
+            return result
         finally:
+            STOPPED_RUNS.discard(ctx.run_id)
             self._run_id = None
 
     def mcp_argv(self, config_path: str) -> list[str]:
@@ -386,7 +418,7 @@ class InteractiveModule(CLIModule):
             # US-78.8: from here the run is addressable — a manager attaching a
             # console can steer it. Registered before the first prompt, because
             # the first turn is the longest and the one worth interrupting.
-            live = LiveSession(opened.client, session_id, emit)
+            live = LiveSession(opened.client, session_id, emit, run_id=self._run_id)
             if self._run_id:
                 LIVE[self._run_id] = live
 
