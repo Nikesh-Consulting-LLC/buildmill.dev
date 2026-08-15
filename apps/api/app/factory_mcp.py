@@ -4145,6 +4145,17 @@ async def submit_guidelines_refresh(
             "completes guidelines runs only",
             "use the submit tool matching the run's kind",
         )
+    # us-100.5 AC5: sections retired with us-100.1. Accepting a section-shaped
+    # proposal here would write it into project_guidelines, which nothing has
+    # read since migration 263 — the run would succeed and change nothing.
+    # Refuse loudly instead; the dispatch side is disabled too, so this only
+    # catches a run queued before that landed.
+    return _err(
+        "guidelines refresh is temporarily disabled",
+        "this run proposes changes section by section, and Phase 100 "
+        "replaced the sections with a single Agent Instructions document. "
+        "Release the run — the manager edits that document directly for now.",
+    )
     if not (summary or "").strip():
         return _err(
             "summary is required",

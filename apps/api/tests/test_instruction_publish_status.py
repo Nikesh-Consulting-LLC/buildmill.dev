@@ -204,3 +204,34 @@ def test_dispatch_with_no_project_does_nothing(monkeypatch):
 
     monkeypatch.setattr("app.repo_docs.sync_tree", boom)
     asyncio.run(issues_router._sync_repo_before_dispatch(None, None))
+
+
+# --- us-100.5 AC5: a kind that would silently no-op is disabled -------------
+
+
+def test_guidelines_refresh_dispatch_is_refused_with_a_reason(
+    client, make_token, monkeypatch
+):
+    """The refresh run is section-addressed, and us-100.1 retired sections.
+    Left dispatchable it would run, succeed, and write proposals into
+    project_guidelines — a table nothing has read since migration 263 — so a
+    manager would see a completed refresh that changed nothing.
+
+    A kind that runs and silently no-ops is worse than one that refuses, and
+    us-100.5 AC5 requires exactly this until the reshape lands.
+    """
+
+    async def must_not_dispatch(*a, **k):
+        raise AssertionError("a section-shaped refresh must not be dispatched")
+
+    monkeypatch.setattr(
+        "app.routers.projects.db.dispatch_guidelines_refresh", must_not_dispatch
+    )
+    resp = client.post(
+        f"/api/v1/projects/{PROJECT_ID}/guidelines/refresh",
+        headers={"Authorization": f"Bearer {make_token()}"},
+        json={"scope": "all", "focus": ""},
+    )
+    assert resp.status_code == 409
+    detail = resp.json()["detail"]
+    assert "Agent Instructions" in detail
