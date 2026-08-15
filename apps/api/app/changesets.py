@@ -203,6 +203,31 @@ def scratch_paths(files: list[dict[str, Any]]) -> list[str]:
     return out
 
 
+def split_scratch(
+    files: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """us-96.8: the factory's own scratch is FILTERED out of a changeset
+    rather than failing it — on 2026-08-14 (run 51cd4fd3) one voice told
+    the agent to write `.factory-out/test_cases.json` and another refused
+    the whole hand-back for containing it. The security property is
+    unchanged: scratch still never lands (the 2026-08-13 token-in-history
+    incident stays impossible); the real files just no longer fail with
+    it. The caller refuses a changeset that is ONLY scratch — there is
+    nothing to commit."""
+    scratch = set(scratch_paths(files))
+    if not scratch:
+        return list(files), []
+    kept: list[dict[str, Any]] = []
+    dropped: list[str] = []
+    for f in files:
+        path = str(f.get("path") or "").strip().replace("\\", "/").lstrip("/")
+        if path in scratch:
+            dropped.append(path)
+        else:
+            kept.append(f)
+    return kept, dropped
+
+
 def validate_changeset(files: list[dict[str, Any]]) -> list[str]:
     """US-5.21-style findings — all of them, checked before anything
     touches GitHub."""

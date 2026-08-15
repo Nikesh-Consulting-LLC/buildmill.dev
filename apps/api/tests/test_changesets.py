@@ -252,3 +252,33 @@ def test_apply_encodes_text_content_as_base64_blob(monkeypatch):
     stub, _ = _apply([_file("a.txt", "add", "hello")], monkeypatch=monkeypatch)
     blob_call = next(c for c in stub.calls if c[0] == "create_blob")
     assert base64.b64decode(blob_call[1]) == b"hello"
+
+
+# ---------------------------------------------------------------- us-96.8
+# Scratch is filtered, not fatal: the security property (scratch never
+# lands) is unchanged; the real files no longer fail with it.
+
+
+def test_split_scratch_filters_scratch_and_keeps_the_work():
+    files = [
+        {"path": "src/app.py", "op": "update", "content": "x"},
+        {"path": ".factory-out/test_cases.json", "op": "add", "content": "[]"},
+        {"path": ".grok/config.toml", "op": "add", "content": ""},
+    ]
+    kept, dropped = changesets.split_scratch(files)
+    assert [f["path"] for f in kept] == ["src/app.py"]
+    assert dropped == [".factory-out/test_cases.json", ".grok/config.toml"]
+
+
+def test_split_scratch_only_scratch_keeps_nothing():
+    files = [{"path": ".factory-out/plan.md", "op": "add", "content": ""}]
+    kept, dropped = changesets.split_scratch(files)
+    assert kept == []
+    assert dropped == [".factory-out/plan.md"]
+
+
+def test_split_scratch_clean_changeset_is_untouched():
+    files = [{"path": "a.py", "op": "add", "content": ""}]
+    kept, dropped = changesets.split_scratch(files)
+    assert kept == files
+    assert dropped == []

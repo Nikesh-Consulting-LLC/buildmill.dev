@@ -188,6 +188,13 @@ class InteractiveModule(CLIModule):
     # declaring `loadSession` — this flag only says the module knows how to ask.
     RESUME_SUPPORTED = True
 
+    # us-96.8: this module's agent hands code back over factory MCP
+    # (submit_changeset) — run 51cd4fd3 proved it does, and the factory
+    # accepted it. One voice: the prompt says MCP, the harness never
+    # commits the tree a second time, and the post-run sweep names any
+    # file modified but never submitted.
+    MCP_HANDBACK_KINDS = frozenset({"code"})
+
     settings = (
         Knob(
             "model",
