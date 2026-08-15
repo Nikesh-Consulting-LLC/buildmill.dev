@@ -3855,6 +3855,7 @@ export type Database = {
       }
       projects: {
         Row: {
+          agent_instructions: string
           archived_at: string | null
           auto_approve_code: boolean
           auto_approve_plan: boolean
@@ -3897,6 +3898,7 @@ export type Database = {
           worker_instructions_ready_by: string | null
         }
         Insert: {
+          agent_instructions?: string
           archived_at?: string | null
           auto_approve_code?: boolean
           auto_approve_plan?: boolean
@@ -3939,6 +3941,7 @@ export type Database = {
           worker_instructions_ready_by?: string | null
         }
         Update: {
+          agent_instructions?: string
           archived_at?: string | null
           auto_approve_code?: boolean
           auto_approve_plan?: boolean
