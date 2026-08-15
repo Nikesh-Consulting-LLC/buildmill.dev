@@ -308,15 +308,18 @@ async def save_instructions(
             status_code=409, detail=f"GitHub not connected for this repo: {e.message}"
         )
 
+    # us-99.2 AC5: ONE writer. Pressing Save and dispatching a run go through
+    # the same pure planner, so they produce byte-identical files — the whole
+    # point of the single-door rule US-22.6 introduced, now covering the
+    # per-kind set as well as AGENTS.md.
+    instructions = await asyncio.to_thread(
+        db.get_project_instructions_for_publish, settings, str(project_id)
+    )
+    files, deletes = repo_docs.instruction_file_plan(
+        instructions, guidelines, bool(project.get("docs_tree_enabled"))
+    )
     try:
-        files, block = await repo_docs.build_instruction_file_contents(
-            token,
-            project["repo_full_name"],
-            branch,
-            guidelines,
-            bool(project.get("docs_tree_enabled")),
-        )
-        # One commit carrying both files: either both land or neither does,
+        # One commit carrying every file: either they all land or none does,
         # so the repo never holds a half-written instruction set.
         result = await repo_docs.commit_files(
             token,
@@ -324,6 +327,7 @@ async def save_instructions(
             branch,
             "docs: build mill instructions (save)",
             files,
+            deletes,
         )
     except GitHubError as e:
         raise HTTPException(status_code=502, detail=f"GitHub commit failed: {e.message}")
@@ -331,7 +335,10 @@ async def save_instructions(
     commit_sha = result.get("commit_sha")
     if commit_sha and not result.get("unchanged"):
         db.record_instructions_sync(
-            settings, str(project_id), repo_docs.block_hash(block), commit_sha
+            settings,
+            str(project_id),
+            repo_docs.publish_hash(files, deletes),
+            commit_sha,
         )
 
     owner, repo = project["repo_full_name"].split("/", 1)

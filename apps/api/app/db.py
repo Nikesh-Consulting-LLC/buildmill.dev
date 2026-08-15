@@ -5454,6 +5454,36 @@ def get_project_docs_config(
         ).fetchone()
 
 
+def get_project_instructions_for_publish(
+    settings: Settings, project_id: str
+) -> dict[str, str]:
+    """US-99.2: every instruction kind's RESOLVED text for this project.
+
+    Resolved, not raw: `worker_instruction_for` runs the same four-level
+    chain a worker's own read goes through (project row → project-template
+    override → baked default), so what gets published is exactly what an
+    agent would have been served. Publishing the raw column instead would
+    write empty files for every kind a project has never edited.
+
+    A kind whose whole chain resolves to blank is returned as an empty
+    string, which the publisher turns into a DELETE — the repository must
+    never carry an instruction the factory no longer believes in.
+    """
+    if not _valid_uuid(project_id):
+        return {}
+    from .instruction_files import KIND_FILES
+
+    kinds = sorted(KIND_FILES)
+    with _connect(settings) as conn:
+        rows = conn.execute(
+            "select k.kind, "
+            "coalesce(public.worker_instruction_for(%s, k.kind), '') as content "
+            "from unnest(%s::text[]) as k(kind)",
+            (project_id, kinds),
+        ).fetchall()
+    return {r["kind"]: (r["content"] or "").strip() for r in rows}
+
+
 def get_approved_plans(
     settings: Settings, issue_id: str, org_id: str
 ) -> dict[str, str | None]:

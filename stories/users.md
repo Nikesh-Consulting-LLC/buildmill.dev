@@ -81,8 +81,8 @@ Phases 85–89:
 | 48 | [us-98.5](us-98.5-an-unresolved-branch-fails-the-whole-merge.md) | An unresolved branch fails the whole merge | Testing |
 | 49 | [us-98.6](us-98.6-the-manager-reviews-the-merge-summary.md) | The manager reviews the merge summary | Testing |
 | 50 | [us-99.1](us-99.1-every-instruction-kind-has-a-file.md) | Every instruction kind has a file, and one map says which | Testing |
-| 51 | [us-99.2](us-99.2-agents-md-is-the-index.md) | AGENTS.md is the index, and Build Mill owns it whole | New |
-| 52 | [us-99.3](us-99.3-project-conventions-become-guidelines-md.md) | Project conventions become Guidelines.md | New |
+| 51 | [us-99.2](us-99.2-agents-md-is-the-index.md) | AGENTS.md is the index, and Build Mill owns it whole | Testing |
+| 52 | [us-99.3](us-99.3-project-conventions-become-guidelines-md.md) | Project conventions become Guidelines.md | Testing |
 | 53 | [us-99.4](us-99.4-an-unpublished-edit-says-so.md) | An unpublished edit says so, and the manager pushes it | New |
 | 54 | [us-99.5](us-99.5-the-agent-reads-the-file-and-mcp-fills-the-gap.md) | The agent reads the file, and MCP fills the gap | New |
 | 55 | [us-99.6](us-99.6-a-template-carries-the-whole-file-set.md) | A template carries the whole file set | New |

@@ -438,6 +438,138 @@ def build_instruction_block(
     return "\n".join(parts)
 
 
+def build_agents_index(
+    kinds_present: list[str],
+    conventions_present: bool,
+    docs_tree_enabled: bool,
+) -> str:
+    """US-99.2: AGENTS.md, written WHOLE.
+
+    It used to be a shared file — the factory owned a fenced region and
+    `merge_block` was careful never to touch a byte outside it. That was
+    right when the block held only guidelines and a docs-tree pointer. It
+    stops being right the moment AGENTS.md becomes the entry point to a set
+    of files Build Mill maintains, because then half a file being
+    authoritative and half being somebody's notes is a question every agent
+    has to answer for itself.
+
+    So Build Mill owns it outright. **This destroys hand-written AGENTS.md
+    content on first publish** — the accepted cost of single ownership, made
+    visible by happening inside a commit, on a branch with history, at a
+    moment the manager chose (us-99.4) rather than silently at dispatch.
+    """
+    from .instruction_files import CONVENTIONS_FILE, KIND_FILES, ROOT
+
+    lines = [
+        "# Agent instructions",
+        "",
+        "Build Mill owns this file and everything under "
+        f"`{ROOT}/`, and rewrites them whole on each publish. Edits made "
+        "here are replaced — change them in Build Mill instead.",
+        "",
+    ]
+    if conventions_present:
+        lines += [
+            "## Project conventions",
+            "",
+            f"How work is done in this repository: [`{ROOT}/"
+            f"{CONVENTIONS_FILE}`]({ROOT}/{CONVENTIONS_FILE}). Read it before "
+            "you change anything.",
+            "",
+        ]
+    if kinds_present:
+        lines += [
+            "## Instructions by task",
+            "",
+            "Read the one that matches the run you are doing. Each is the "
+            "whole brief for that task.",
+            "",
+            "| Task | File |",
+            "| --- | --- |",
+        ]
+        for kind in sorted(kinds_present):
+            label = KIND_META.get(kind, kind)
+            name = KIND_FILES[kind]
+            lines.append(f"| {label} | [`{ROOT}/{name}`]({ROOT}/{name}) |")
+        lines.append("")
+    if not kinds_present and not conventions_present:
+        lines += [
+            "_Build Mill has published no instructions for this project "
+            "yet._",
+            "",
+        ]
+    if docs_tree_enabled:
+        lines += [DOCS_TREE_SECTION, ""]
+    return "\n".join(lines).rstrip() + "\n"
+
+
+#: One line per kind, naming who receives it — the same vocabulary the
+#: Settings editor uses, so the repo and the app describe a task identically.
+KIND_META: dict[str, str] = {
+    "prd": "Drafting a feature's PRD",
+    "breakdown": "Splitting an approved PRD into stories",
+    "elaborate": "Expanding a rough story",
+    "wireframe": "Drawing a story's UI before it is built",
+    "plan": "Planning a story that belongs to a feature",
+    "standalone_plan": "Planning a standalone story",
+    "bug_rca": "Diagnosing a bug (root cause analysis)",
+    "code": "Building a story that belongs to a feature",
+    "standalone_code": "Building a standalone story",
+    "bug_fix": "Fixing a bug from an approved RCA",
+    "chore": "Building a chore (single shot)",
+    "merge": "Landing branches onto the default branch",
+    "test": "Executing test cases and reporting results",
+    "deploy": "Running and verifying one deployment",
+    "release": "Preparing a release",
+    "guidelines": "Proposing changes to the project's conventions",
+}
+
+
+def instruction_file_plan(
+    instructions: dict[str, str],
+    conventions: str | None,
+    docs_tree_enabled: bool,
+) -> tuple[dict[str, str], set[str]]:
+    """(files to write, paths to delete) for one publish — pure, so the whole
+    shape is testable without GitHub.
+
+    A kind resolving to blank is DELETED rather than written empty: a
+    repository must never carry an instruction the factory no longer
+    believes in, and an empty file reads as "no guidance" rather than "not
+    applicable".
+    """
+    from .instruction_files import CONVENTIONS_FILE, KIND_FILES, ROOT
+
+    files: dict[str, str] = {}
+    deletes: set[str] = set()
+
+    for kind, name in KIND_FILES.items():
+        path = f"{ROOT}/{name}"
+        body = (instructions.get(kind) or "").strip()
+        if body:
+            files[path] = body.rstrip() + "\n"
+        else:
+            deletes.add(path)
+
+    conv_path = f"{ROOT}/{CONVENTIONS_FILE}"
+    conv = (conventions or "").strip()
+    if conv:
+        files[conv_path] = conv.rstrip() + "\n"
+    else:
+        deletes.add(conv_path)
+
+    files["AGENTS.md"] = build_agents_index(
+        [k for k in KIND_FILES if (instructions.get(k) or "").strip()],
+        bool(conv),
+        docs_tree_enabled,
+    )
+    # us-99.2 AC4: CLAUDE.md is the pointer, unconditionally. It was already
+    # scaffolded that way; the preservation branch that merged a block into a
+    # CLAUDE.md carrying other content retires with the block itself.
+    files["CLAUDE.md"] = CLAUDE_MD_POINTER
+    return files, deletes
+
+
 def _strip_legacy_block(text: str) -> str:
     """Remove the pre-22.6 docs-tree-only region, if the repo still has one."""
     if LEGACY_START in text and LEGACY_END in text:
@@ -665,7 +797,7 @@ async def _sync_tree_locked(
     )
     if result.get("commit_sha") and not result.get("unchanged"):
         db.record_instructions_sync(
-            settings, project_id, block_hash(block), result["commit_sha"]
+            settings, project_id, digest, result["commit_sha"]
         )
     return {"files": sorted(files), "deleted": sorted(deletes), **result}
 
@@ -674,6 +806,20 @@ def block_hash(block: str) -> str:
     """US-22.7: what was last successfully committed, so a dispatch that
     changes nothing costs no GitHub call."""
     return hashlib.sha256(block.encode()).hexdigest()
+
+
+def publish_hash(files: dict[str, str], deletes: set[str]) -> str:
+    """US-99.2: the fingerprint of a whole publish — every file's content AND
+    every deletion.
+
+    Deletions are in the hash deliberately. The old `block_hash` could only
+    see the text of one block, so a kind whose instruction was cleared
+    produced no change it could detect and the stale file stayed in the
+    repository forever. Sorted, so map ordering can never move the digest.
+    """
+    parts = [f"F:{p}\n{files[p]}" for p in sorted(files)]
+    parts += [f"D:{p}" for p in sorted(deletes)]
+    return hashlib.sha256("\n\x00\n".join(parts).encode()).hexdigest()
 
 
 async def sync_instruction_files(
@@ -700,10 +846,16 @@ async def _sync_instruction_files_locked(
         return {"skipped": "no linked repository"}
     branch = project.get("default_branch") or "main"
 
-    block = build_instruction_block(
-        project.get("guidelines"), bool(project.get("docs_tree_enabled"))
+    # us-99.2: the whole published set, not a block. The hash covers every
+    # file AND every deletion, so a kind going blank is a change the next
+    # publish notices — the old block hash could not see that at all.
+    instructions = db.get_project_instructions_for_publish(settings, project_id)
+    files, deletes = instruction_file_plan(
+        instructions,
+        project.get("guidelines"),
+        bool(project.get("docs_tree_enabled")),
     )
-    digest = block_hash(block)
+    digest = publish_hash(files, deletes)
     if digest == (project.get("instructions_synced_hash") or ""):
         return {"unchanged": True, "hash": digest}
 
@@ -711,17 +863,13 @@ async def _sync_instruction_files_locked(
         token = await github_tokens.token_for_org(
             settings, str(project["org_id"]), repo_full
         )
-        owner, repo = repo_full.split("/", 1)
-        current = await _current_instruction_files(token, owner, repo, branch)
-        files = instruction_files(
-            block, current["AGENTS.md"], current["CLAUDE.md"]
-        )
         result = await commit_files(
             token,
             repo_full,
             branch,
             f"docs: build mill instructions ({trigger})",
             files,
+            deletes,
         )
     except Exception as e:  # noqa: BLE001 — availability beats freshness
         return {"error": str(e)}
