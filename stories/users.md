@@ -19,14 +19,17 @@ phases did *not* prove, the Phase 78 known gaps, and the
 retired-unbuilt-do-not-re-propose list — is in
 [APPLICATION.md → Delivery history](../APPLICATION.md#delivery-history).
 
-Sixty-one stories are open — Phase 91's usability work first (requested
+Seventy-two stories are open — Phase 91's usability work first (requested
 2026-08-13), then Phase 92's phone work, the public site and its beta gate
 (requested 2026-08-14), Phase 95's cost management (requested 2026-08-14),
 Phase 97's GitHub linkage repair (requested 2026-08-15, ahead of Phase 96
 because it is costing live runs today), Phase 96's per-type work-item paths
 and its runner-health addendum from the 2026-08-14 run-log analysis, then
 Phase 98's merge kind and Phase 99's move of the instructions into the
-repository (both requested 2026-08-15), and the residue carried out of
+repository (both requested 2026-08-15), Phase 100's collapse of the
+twenty-two guideline sections into one Agent Instructions document
+(requested 2026-08-15), Phase 101's rebuild of what a release hands the
+manager (requested 2026-08-15), and the residue carried out of
 Phases 85–89:
 
 | Order | Story | Title | Status |
@@ -87,11 +90,23 @@ Phases 85–89:
 | 54 | [us-99.5](us-99.5-the-agent-reads-the-file-and-mcp-fills-the-gap.md) | The agent reads the file, and MCP fills the gap | Testing |
 | 55 | [us-99.6](us-99.6-a-template-carries-the-whole-file-set.md) | A template carries the whole file set | Testing |
 | 56 | [us-99.7](us-99.7-a-template-edit-offers-itself.md) | A template edit offers itself to the projects using it | Testing |
-| 57 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
-| 58 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
-| 59 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
-| 60 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
-| 61 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+| 57 | [us-100.1](us-100.1-agent-instructions-is-one-document.md) | Agent Instructions is one document | New |
+| 58 | [us-100.2](us-100.2-agents-md-is-the-agent-instructions.md) | AGENTS.md is the Agent Instructions | New |
+| 59 | [us-100.3](us-100.3-the-tabs-say-what-they-hold.md) | The tabs say what they hold | New |
+| 60 | [us-100.4](us-100.4-a-template-defines-the-agent-instructions.md) | A template defines the Agent Instructions | New |
+| 61 | [us-100.5](us-100.5-the-refresh-run-proposes-a-document.md) | The refresh run proposes a document, not sections | New |
+| 62 | [us-100.6](us-100.6-versioning-is-agent-work.md) | Versioning is agent work | New |
+| 63 | [us-101.1](us-101.1-the-release-agent-reads-the-whole-story.md) | The release agent reads the whole story, not just its title | New |
+| 64 | [us-101.2](us-101.2-a-release-case-knows-its-section-and-its-story.md) | A release case knows its section, its story, and whether it is critical | New |
+| 65 | [us-101.3](us-101.3-every-check-is-a-step-and-an-expectation.md) | Every check is a step and an expectation | New |
+| 66 | [us-101.4](us-101.4-the-notes-are-a-declaration.md) | The notes are a declaration, not a wall of markdown | New |
+| 67 | [us-101.5](us-101.5-the-release-page-is-the-plan-a-tester-follows.md) | The release page is the plan a tester follows | New |
+| 68 | [us-101.6](us-101.6-the-release-instruction-reaches-the-agent.md) | The instruction the release agent reads is the one the manager edits | New |
+| 69 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
+| 70 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
+| 71 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
+| 72 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
+| 73 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
 
 **Phase 91 — Usability: the dashboard reads like the job** (drafted 2026-08-13,
 the manager's own list). Nothing here is broken; all of it is friction the
@@ -289,6 +304,67 @@ give each type its own words. us-99.7 lets a corrected template reach the
 projects already using it by **offering**, per instruction, using the
 `updated_by` stamp to say which ones the project has never touched and which
 would lose a local edit — and never publishing on the superadmin's behalf.
+
+**Phase 100 — One document, not twenty-two sections** (drafted 2026-08-15,
+the manager's request while inspecting project templates). Phase 99 put the
+instructions in the repository; this fixes what they *are*. A project's
+conventions are twenty-two catalog sections — Tech stack, Commands, Testing
+expectations, Versioning & Release and the rest — that the agent receives
+concatenated back into one document anyway. The structure buys nothing and
+costs a form with twenty-two boxes where a person wants an editor. It becomes
+one markdown document called **Agent Instructions** (us-100.1), the Guidelines
+section is decommissioned on a schedule rather than left to rot, and that
+document **is** `AGENTS.md`'s body — retiring `.buildmill/Guidelines.md`,
+which shipped hours earlier in us-99.3 and is superseded here (us-100.2).
+us-100.3 fixes the naming collision the manager actually reported: the tab
+labelled **Agent Instructions** today holds the *per-task* worker
+instructions, so the one place you would go for your project's instructions
+shows you a list of run-kind editors instead — both tabs get named for what
+they hold, in one vocabulary shared by project settings, both template
+editors, and the audit trail. us-100.4 narrows a template to exactly what a
+project has: the Agent Instructions document plus the per-task instructions,
+dropping `guideline` sections (retired) and `prompt` sections (platform
+machinery that does not belong in a project template). And us-100.5 reshapes
+the refresh run, which is section-addressed today and would otherwise keep
+writing to a table nothing reads — an agent now proposes a revised Agent
+Instructions **and** revised per-task instructions, accepted or rejected
+whole, because after Phase 99 improving what agents are told means more than
+one file.
+
+**Phase 101 — A release explains itself** (drafted 2026-08-15, the manager's
+request, against a hand-written UAT page as the quality bar). A release hands
+the manager two paragraphs of prose and an unchecked pile of test cases, and
+what he wants is the page he writes by hand: facts at the top, numbered
+sections in the order they must be worked, and one line per check that reads
+*do this → expect that*, tagged with the story that put it there. The gap is
+not prompt polish. The release agent's entire input is a version string, the
+`{issue_id, title, type, display_id}` snapshot from the cut, the **first line**
+of each commit message, and changed paths with `+`/`-` counts — no acceptance
+criteria, no plan, and no sight of the per-story test cases the server copies
+onto the release seconds after it submits. So us-101.1 gives it the
+requirement, the cases it is about to inherit, the modules the cut already
+computed and never showed it, and the migrations in the range — and fixes
+three defects found in that payload, of which the loudest is that every commit
+message arrives as a one-element **list**. us-101.2 gives a case the section,
+position and criticality a running order needs, and lets an agent tag its own
+case with the story it tests — `issue_id` has always existed on the row and
+`attach_release_test_cases` has never set it, so an agent-authored case is
+permanently unattributable. us-101.3 refuses a check that is a title with
+nothing behind it: `test_cases` on hand-back is optional and completely
+unvalidated today, so a release can ship with fifteen titles and no steps and
+every layer above calls it done. us-101.4 makes the notes a declaration the
+app renders rather than markdown or agent-authored HTML — not for taste, but
+because the UAT deploy fires *after* the notes are stored, so a masthead an
+agent writes claiming a deploy result is a fabrication, and because the only
+safe frame for agent HTML has an opaque origin and could never carry the
+verdict buttons that gate sign-off. us-101.5 assembles the page — and finds
+every masthead number already loaded by that page's own queries, making it a
+rendering story rather than a data one. us-101.6 closes the loop the others
+depend on: the project's **Release** worker instruction reaches nobody today,
+because instruction delivery is keyed on a `runs` row and a release prep has
+none — while the text sitting in that editable box still tells the agent to
+finish with `submit_release_run`, a tool that no longer exists, and to deploy
+to UAT itself, which the system does for it.
 
 **Phase 85 residue — us-85.3** (drafted 2026-08-12) closes the loop on the incident
 that motivated us-85.1's workspace verification. A run that fails on a broken bench —

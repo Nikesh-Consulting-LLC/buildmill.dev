@@ -41,8 +41,6 @@ import { ProjectSummaryCard } from "./project-summary-card";
 import { RefreshGuidelinesDialog } from "./refresh-guidelines-dialog";
 import { ProjectSetupReadinessCard } from "./project-setup-readiness-card";
 import { epicLabel, workItemDisplayId } from "@/lib/work-items";
-import { GuidelinesTab } from "./guidelines-tab";
-import type { GuidelineSectionRow } from "./guideline-section-card";
 import { LearningsTab } from "./learnings-tab";
 import { WorkerInstructionsTab } from "./worker-instructions-tab";
 import { GithubTab } from "./github-tab";
@@ -53,6 +51,7 @@ import {
 } from "./deployments-tab";
 import { SuitesTab, type SuiteRow } from "./suites-tab";
 import { EnvironmentTab } from "./environment-tab";
+import { AgentInstructionsEditor } from "./agent-instructions-editor";
 
 export default async function ProjectDetailPage({
   params,
@@ -77,7 +76,7 @@ export default async function ProjectDetailPage({
   const { data: project } = await supabase
     .from("projects")
     .select(
-      "id, org_id, name, slug, description, summary, repo_full_name, default_branch, created_at, updated_at, archived_at, env_runtime, env_setup_commands, env_notes, uat_branch, production_branch, dev_branch_strategy, guidelines_ready_at, guidelines_ready_by, worker_instructions_ready_at, worker_instructions_ready_by, docs_tree_enabled, build_mode, sequential_only, follow_build_order, route_feature_as_one, auto_approve_prd, auto_approve_plan, auto_approve_code, release_uat_deployment_id, release_prod_deployment_id, instructions_synced_at, instructions_synced_sha, budget_enabled, budget_usd, budget_started_at, org_template_id, presubmit_test_command"
+      "id, org_id, name, slug, description, summary, repo_full_name, default_branch, created_at, updated_at, archived_at, env_runtime, env_setup_commands, env_notes, uat_branch, production_branch, dev_branch_strategy, guidelines_ready_at, guidelines_ready_by, worker_instructions_ready_at, worker_instructions_ready_by, docs_tree_enabled, build_mode, sequential_only, follow_build_order, route_feature_as_one, auto_approve_prd, auto_approve_plan, auto_approve_code, release_uat_deployment_id, release_prod_deployment_id, instructions_synced_at, instructions_synced_sha, budget_enabled, budget_usd, budget_started_at, org_template_id, presubmit_test_command, agent_instructions"
     )
     .eq("id", id)
     .maybeSingle();
@@ -542,30 +541,16 @@ export default async function ProjectDetailPage({
           />
         </TabsContent>
 
+        {/* us-100.1/us-100.3: one document, not twenty-two section cards.
+            Migration 263 repointed assemble_project_guidelines at
+            projects.agent_instructions, so the old GuidelinesTab was saving
+            to a table nothing reads — an edit that appears to save and
+            changes nothing an agent sees. Replaced rather than left up. */}
         <TabsContent value="guidelines">
-          <GuidelinesTab
-            canRefresh={caps.can("manage_project")}
-            hasRepo={!!project.repo_full_name}
-            orgId={project.org_id}
+          <AgentInstructionsEditor
             projectId={project.id}
-            projectName={project.name}
-            sections={(guidelines ?? []) as GuidelineSectionRow[]}
-            environment={{
-              env_runtime: project.env_runtime ?? "",
-              env_setup_commands:
-                (project.env_setup_commands as string[] | null) ?? [],
-              env_notes: project.env_notes ?? "",
-            }}
-            guidelinesReadyAt={project.guidelines_ready_at}
-            guidelinesReadyByName={
-              project.guidelines_ready_by
-                ? readyActorNames[project.guidelines_ready_by] ?? null
-                : null
-            }
-            instructionsSyncedAt={project.instructions_synced_at}
-            instructionsSyncedSha={project.instructions_synced_sha}
-            repoFullName={project.repo_full_name}
-            defaultBranch={project.default_branch}
+            initial={project.agent_instructions ?? ""}
+            canEdit={caps.can("manage_project")}
           />
         </TabsContent>
 
