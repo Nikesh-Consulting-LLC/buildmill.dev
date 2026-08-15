@@ -5484,6 +5484,60 @@ def get_project_instructions_for_publish(
     return {r["kind"]: (r["content"] or "").strip() for r in rows}
 
 
+def get_template_instruction_offers(
+    settings: Settings, project_id: str
+) -> list[dict[str, Any]]:
+    """US-99.7: which of this project's instructions its template now differs
+    on, and whether taking the update would cost anything.
+
+    A template seeds a project once at creation and is never read again, so a
+    superadmin fixing a genuinely wrong instruction fixes it for projects
+    that do not exist yet and for nobody else. Pushing the fix automatically
+    is worse: a project that deliberately rewrote that instruction would have
+    its work reverted from somewhere its manager cannot see.
+
+    So the template OFFERS, and the offer can be honest about the risk
+    because the database already records who last wrote each instruction.
+    `worker_instructions.updated_by IS NULL` means the seeding trigger wrote
+    it and nobody has touched it since (the `stamp_worker_instructions_editor`
+    trigger from migration 052 maintains that) — taking the update costs
+    nothing. A non-null editor means a local edit would be lost, and the
+    manager is shown what.
+    """
+    if not _valid_uuid(project_id):
+        return []
+    with _connect(settings) as conn:
+        rows = conn.execute(
+            """
+            select wi.run_kind,
+                   wi.content        as project_content,
+                   s.content         as template_content,
+                   wi.updated_by is null as never_edited
+            from public.worker_instructions wi
+            join public.projects p on p.id = wi.project_id
+            join public.org_project_template_sections s
+              on s.org_template_id = p.org_template_id
+             and s.section_type = 'worker_instruction'
+             and s.section_key = wi.run_kind
+            where wi.project_id = %s
+              and coalesce(s.content, '') <> coalesce(wi.content, '')
+            order by wi.run_kind
+            """,
+            (project_id,),
+        ).fetchall()
+    return [
+        {
+            "kind": r["run_kind"],
+            "template_content": r["template_content"],
+            "project_content": r["project_content"],
+            # The whole point of the offer: safe means the project never
+            # touched this, so accepting reverts nothing.
+            "safe_to_accept": bool(r["never_edited"]),
+        }
+        for r in rows
+    ]
+
+
 def get_approved_plans(
     settings: Settings, issue_id: str, org_id: str
 ) -> dict[str, str | None]:
