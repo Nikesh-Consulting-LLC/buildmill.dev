@@ -22,14 +22,29 @@ export const RUN_KINDS = [
   "test",
   "release",
   "deploy",
+  "guidelines",
+  "elaborate",
+  "wireframe",
+  "merge",
 ] as const;
 
 export type RunKind = (typeof RUN_KINDS)[number];
 
 /** Every kind the factory dispatches today. us-13.11 (test), us-13.12
- * (release) and us-13.13 (deploy) shipped, so nothing is reserved. */
+ * (release) and us-13.13 (deploy) shipped, so nothing is reserved.
+ *
+ * us-98.1 brought this back into step with `runs_kind_check`. It had frozen
+ * at seven while the database moved to ten: `guidelines` (us-43),
+ * `elaborate` (us-44.1) and `wireframe` (us-48) were dispatchable and
+ * routable but read here as "not dispatchable yet". The header above
+ * rationalized understating as the safe direction to be wrong in — which is
+ * true of a kind that does not exist yet, and false of three that do. */
 export const DISPATCHABLE_RUN_KINDS: ReadonlySet<string> = new Set(RUN_KINDS);
 
+/** The kind as a noun, for a column or a badge. See RUN_KIND_RUN_PHRASES
+ * for the "<kind> run" form — they are different words for different
+ * places, and they used to be two exports with the same name in two
+ * modules (us-98.1). */
 export const RUN_KIND_LABELS: Record<RunKind, string> = {
   prd: "PRD",
   breakdown: "Breakdown",
@@ -38,6 +53,26 @@ export const RUN_KIND_LABELS: Record<RunKind, string> = {
   test: "Test",
   release: "Release",
   deploy: "Deploy",
+  guidelines: "Guidelines",
+  elaborate: "Elaborate",
+  wireframe: "Wireframe",
+  merge: "Merge",
+};
+
+/** The kind as the run itself — "a Plan run" — for prose that names what is
+ * about to happen. */
+export const RUN_KIND_RUN_PHRASES: Record<RunKind, string> = {
+  prd: "PRD run",
+  breakdown: "Breakdown run",
+  plan: "Plan run",
+  code: "Code run",
+  test: "Test run",
+  release: "Release run",
+  deploy: "Deploy run",
+  guidelines: "Guidelines run",
+  elaborate: "Elaboration run",
+  wireframe: "Wireframe run",
+  merge: "Merge run",
 };
 
 /** What granting this capability actually does, in the operator's terms —
@@ -50,6 +85,10 @@ export const RUN_KIND_GRANT_HELP: Record<RunKind, string> = {
   test: "may claim verification runs and report per-case results",
   release: "may prepare release cuts and promotion PRs",
   deploy: "may execute deployments, under the deployment's own rails",
+  guidelines: "may propose changes to the project's guidelines",
+  elaborate: "may expand a story's body and acceptance criteria",
+  wireframe: "may draw wireframes for a story's UI surface",
+  merge: "may land named branches onto the default branch",
 };
 
 export function isDispatchable(kind: string): boolean {

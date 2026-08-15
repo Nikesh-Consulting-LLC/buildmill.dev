@@ -48,11 +48,21 @@ class MergeConflict(Exception):
 
 
 async def _merge_pr(
-    settings: Settings, user_token: str, org_id: str, pr_url: str | None
+    settings: Settings,
+    user_token: str,
+    org_id: str,
+    pr_url: str | None,
+    merge_method: str = "squash",
 ) -> str:
     """Merge the run's PR. Simulated PRs (and missing tokens) skip GitHub.
     Resolves the credential from **the run's own org** via github_tokens
-    (US-76.4; see its preference order, US-3.15)."""
+    (US-76.4; see its preference order, US-3.15).
+
+    Squash is right for a work item's PR — one item, one commit. us-98.6
+    passes `merge` for a merge run: squashing would collapse every source
+    branch's history into a single new commit and destroy the only record of
+    where those changes came from, which is the same reason release PRs to
+    `prod` are never squashed."""
     if not pr_url or pr_url.startswith(SIMULATED_PREFIX):
         return "simulated"
 
@@ -78,7 +88,9 @@ async def _merge_pr(
         raise ReportedHTTPException(status_code=409, detail=e.message, context=context)
 
     try:
-        merge_sha = await github.merge_pull_request(token, owner, repo, number)
+        merge_sha = await github.merge_pull_request(
+            token, owner, repo, number, merge_method
+        )
     except github.GitHubError as e:
         status = getattr(e, "upstream_status", None)
         if status == 401:
@@ -346,7 +358,12 @@ async def approve(
 
     try:
         merge_result = await _merge_pr(
-            settings, user.token, runs[0]["org_id"], runs[0]["pr_url"]
+            settings,
+            user.token,
+            runs[0]["org_id"],
+            runs[0]["pr_url"],
+            # us-98.6: a merge keeps every source commit reachable.
+            "merge" if runs[0].get("kind") == "merge" else "squash",
         )
     except MergeConflict as e:
         # Nothing else has run yet (approve_run_precheck only reads) — the

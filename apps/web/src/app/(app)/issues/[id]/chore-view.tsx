@@ -1,5 +1,6 @@
 import { WorkItemTabs } from "./work-item-tabs";
 import { tabsForType, type WorkItemTab } from "./work-item-tab-config";
+import { MergeBranchesSection } from "./merge-branches-section";
 import {
   ComplexitySection,
   DescriptionSection,
@@ -32,6 +33,13 @@ export function ChoreView({
             <ComplexitySection data={data} />
             <ParentPrdSection data={data} />
             <DescriptionSection data={data} title="Description" />
+            {/* us-98.2: a chore is also how a merge is expressed — the
+                branches it names decide whether dispatch builds or merges. */}
+            <MergeBranchesSection
+              issueId={data.issue.id}
+              projectId={data.issue.project_id}
+              status={data.issue.status}
+            />
           </div>
         ),
         ...commonSlots(data),

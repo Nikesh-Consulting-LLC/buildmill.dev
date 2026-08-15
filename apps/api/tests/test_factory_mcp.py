@@ -110,6 +110,9 @@ def test_all_tools_listed(mcp_client):
         "get_run_status",
         "get_pr_status",
         "release_work",
+        # us-98.5: a merge that cannot finish must have a way to say so —
+        # before this, an MCP agent could only release the claim silently.
+        "report_merge_failure",
     ):
         assert tool in resp.text
 

@@ -1236,6 +1236,75 @@ async def get_work_context(run_id: str, ctx: Context) -> dict[str, Any]:
             ),
         )
 
+    if run["kind"] == "merge":
+        # US-98.3: the one kind whose subject is several refs. Everything the
+        # agent needs to know is the base, the branches, and the heads frozen
+        # at dispatch — a sha recorded here rather than read live is what
+        # makes "the branch moved under me" impossible to miss later.
+        m_base = ic.get("merge_base") or {}
+        m_base_branch = m_base.get("branch") or ic.get("default_branch") or "main"
+        m_branches = [
+            b for b in (ic.get("merge_branches") or []) if isinstance(b, dict)
+        ]
+        md = (
+            f"# {run.get('issue_title') or ic.get('title', 'Work item')}\n\n"
+            "- Kind: **merge** (land these branches onto the base)\n\n"
+            "## What to land\n\n"
+            f"- Base: `{m_base_branch}`"
+            + (f" @ `{m_base['head_sha']}`" if m_base.get("head_sha") else "")
+            + "\n"
+        )
+        for b in m_branches:
+            md += (
+                f"- `{b.get('branch')}`"
+                + (f" @ `{b.get('head_sha')}`" if b.get("head_sha") else "")
+                + "\n"
+            )
+        md += (
+            f"\nRead any of them with `get_workspace(run_id, ref=...)` — your "
+            f"claim licenses these "
+            f"{len(m_branches)} branch(es) and the base, and nothing else.\n"
+            "\n**All or nothing.** Every branch above must be merged, or you "
+            "submit none of them. If one defeats you, report which, the "
+            "paths that conflicted, and what you tried.\n"
+        )
+        if (template or "").strip():
+            md += f"\n\n## Instructions\n\n{template}"
+        if (run.get("instruction_set") or "").strip():
+            md += f"\n\n## Instruction set\n\n{run['instruction_set']}"
+        md += docs_md + discussion_md
+        return _next(
+            {
+                "markdown": md,
+                "kind": "merge",
+                "repo_full_name": ic.get("repo_full_name")
+                or run.get("project_repo_full_name"),
+                "default_branch": ic.get("default_branch")
+                or run.get("default_branch"),
+                "merge_base": {
+                    "branch": m_base_branch,
+                    "head_sha": m_base.get("head_sha"),
+                },
+                "merge_branches": [
+                    {"branch": b.get("branch"), "head_sha": b.get("head_sha")}
+                    for b in m_branches
+                ],
+                "instructions": template,
+                "instruction_set": run.get("instruction_set"),
+                "documents": docs_out,
+                "comments": comments_out,
+            },
+            (
+                "get_workspace",
+                "fetch each branch by name with `ref=` — and the base — then "
+                "merge them locally",
+            ),
+            (
+                "report_progress",
+                "narrate as you go; a note also extends your lease",
+            ),
+        )
+
     request = ctx.request_context.request if ctx.request_context else None
     base = str(request.base_url).rstrip("/") if request is not None else ""
     # US-7.3: the working branch derives from the project's dev branching
@@ -1840,6 +1909,123 @@ async def _held_run_and_token(
     return run, token, None
 
 
+def _merge_refs(run: dict[str, Any]) -> tuple[str, list[str]] | None:
+    """US-98.3: the refs a merge run is licensed to read — its base and the
+    branches the manager named — or None when this is not a merge run.
+
+    A merge is the first kind of work that is inherently about several refs
+    at once, and every repo-reading tool serves one. The obvious shortcut is
+    `get_project_workspace`, which already takes an arbitrary ref — but that
+    is gated on the worker's standing `no_claim_checkout` capability, which
+    is a permission to browse ANY ref of any project it can see. A worker
+    trusted to land a merge should not have to be trusted with that.
+
+    So the CLAIM is the authority instead: the run declared its branches at
+    dispatch (us-98.2), and the licence is exactly that set plus the base.
+    It is as wide as the job and no wider, and it expires with the claim.
+    """
+    if (run.get("kind") or "") != "merge":
+        return None
+    ic = run.get("_repo_ic") or run.get("input_context") or {}
+    base = (ic.get("merge_base") or {}).get("branch") or ic.get(
+        "default_branch"
+    ) or "main"
+    branches = [
+        b.get("branch")
+        for b in (ic.get("merge_branches") or [])
+        if isinstance(b, dict) and b.get("branch")
+    ]
+    return base, branches
+
+
+def _refused_ref(run: dict[str, Any], ref: str) -> dict[str, Any] | None:
+    """None when `ref` is allowed, an error answer when it is not.
+
+    Silent on every non-merge run, so no existing kind's reach changes."""
+    licence = _merge_refs(run)
+    if licence is None or not (ref or "").strip():
+        return None
+    base, branches = licence
+    allowed = [base, *branches]
+    if ref.strip() in allowed:
+        return None
+    return _err(
+        f"this merge run is not licensed to read '{ref}'",
+        "a merge may read only its base and the branches it was asked to "
+        "land: " + ", ".join(allowed),
+    )
+
+
+def _merge_declaration_error(
+    run: dict[str, Any],
+    merged_branches: list[dict[str, str]] | None,
+    allow_partial: bool,
+) -> dict[str, Any] | None:
+    """US-98.4/98.5: a merge accounts for every branch, or for none.
+
+    None when the submission may proceed, an error answer when it may not.
+
+    A partial merge is the kind of result that looks like progress and costs
+    more than starting over: ask for six branches, get five, and the pull
+    request in front of the manager now means something nobody asked for.
+    This runs BEFORE a single blob is written — us-98.5's "nothing partial
+    survives a failure" is only true if nothing was created in the first
+    place.
+    """
+    if (run.get("kind") or "") != "merge":
+        if merged_branches:
+            return _err(
+                f"merged_branches means nothing on a {run.get('kind')} run",
+                "only a merge run declares what it landed",
+            )
+        return None
+
+    licence = _merge_refs(run)
+    asked = set(licence[1] if licence else [])
+    entries = [e for e in (merged_branches or []) if isinstance(e, dict)]
+    declared = {
+        (e.get("branch") or "").strip()
+        for e in entries
+        if (e.get("branch") or "").strip()
+    }
+
+    if allow_partial:
+        return _err(
+            "allow_partial is not available on a merge",
+            "a merge lands every branch it was given or none of them — if "
+            "one defeats you, say which and stop rather than submitting "
+            "the rest",
+        )
+    if not declared:
+        return _err(
+            "a merge submission must declare what it merged",
+            "pass merged_branches: one {branch, head_sha, outcome} per "
+            "branch you were asked to land — " + ", ".join(sorted(asked)),
+        )
+    missing = sorted(asked - declared)
+    if missing:
+        return _err(
+            "this merge does not account for every branch: "
+            + ", ".join(missing),
+            "a merge is all or nothing. Merge them and declare each one, or "
+            "report which branch defeated you and stop — a partial merge is "
+            "not a smaller success, it is a different result.",
+        )
+    extra = sorted(declared - asked)
+    if extra:
+        return _err(
+            "these branches are not part of this run: " + ", ".join(extra),
+            "this merge was asked for: " + ", ".join(sorted(asked)),
+        )
+    if any(not (e.get("outcome") or "").strip() for e in entries):
+        return _err(
+            "every branch needs an outcome",
+            'say what happened to each: "clean", or the reconciliation you '
+            "made and why. The manager reads this before the diff.",
+        )
+    return None
+
+
 async def _project_repo_and_token(
     project_id: str,
     tool: str = "repo_read",
@@ -1979,6 +2165,9 @@ async def get_repo_tree(
     run, token, err = await _held_run_and_token(run_id, "get_repo_tree")
     if err:
         return err
+    refused = _refused_ref(run, ref)
+    if refused:
+        return refused
     ic = run["_repo_ic"]
     repo_full = run["_repo_full_name"]
     owner, repo = repo_full.split("/", 1)
@@ -2210,6 +2399,9 @@ async def read_repo_file(
     run, token, err = await _held_run_and_token(run_id, "read_repo_file")
     if err:
         return err
+    refused = _refused_ref(run, ref)
+    if refused:
+        return refused
     ic = run["_repo_ic"]
     repo_full = run["_repo_full_name"]
     owner, repo = repo_full.split("/", 1)
@@ -2360,7 +2552,7 @@ async def _workspace_delta(
 
 
 @mcp.tool(**_read("Get workspace snapshot"))
-async def get_workspace(run_id: str) -> dict[str, Any]:
+async def get_workspace(run_id: str, ref: str = "") -> dict[str, Any]:
     """Get your claimed run's working tree — with zero git tooling and zero
     GitHub access.
 
@@ -2380,12 +2572,30 @@ async def get_workspace(run_id: str) -> dict[str, Any]:
     later declares as its base. Bases follow the get_repo_tree rules (work
     branch when it exists, else the default branch), so a continuing branch is
     never reset to main. Calling again is always safe.
+
+    `ref` — **merge runs only** (us-98.3). A merge is asked to land several
+    branches, so it needs to read several: pass the branch you want. Your
+    claim licenses exactly the branches the manager named plus the base, and
+    nothing else. An explicit ref always answers `full`, never `delta`.
+    On any other run kind a `ref` is refused rather than ignored, so no
+    existing run gains reach it did not have.
     """
     import base64 as _b64
 
     run, token, err = await _held_run_and_token(run_id, "get_workspace")
     if err:
         return err
+    wanted = (ref or "").strip()
+    if wanted and _merge_refs(run) is None:
+        return _err(
+            "get_workspace does not take a ref on this run",
+            "only a merge run reads more than one branch; everything else "
+            "gets its own working tree",
+        )
+    refused = _refused_ref(run, wanted)
+    if refused:
+        return refused
+
     settings = get_settings()
     ic = run["_repo_ic"]
     repo_full = run["_repo_full_name"]
@@ -2395,7 +2605,7 @@ async def get_workspace(run_id: str) -> dict[str, Any]:
     project_id = str(run.get("project_id") or "")
     try:
         base_ref = await repo_browse.resolve_ref(
-            token, ic, str(run["issue_id"]), "",
+            token, ic, str(run["issue_id"]), wanted,
             run_branch=db.resolve_working_branch(settings, run)[0],
         )
         commit = await github.get_commit(token, owner, repo, base_ref)
@@ -2403,10 +2613,19 @@ async def get_workspace(run_id: str) -> dict[str, Any]:
     except github.GitHubError as e:
         return _github_err(e)
 
+    # US-98.3: an explicit ref NEVER takes the delta path, and never records a
+    # delivery. The delta manifest is keyed on (worker, project) and means
+    # "the tree you last held" — fetching branch B after branch A would answer
+    # a diff BETWEEN TWO BRANCHES dressed as a workspace update, and then
+    # record B's paths as what the worker holds. The failure would not be an
+    # error; it would be a silently wrong tree, which is the one outcome a
+    # merge cannot survive.
+    multi_ref = bool(wanted)
+
     # US-31.6: try the incremental answer first.
     prior = (
         db.get_workspace_delivery(settings, str(worker["id"]), project_id)
-        if project_id
+        if project_id and not multi_ref
         else None
     )
     if prior and prior["base_sha"]:
@@ -2511,7 +2730,8 @@ async def get_workspace(run_id: str) -> dict[str, Any]:
     # US-31.6: remember the full tree we just served, so the NEXT call can be
     # a delta. The path list comes from the tree at this sha, not from the zip
     # — the zip is opaque here and the tree is one API call.
-    if project_id:
+    # US-98.3: skipped for an explicit ref — see `multi_ref` above.
+    if project_id and not multi_ref:
         try:
             tree = await github.get_tree(token, owner, repo, base_sha)
             paths = [
@@ -3992,6 +4212,131 @@ async def submit_code_work(
     )
 
 
+def _merge_failure_report(
+    run: dict[str, Any],
+    branch: str,
+    conflicting_paths: list[str] | None,
+    tried: str,
+) -> tuple[str | None, dict[str, Any] | None]:
+    """US-98.5 AC3: the text of a named merge failure, or a refusal.
+
+    Returns `(error_text, None)` when the report is usable, `(None, err)`
+    when it is not. Pure, so the shape is testable without a database.
+
+    A merge that cannot be done is a legitimate answer and has to arrive as
+    one. What makes it useful rather than merely honest is that it names the
+    branch, the paths, and the attempt — the retry run receives this verbatim
+    as feedback, so a vague "it conflicted" costs the next agent the same
+    discovery all over again.
+    """
+    if (run.get("kind") or "") != "merge":
+        return None, _err(
+            f"this is a {run.get('kind')} run, not a merge",
+            "only a merge reports a branch it could not land",
+        )
+    name = (branch or "").strip()
+    if not name:
+        return None, _err(
+            "say which branch defeated you",
+            "the retry reads this to know where to start",
+        )
+    licence = _merge_refs(run)
+    asked = list(licence[1] if licence else [])
+    if name not in asked:
+        return None, _err(
+            f"'{name}' is not one of this run's branches",
+            "this merge was asked for: " + ", ".join(asked),
+        )
+    if not (tried or "").strip():
+        return None, _err(
+            "say what you tried",
+            "the next agent repeats whatever you do not rule out",
+        )
+    paths = [p.strip() for p in (conflicting_paths or []) if (p or "").strip()]
+    text = (
+        f"MERGE FAILED — could not land `{name}` onto "
+        f"`{(licence[0] if licence else 'the base')}`.\n\n"
+        + (
+            "Conflicting paths:\n"
+            + "\n".join(f"- `{p}`" for p in paths)
+            + "\n\n"
+            if paths
+            else "No specific paths were named.\n\n"
+        )
+        + f"What was tried:\n{tried.strip()}\n\n"
+        + "This merge was all-or-nothing, so nothing was submitted: the "
+        + f"other {max(len(asked) - 1, 0)} branch(es) were not landed either."
+    )
+    return text, None
+
+
+@mcp.tool(**_write("Report a branch a merge could not land"))
+async def report_merge_failure(
+    run_id: str,
+    branch: str,
+    tried: str,
+    conflicting_paths: list[str] | None = None,
+) -> dict[str, Any]:
+    """Stop a merge you cannot finish, and say why — us-98.5.
+
+    A merge is all or nothing, so a branch you cannot resolve ends the whole
+    run. That is a real answer, not a breakdown: report it here rather than
+    submitting the branches that did work, and rather than releasing the
+    claim silently.
+
+    Name `branch` (the one that defeated you), `tried` (what you attempted —
+    the retry repeats whatever you do not rule out) and, where you can,
+    `conflicting_paths`. The run ends failed with this attached, the chore
+    goes back to a state the manager can redispatch, and this text reaches
+    the next attempt as its feedback.
+
+    The failure is classed **work-fault**: the code genuinely conflicts, which
+    is the work's problem and not the machine's, so it must not count against
+    runner health.
+    """
+    from .routers.worker import Submit, perform_submit
+
+    settings = get_settings()
+    worker = _worker()
+    run = db.get_worker_run(settings, run_id, str(worker["org_id"]))
+    if not run:
+        return _err("run not found", "list_my_work shows what you hold")
+    if str(run.get("worker_id") or "") != str(worker["id"]):
+        return _err("you do not hold this run", "claim_work it first")
+
+    error_text, refusal = _merge_failure_report(
+        run, branch, conflicting_paths, tried
+    )
+    if refusal:
+        return refusal
+
+    try:
+        await perform_submit(
+            settings,
+            worker,
+            run_id,
+            # us-98.5 AC5: work-fault. A merge that fails because two changes
+            # genuinely contradict is not a broken bench, and classing it as
+            # one would feed the repair ladder a false premise — the mistake
+            # us-27.12 was written about.
+            Submit(error=error_text, fault_class="work-fault"),
+        )
+    except HTTPException as e:
+        return _err(
+            str(e.detail),
+            getattr(e, "hint", "check claim_work / the run id and retry"),
+        )
+    return {
+        "markdown": (
+            f"# Merge stopped\n\n`{branch}` could not be landed, so nothing "
+            "was submitted. The manager has the reason and can redispatch."
+        ),
+        "reported": True,
+        "branch": branch,
+        "fault_class": "work-fault",
+    }
+
+
 def _resolve_member_ids(
     members: list[dict[str, Any]], given: list[str]
 ) -> tuple[list[str], list[str]]:
@@ -4025,6 +4370,7 @@ async def submit_changeset(
     notes: str = "",
     stdout: str = "",
     test_cases: list[dict[str, str]] | None = None,
+    merged_branches: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Hand back code as changed files — the factory does all the git:
     builds the commit from base_sha, pushes the work branch with the
@@ -4045,7 +4391,16 @@ async def submit_changeset(
     deliberately. A single-story run needs none of this: omit all three.
     notes reaches the manager at the review gate (and the item's
     thread) — flag risks and open questions there; it is part of
-    finishing the work."""
+    finishing the work.
+
+    **Merge runs** (us-98.4/98.5) hand back through here too: the merged tree
+    is a changeset. You must also pass `merged_branches` — one entry per
+    branch you were asked to land, `{branch, head_sha, outcome}`, where
+    `outcome` says what happened: "clean", or the reconciliation you made and
+    why. It is **all or nothing**: a declaration that does not cover every
+    branch in your run is refused, and `allow_partial` is not available. The
+    manager reads that account before the diff, because it is the only place
+    a silently dropped change would show."""
     settings = get_settings()
     worker = _worker()
     run = db.get_worker_run(settings, run_id, str(worker["org_id"]))
@@ -4053,12 +4408,16 @@ async def submit_changeset(
         return _err("run not found", "list_available_work shows valid run ids")
     if str(run.get("worker_id") or "") != str(worker["id"]):
         return _err("you do not hold this run", "claim_work it first")
-    if run["kind"] != "code":
+    if run["kind"] not in ("code", "merge"):
         return _err(
             f"this is a {run['kind']} run — changesets are for code runs",
             "hand back with "
             + ("submit_plan" if run["kind"] == "plan" else "submit_prd"),
         )
+
+    gate = _merge_declaration_error(run, merged_branches, allow_partial)
+    if gate:
+        return gate
 
     # US-27.1: attribution and finality are settled BEFORE anything touches
     # GitHub. A commit that cannot be attributed to a story in this run is a
@@ -4311,6 +4670,24 @@ async def submit_changeset(
     # review pipeline regardless of transport.
     from .routers.worker import Submit, perform_submit
 
+    # us-98.4 AC3: the per-branch account rides the notes, which is what
+    # becomes the pull request body and what the manager reads at the review
+    # gate. It leads, ahead of the agent's own summary: a plain diff cannot
+    # distinguish "resolved by taking one side" from "merged cleanly", so the
+    # account is the only place a silent loss would show.
+    submit_notes = notes
+    if run["kind"] == "merge" and merged_branches:
+        account = "\n".join(
+            f"- `{e.get('branch')}` @ `{(e.get('head_sha') or '')[:7]}` — "
+            f"{(e.get('outcome') or '').strip()}"
+            for e in merged_branches
+        )
+        submit_notes = (
+            "## Branches landed\n\n"
+            + account
+            + ("\n\n## Notes\n\n" + notes if (notes or "").strip() else "")
+        )
+
     try:
         sub = await perform_submit(
             settings,
@@ -4318,7 +4695,7 @@ async def submit_changeset(
             run_id,
             Submit(
                 branch_ref=branch,
-                notes=notes or None,
+                notes=submit_notes or None,
                 stdout=stdout or None,
                 # us-96.8 AC2: the MCP transport's ONE route for test cases —
                 # a structured field on the submit, never a scratch file the
