@@ -393,31 +393,43 @@ def test_chore_retry_is_always_code(db, project):
 
 
 def test_chore_instruction_kind_resolves_chore(db, project):
-    """instruction_kind_for maps a chore's code run to 'chore' and leaves
-    everything else alone — including a story's plan/code."""
+    """instruction_kind_for maps a chore's code run to 'chore' and leaves a
+    feature-child story on plan/code. (A parentless story maps to the
+    standalone pair since us-96.3 — pinned separately below.)"""
     chore_id = _insert_issue(db, project, type="chore", status="draft")
-    story_id = _insert_issue(db, project, status="draft")
+    feature_id = _insert_issue(
+        db, project, type="feature", status="draft", acceptance_criteria="[]"
+    )
+    child_id = _insert_issue(db, project, status="draft")
+    # _insert_issue's INSERT enumerates fixed columns, so parenting is a
+    # second statement, not a kwarg.
+    db.execute(
+        "update public.issues set parent_id = %s where id = %s",
+        (feature_id, child_id),
+    )
+    db.commit()
     try:
         row = db.execute(
             """
             select public.instruction_kind_for(%s, 'code') as chore_code,
                    public.instruction_kind_for(%s, 'plan') as chore_plan,
-                   public.instruction_kind_for(%s, 'code') as story_code,
-                   public.instruction_kind_for(%s, 'plan') as story_plan,
+                   public.instruction_kind_for(%s, 'code') as child_code,
+                   public.instruction_kind_for(%s, 'plan') as child_plan,
                    public.instruction_kind_for(null, 'code') as no_issue
             """,
-            (chore_id, chore_id, story_id, story_id),
+            (chore_id, chore_id, child_id, child_id),
         ).fetchone()
         assert row["chore_code"] == "chore"
         # A chore never has a plan run; identity here is harmless and keeps
         # the mapping total.
         assert row["chore_plan"] == "plan"
-        assert row["story_code"] == "code"
-        assert row["story_plan"] == "plan"
+        assert row["child_code"] == "code"
+        assert row["child_plan"] == "plan"
         assert row["no_issue"] == "code"
     finally:
         _cleanup_issue(db, chore_id)
-        _cleanup_issue(db, story_id)
+        _cleanup_issue(db, child_id)
+        _cleanup_issue(db, feature_id)
 
 
 # ---------------------------------------------------------------- us-96.2
@@ -463,3 +475,22 @@ def test_bug_instruction_kinds_resolve_rca_and_fix(db, project):
         assert row["c"] == "bug_fix"
     finally:
         _cleanup_issue(db, issue_id)
+
+
+# ---------------------------------------------------------------- us-96.3
+def test_standalone_story_instruction_kinds(db, project):
+    """A story with no parent feature resolves the standalone pair; the
+    feature-child side is pinned in the us-96.1 block above."""
+    story_id = _insert_issue(db, project, status="draft")
+    try:
+        row = db.execute(
+            """
+            select public.instruction_kind_for(%s, 'plan') as p,
+                   public.instruction_kind_for(%s, 'code') as c
+            """,
+            (story_id, story_id),
+        ).fetchone()
+        assert row["p"] == "standalone_plan"
+        assert row["c"] == "standalone_code"
+    finally:
+        _cleanup_issue(db, story_id)
