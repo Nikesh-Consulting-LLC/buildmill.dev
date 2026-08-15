@@ -9,7 +9,7 @@ the db layer stubbed.
 
 from pathlib import Path
 
-from app.factory_mcp import _CATALOG_SECTION_KEYS
+from app.factory_mcp import _AGENTS_KEY, _AGENTS_PATH, _resolve_proposal_file
 
 ROOT = Path(__file__).resolve().parents[2].parent
 MIGRATIONS = ROOT / "infra" / "supabase" / "migrations"
@@ -117,27 +117,19 @@ def test_a_still_pending_row_closes_nothing():
 # ------------------------------------------------------------------- the catalog
 
 
-def test_api_catalog_matches_the_web_catalog():
-    """The API validates section_key against a copy of the web app's catalog
-    (it does not read the web source). This is the test that keeps the two
-    honest — a key added on one side and not the other means an agent's
-    proposal is refused for naming a section the manager can see."""
-    ts = (
-        ROOT / "apps" / "web" / "src" / "lib" / "project-guidelines-catalog.ts"
-    ).read_text(encoding="utf-8")
-    web_keys = set()
-    for line in ts.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("key:") and stripped.endswith(","):
-            web_keys.add(stripped.split('"')[1])
-    assert web_keys, "no catalog keys parsed from the web catalog"
-    assert web_keys == _CATALOG_SECTION_KEYS
-
-
-def test_the_deployment_section_is_in_the_catalog():
-    # US-43.4: a catalog entry, not a custom section — so it carries guidance,
-    # can be re-proposed against by key, and can be required of the pass.
-    assert "deployment" in _CATALOG_SECTION_KEYS
+def test_a_proposal_is_addressed_by_file_not_by_catalog_section():
+    """us-100.5: the twenty-two-key catalog is gone. A proposal names a
+    FILE — `agents` (AGENTS.md) or a run kind (its .buildmill file) — and
+    the resolver accepts the shapes an agent might send for the same
+    file."""
+    assert _resolve_proposal_file("agents") == (_AGENTS_KEY, _AGENTS_PATH)
+    assert _resolve_proposal_file("AGENTS.md") == (_AGENTS_KEY, _AGENTS_PATH)
+    assert _resolve_proposal_file("code") == ("code", ".buildmill/Code.md")
+    assert _resolve_proposal_file(".buildmill/Code.md") == ("code", ".buildmill/Code.md")
+    assert _resolve_proposal_file("Code.md") == ("code", ".buildmill/Code.md")
+    # the old catalog keys name nothing now
+    for old_key in ("deployment", "tech-stack", "commands", "custom", ""):
+        assert _resolve_proposal_file(old_key) is None, old_key
 
 
 # --------------------------------------------- the two defects found on a live DB
@@ -380,8 +372,8 @@ def test_guidelines_has_its_own_branch():
 def test_the_brief_carries_what_the_run_needs():
     src = _work_context_source()
     branch = src.split('if run["kind"] == "guidelines":')[1].split("return _next")[0]
-    for needed in ("template", "current_guidelines", "work_items",
-                   "scope_instruction", "focus"):
+    for needed in ("template", "agent_instructions", "instructions",
+                   "work_items", "scope_instruction", "focus"):
         assert needed in branch, needed
 
 
@@ -393,10 +385,12 @@ def test_the_brief_names_the_subject_and_warns_off_the_generated_file():
     assert "submit_guidelines_refresh" in src
 
 
-def test_an_empty_section_is_shown_as_needing_writing():
-    # A placeholder that is present and blank is a different instruction from
-    # a section that does not exist — omitting it loses that.
-    assert "_empty — needs writing_" in _work_context_source()
+def test_an_empty_file_is_shown_as_such():
+    # us-100.5: a blank per-task file and an empty document are each shown
+    # as what they are, not omitted — omission would read as "fine".
+    src = _work_context_source()
+    assert "_blank — this kind currently publishes no file_" in src
+    assert "_empty — this project has no Agent Instructions yet._" in src
 
 
 def test_list_run_documents_guards_a_run_with_no_work_item():

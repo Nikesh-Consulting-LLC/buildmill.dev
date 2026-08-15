@@ -1,19 +1,29 @@
 "use client";
 
-// Phase 67 (us-67.2): the superadmin's project templates — a named bundle of
-// guideline sections, per-run-kind worker instructions, and the two
-// project-shaped thinking prompts (test-case elaboration, deploy-script
-// generation) that a new project silently inherits a copy of (us-67.1).
-// Exactly one template is the Default every org/project falls back to.
+// Phase 67 (us-67.2) → Phase 100 (us-100.4): the superadmin's project
+// templates. A template is the contents of the files a new project will
+// publish — the AGENTS.md body (Agent Instructions) and one `.buildmill/*.md`
+// per task kind — and nothing else. Exactly one template is the Default
+// every org/project falls back to.
 //
-// Layout: templates down the left, each expandable to its section tree
-// (Guideline sections / Worker instructions / Prompts); the right pane shows
-// exactly one section's editor at a time — the shared MarkdownEditor's
-// Write/Preview tabs — for whichever section is selected in the tree.
+// Layout: templates down the left, each expandable to its file tree; the
+// right pane edits exactly one file at a time (the shared MarkdownEditor's
+// Write/Preview tabs). The tree and the editor are the same components the
+// org's copies use (`template-files-editor.tsx`), so a superadmin authoring
+// here sees what a manager will get.
+//
+// Storage is unchanged from Phase 67: the document is
+// `project_templates.agent_instructions` (migration 265) and each per-task
+// file is a `worker_instruction` section keyed by kind. The `guideline` and
+// `prompt` section rows that Phase 67 also stored are deliberately left in
+// the database (migration 265 deletes nothing) but are no longer offered
+// here: guideline sections became the document (us-100.1) and prompt
+// sections are platform-global LLM prompts that no agent reads. Those still
+// live at /admin/prompt-templates.
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, ChevronRight, Copy, EyeOff, Eye, Plus } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, EyeOff, Eye } from "lucide-react";
 
 import { apiCall } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
@@ -27,11 +37,21 @@ import {
   DialogTitle,
   DialogClose,
 } from "@/components/ui/dialog";
-import { MarkdownEditor } from "@/components/markdown-editor";
 import { cn } from "@/lib/utils";
 import { toastError, toastSuccess } from "@/components/ui/toast";
 import { confirmDialog } from "@/components/ui/confirm-dialog";
-import { KIND_FILES } from "@/lib/instruction-files";
+import {
+  AGENTS_KEY,
+  contentFor,
+  filledFileCount,
+  templateFileForKey,
+  totalFileCount,
+  type TemplateContents,
+} from "@/lib/template-files";
+import {
+  TemplateFileEditor,
+  TemplateFileTree,
+} from "@/components/template-files-editor";
 
 type Template = {
   id: string;
@@ -42,43 +62,21 @@ type Template = {
   is_default: boolean;
   is_disabled: boolean;
   version: number;
-  section_count: number;
+  agent_instructions: string;
+  file_count: number;
 };
-
-type SectionType = "guideline" | "worker_instruction" | "prompt";
 
 type Section = {
-  section_type: SectionType;
+  section_type: string;
   section_key: string;
-  title: string;
   content: string;
-  sort_order: number;
 };
-
-// us-99.6: derived, not hand-listed. This constant omitted all five kinds
-// Phase 96 added (chore, bug_rca, bug_fix, standalone_plan, standalone_code)
-// in TWO verbatim copies, so a template could not carry per-type
-// instructions even though every project's own editor exposes them — new
-// projects silently fell through to the factory default for exactly the
-// kinds that exist to give each type its own words.
-const WORKER_INSTRUCTION_KINDS = Object.keys(KIND_FILES);
-const PROMPT_KINDS = ["test_case_elaborate", "deploy_script_generate"];
-const PROMPT_LABELS: Record<string, string> = {
-  test_case_elaborate: "Test-case elaboration",
-  deploy_script_generate: "Deploy-script generation",
-};
-
-const NEW_GUIDELINE = "new-guideline";
-
-function sectionParam(type: SectionType, key: string) {
-  return `${type}:${key}`;
-}
 
 export default function AdminProjectTemplatesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectedId = searchParams.get("id");
-  const sectionRef = searchParams.get("section"); // "type:key" | "new-guideline" | null
+  const fileKey = searchParams.get("file"); // "agents" | <run kind> | null
 
   const [templates, setTemplates] = useState<Template[] | null>(null);
   const [sections, setSections] = useState<Section[] | null>(null);
@@ -107,8 +105,10 @@ export default function AdminProjectTemplatesPage() {
   const loadSections = useCallback(async () => {
     if (!selectedId) return;
     try {
-      const res = await apiCall(`/api/v1/admin/project-templates/${selectedId}/sections`);
-      setSections(res ?? []);
+      const res: Section[] = await apiCall(
+        `/api/v1/admin/project-templates/${selectedId}/sections`,
+      );
+      setSections((res ?? []).filter((s) => s.section_type === "worker_instruction"));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -126,9 +126,13 @@ export default function AdminProjectTemplatesPage() {
     }
   }, [selectedId, templates, router]);
 
-  function select(templateId: string, section?: string) {
-    const q = section ? `?id=${templateId}&section=${section}` : `?id=${templateId}`;
+  function select(templateId: string, file?: string) {
+    const q = file ? `?id=${templateId}&file=${file}` : `?id=${templateId}`;
     router.push(`/admin/project-templates${q}`);
+  }
+
+  async function reload() {
+    await Promise.all([loadTemplates(), loadSections()]);
   }
 
   async function setDefault(t: Template) {
@@ -143,10 +147,6 @@ export default function AdminProjectTemplatesPage() {
     } catch (e) {
       toastError("Could not set default", (e as Error).message);
     }
-  }
-
-  async function reload() {
-    await Promise.all([loadTemplates(), loadSections()]);
   }
 
   async function toggleDisabled(t: Template) {
@@ -184,7 +184,8 @@ export default function AdminProjectTemplatesPage() {
   async function deleteTemplate(t: Template) {
     const ok = await confirmDialog({
       title: `Delete ${t.name}?`,
-      description: "This removes the template and every section in it. Orgs that already copied it keep their own copy.",
+      description:
+        "This removes the template and every file in it. Orgs that already copied it keep their own copy.",
       confirmLabel: "Delete",
       destructive: true,
     });
@@ -224,24 +225,54 @@ export default function AdminProjectTemplatesPage() {
     }
   }
 
-  const selected = templates?.find((t) => t.id === selectedId) ?? null;
-  const guidelineSections = (sections ?? []).filter((s) => s.section_type === "guideline");
-
-  function sectionFor(type: SectionType, key: string): Section {
-    return (
-      sections?.find((s) => s.section_type === type && s.section_key === key) ?? {
-        section_type: type,
-        section_key: key,
-        title: "",
-        content: "",
-        sort_order: 0,
+  /** Save one file. The document goes to the template row; a per-task file
+   * goes to its `worker_instruction` section — or is deleted when blanked,
+   * because a stored empty string would win over the factory default at
+   * project creation (`seed_worker_instructions` coalesces on it). */
+  async function saveFile(t: Template, key: string, text: string): Promise<boolean> {
+    const file = templateFileForKey(key);
+    try {
+      if (key === AGENTS_KEY) {
+        await apiCall(`/api/v1/admin/project-templates/${t.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ agent_instructions: text }),
+        });
+      } else if (text.trim() === "") {
+        await apiCall(
+          `/api/v1/admin/project-templates/${t.id}/sections/worker_instruction/${key}`,
+          { method: "DELETE" },
+        );
+      } else {
+        await apiCall(
+          `/api/v1/admin/project-templates/${t.id}/sections/worker_instruction/${key}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: "", content: text, sort_order: 0 }),
+          },
+        );
       }
-    );
+      toastSuccess("Saved", `${file?.path ?? key} updated.`);
+      await reload();
+      return true;
+    } catch (e) {
+      toastError("Could not save", (e as Error).message);
+      return false;
+    }
   }
 
-  const [activeType, activeKey] = sectionRef?.includes(":")
-    ? sectionRef.split(":", 2)
-    : [null, null];
+  const selected = templates?.find((t) => t.id === selectedId) ?? null;
+  const contents: TemplateContents | null =
+    selected && sections
+      ? {
+          agentInstructions: selected.agent_instructions ?? "",
+          instructions: Object.fromEntries(
+            sections.map((s) => [s.section_key, s.content ?? ""]),
+          ),
+        }
+      : null;
+  const activeFile = templateFileForKey(fileKey);
 
   return (
     <div className="flex h-[calc(100vh-8rem)] min-h-[600px] w-full flex-col gap-4">
@@ -251,10 +282,12 @@ export default function AdminProjectTemplatesPage() {
             Project templates
           </h1>
           <p className="max-w-3xl text-sm text-muted-foreground">
-            A named bundle of guideline sections, worker instructions, and
-            project-shaped prompts. A new project silently inherits a copy of
-            the org&apos;s default template — editing here changes no
-            existing project.
+            The files a new project starts with: its Agent Instructions
+            (<span className="font-mono">AGENTS.md</span>) and one
+            per-task instruction file under{" "}
+            <span className="font-mono">.buildmill/</span>. A new project
+            silently inherits a copy of the org&apos;s default template —
+            editing here changes no existing project.
           </p>
         </div>
         <Button size="sm" onClick={() => setCreateOpen(true)}>
@@ -305,7 +338,7 @@ export default function AdminProjectTemplatesPage() {
                       }}
                       className={cn(
                         "flex w-full cursor-pointer items-start gap-1.5 px-3 py-2 text-left text-sm hover:bg-muted/50",
-                        expanded && !sectionRef && "bg-muted",
+                        expanded && !fileKey && "bg-muted",
                       )}
                     >
                       {expanded ? (
@@ -326,7 +359,12 @@ export default function AdminProjectTemplatesPage() {
                         <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                           <span className="font-mono">{t.key}</span>
                           <span>v{t.version}</span>
-                          <span>· {t.section_count} sections</span>
+                          <span>
+                            · {t.id === selectedId && contents
+                              ? filledFileCount(contents)
+                              : t.file_count}{" "}
+                            of {totalFileCount()} files
+                          </span>
                         </span>
                       </span>
                       <span className="flex shrink-0 items-center gap-0.5">
@@ -362,52 +400,15 @@ export default function AdminProjectTemplatesPage() {
                       </span>
                     </div>
 
-                    {expanded && (
-                      <div className="pb-2 pl-8 pr-2">
-                        <SectionGroup label="Guideline sections">
-                          {guidelineSections.map((s) => (
-                            <SectionRow
-                              key={s.section_key}
-                              label={s.title || s.section_key}
-                              active={activeType === "guideline" && activeKey === s.section_key}
-                              onClick={() => select(t.id, sectionParam("guideline", s.section_key))}
-                            />
-                          ))}
-                          <button
-                            type="button"
-                            onClick={() => select(t.id, NEW_GUIDELINE)}
-                            className={cn(
-                              "flex w-full items-center gap-1 rounded px-2 py-1 text-left text-xs text-muted-foreground hover:bg-muted/50",
-                              sectionRef === NEW_GUIDELINE && "bg-muted text-foreground",
-                            )}
-                          >
-                            <Plus className="size-3" /> Add guideline section
-                          </button>
-                        </SectionGroup>
-
-                        <SectionGroup label="Worker instructions">
-                          {WORKER_INSTRUCTION_KINDS.map((kind) => (
-                            <SectionRow
-                              key={kind}
-                              label={kind}
-                              mono
-                              active={activeType === "worker_instruction" && activeKey === kind}
-                              onClick={() => select(t.id, sectionParam("worker_instruction", kind))}
-                            />
-                          ))}
-                        </SectionGroup>
-
-                        <SectionGroup label="Prompts">
-                          {PROMPT_KINDS.map((kind) => (
-                            <SectionRow
-                              key={kind}
-                              label={PROMPT_LABELS[kind] ?? kind}
-                              active={activeType === "prompt" && activeKey === kind}
-                              onClick={() => select(t.id, sectionParam("prompt", kind))}
-                            />
-                          ))}
-                        </SectionGroup>
-                      </div>
+                    {expanded && contents && (
+                      <TemplateFileTree
+                        contents={contents}
+                        activeKey={fileKey}
+                        onSelect={(key) => select(t.id, key)}
+                      />
+                    )}
+                    {expanded && !contents && (
+                      <p className="pb-2 pl-8 text-xs text-muted-foreground">Loading files…</p>
                     )}
                   </li>
                 );
@@ -494,37 +495,19 @@ export default function AdminProjectTemplatesPage() {
                 )}
               </div>
 
-              {sections === null ? (
-                <p className="text-sm text-muted-foreground">Loading sections…</p>
-              ) : sectionRef === NEW_GUIDELINE ? (
-                <AddGuidelineSection
-                  templateId={selected.id}
-                  onAdded={async (key) => {
-                    await reload();
-                    select(selected.id, sectionParam("guideline", key));
-                  }}
-                />
-              ) : activeType && activeKey ? (
-                <SectionEditor
-                  key={sectionRef ?? ""}
-                  templateId={selected.id}
-                  section={
-                    activeType === "guideline"
-                      ? guidelineSections.find((s) => s.section_key === activeKey) ??
-                        sectionFor("guideline", activeKey)
-                      : sectionFor(activeType as SectionType, activeKey)
-                  }
-                  showTitle={activeType === "guideline"}
-                  label={
-                    activeType === "prompt"
-                      ? PROMPT_LABELS[activeKey] ?? activeKey
-                      : activeKey
-                  }
-                  onSaved={reload}
+              {!contents ? (
+                <p className="text-sm text-muted-foreground">Loading files…</p>
+              ) : activeFile ? (
+                <TemplateFileEditor
+                  key={`${selected.id}:${activeFile.key}`}
+                  file={activeFile}
+                  value={contentFor(contents, activeFile.key)}
+                  canManage
+                  onSave={(text) => saveFile(selected, activeFile.key, text)}
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  Select a section on the left to edit it.
+                  Select a file on the left to edit it.
                 </p>
               )}
             </div>
@@ -537,193 +520,20 @@ export default function AdminProjectTemplatesPage() {
           <DialogHeader>
             <DialogTitle>New project template</DialogTitle>
             <DialogDescription>
-              Starts with no sections — add guideline, worker-instruction and
-              prompt content from the editor.
+              Starts with every file blank — write the Agent Instructions and
+              any per-task instructions from the editor.
             </DialogDescription>
           </DialogHeader>
           <CreateForm
             onCreated={async (id) => {
               setCreateOpen(false);
               await loadTemplates();
-              select(id);
+              select(id, AGENTS_KEY);
             }}
             onCancel={() => setCreateOpen(false)}
           />
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-function SectionGroup({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="mt-2 first:mt-1">
-      <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </p>
-      <div className="flex flex-col">{children}</div>
-    </div>
-  );
-}
-
-function SectionRow({
-  label,
-  active,
-  mono,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  mono?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "truncate rounded px-2 py-1 text-left text-xs hover:bg-muted/50",
-        mono && "font-mono",
-        active && "bg-primary/10 font-medium text-primary",
-      )}
-    >
-      {label}
-    </button>
-  );
-}
-
-function SectionEditor({
-  templateId,
-  section,
-  label,
-  showTitle,
-  onSaved,
-}: {
-  templateId: string;
-  section: Section;
-  label?: string;
-  showTitle?: boolean;
-  onSaved: () => Promise<void>;
-}) {
-  const [title, setTitle] = useState(section.title);
-  const [content, setContent] = useState(section.content);
-  const [saving, setSaving] = useState(false);
-  const dirty = title !== section.title || content !== section.content;
-
-  async function save() {
-    setSaving(true);
-    try {
-      await apiCall(
-        `/api/v1/admin/project-templates/${templateId}/sections/${section.section_type}/${section.section_key}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title, content, sort_order: section.sort_order }),
-        },
-      );
-      toastSuccess("Saved", `${label ?? title ?? section.section_key} updated.`);
-      await onSaved();
-    } catch (e) {
-      toastError("Could not save", (e as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <div className="flex items-center justify-between gap-2">
-        {showTitle ? (
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Section title"
-            className="rounded-md border bg-background px-2 py-1 text-sm font-medium"
-          />
-        ) : (
-          <span className="font-mono text-sm font-medium">{label}</span>
-        )}
-        <Button size="sm" disabled={!dirty || saving} onClick={() => void save()}>
-          {saving ? "Saving…" : "Save"}
-        </Button>
-      </div>
-      <MarkdownEditor
-        value={content}
-        onChange={setContent}
-        placeholder="(blank)"
-        rows={20}
-        defaultTab="preview"
-        className="min-h-0 flex-1 overflow-y-auto"
-      />
-    </div>
-  );
-}
-
-function AddGuidelineSection({
-  templateId,
-  onAdded,
-}: {
-  templateId: string;
-  onAdded: (key: string) => Promise<void>;
-}) {
-  const [key, setKey] = useState("");
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  async function add() {
-    setSaving(true);
-    try {
-      await apiCall(
-        `/api/v1/admin/project-templates/${templateId}/sections/guideline/${key.trim()}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title, content, sort_order: 0 }),
-        },
-      );
-      await onAdded(key.trim());
-    } catch (e) {
-      toastError("Could not add section", (e as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <div className="grid gap-2 md:grid-cols-2">
-        <input
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          placeholder="section key, e.g. tech-stack"
-          className="rounded-md border bg-background px-2 py-1 font-mono text-sm"
-        />
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Title"
-          className="rounded-md border bg-background px-2 py-1 text-sm"
-        />
-      </div>
-      <MarkdownEditor
-        value={content}
-        onChange={setContent}
-        placeholder="Content"
-        rows={18}
-        className="min-h-0 flex-1 overflow-y-auto"
-      />
-      <div className="flex justify-end">
-        <Button size="sm" disabled={!key.trim() || saving} onClick={() => void add()}>
-          {saving ? "Adding…" : "Add section"}
-        </Button>
-      </div>
     </div>
   );
 }

@@ -18,6 +18,10 @@ import {
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { MarkReadyControl } from "./mark-ready-control";
 import { TaskProcessingCard } from "./task-processing-card";
+import {
+  INSTRUCTION_GROUPS,
+  INSTRUCTION_KIND_META,
+} from "@/lib/instruction-kinds";
 
 export type WorkerInstructionRow = {
   id: string;
@@ -27,103 +31,18 @@ export type WorkerInstructionRow = {
   updated_at: string;
 };
 
-const KIND_META: Record<string, { title: string; description: string }> = {
-  prd: {
-    title: "PRD runs",
-    description: "How a worker should draft a feature's PRD.",
-  },
-  breakdown: {
-    title: "Story breakdown runs",
-    description:
-      "How a worker should split an approved PRD into engineering stories.",
-  },
-  plan: {
-    title: "Stories in a feature — plan",
-    description:
-      "How a worker should write implementation and test plans for a story born from a PRD breakdown.",
-  },
-  code: {
-    title: "Stories in a feature — build",
-    description:
-      "How a worker should implement a feature-child story's approved plan.",
-  },
-  standalone_plan: {
-    title: "Standalone stories — plan",
-    description:
-      "Planning a story with no PRD and no parent feature — the story and its acceptance criteria are the whole contract.",
-  },
-  standalone_code: {
-    title: "Standalone stories — build",
-    description:
-      "Implementing a standalone story's approved plan, inside this story's slice only.",
-  },
-  bug_rca: {
-    title: "Bugs — root cause analysis",
-    description:
-      "How a worker should diagnose a bug: what broke, why, and the proposed fix — in plain language, no code.",
-  },
-  bug_fix: {
-    title: "Bugs — the fix",
-    description:
-      "How a worker should implement an approved RCA's proposed fix, with the reproduction as the regression case.",
-  },
-  chore: {
-    title: "Chores — single-shot build",
-    description:
-      "How a worker should build a chore directly — no plan phase precedes it, and the hand-back notes carry the verification story.",
-  },
-  test: {
-    title: "Test runs",
-    description:
-      "How a worker should execute a work item's test cases and report results.",
-  },
-  release: {
-    title: "Release runs",
-    description:
-      "How a worker should assemble a release: read the change range, write the notes, deploy to UAT and verify it.",
-  },
-  deploy: {
-    title: "Deployment runs",
-    description:
-      "How a worker should trigger, observe and verify one deployment — never claiming an outcome it did not see.",
-  },
-  merge: {
-    title: "Merge runs",
-    description:
-      "How a worker should land named branches onto the default branch: read both sides of every conflict, never drop a change it did not understand, and account for every branch — all of them or none.",
-  },
-  elaborate: {
-    title: "Elaboration runs",
-    description:
-      "How a worker should expand a rough story into a body and acceptance criteria without widening its scope.",
-  },
-  wireframe: {
-    title: "Wireframe runs",
-    description:
-      "How a worker should draw a story's UI surface before it is built — or declare that it has none.",
-  },
-  guidelines: {
-    title: "Guidelines refresh runs",
-    description:
-      "How a worker should propose changes to this project's guidelines. Steers the run that proposes them — it is not the guidelines themselves.",
-  },
-  test_case_elaborate: {
-    title: "Test-case elaboration",
-    description:
-      "Extra guidance appended when a rough test description is expanded into a full manual test case.",
-  },
-  deploy_script_generate: {
-    title: "Deploy-script generation",
-    description:
-      "Extra guidance appended when a deployment script is drafted for this project.",
-  },
-};
+// us-100.4: the titles, descriptions and phase groups live in
+// `@/lib/instruction-kinds` so the template editors render the same set, in
+// the same order, under the same names — set-equality is pinned by
+// `template-files.test.ts`, not by a reviewer noticing.
+const KIND_META = INSTRUCTION_KIND_META;
 
-/** US-20.1: six sections, Task processing first. `kinds: null` marks the
- * section that renders settings rather than instruction rows. Any run kind
- * absent from every section falls into "Other" (below) — three kinds were
- * added by migrations 085/112/114 and rendered here as raw slugs for
- * months because the tab was written when there were only four. */
+/** US-20.1: Task processing first (`kinds: null` marks the section that
+ * renders settings rather than instruction rows), then the shared phase
+ * groups. Any run kind absent from every section falls into "Other" (below)
+ * — three kinds were added by migrations 085/112/114 and rendered here as
+ * raw slugs for months because the tab was written when there were only
+ * four; the shared list is what stops that recurring. */
 const SECTIONS: {
   key: string;
   label: string;
@@ -137,46 +56,12 @@ const SECTIONS: {
       "How this project's work flows through the factory before any of the instructions below apply.",
     kinds: null,
   },
-  {
-    key: "requirements",
-    label: "Requirements",
-    blurb:
-      "Turning an idea into a specification, a specification into stories, and a story into the surface it will have.",
-    kinds: ["prd", "breakdown", "elaborate", "wireframe"],
-  },
-  {
-    key: "planning",
-    label: "Planning",
-    blurb:
-      "Deciding how work will be built and verified — each work-item type in its own words (us-96.3).",
-    kinds: ["plan", "standalone_plan", "bug_rca"],
-  },
-  {
-    key: "coding",
-    label: "Coding",
-    blurb:
-      "Writing the change and handing it back for review — each work-item type in its own words (us-96.3).",
-    kinds: ["code", "standalone_code", "bug_fix", "chore"],
-  },
-  {
-    key: "integration",
-    label: "Integration",
-    blurb:
-      "Landing finished branches onto the default branch, conflicts and all (us-98.1).",
-    kinds: ["merge"],
-  },
-  {
-    key: "testing",
-    label: "Testing",
-    blurb: "Executing test cases and reporting what actually happened.",
-    kinds: ["test"],
-  },
-  {
-    key: "release",
-    label: "Release",
-    blurb: "Assembling a release, shipping it, and verifying where it landed.",
-    kinds: ["release", "deploy"],
-  },
+  ...INSTRUCTION_GROUPS.map((g) => ({
+    key: g.key,
+    label: g.label,
+    blurb: g.blurb,
+    kinds: g.kinds as string[] | null,
+  })),
 ];
 
 const MAPPED_KINDS = new Set(SECTIONS.flatMap((s) => s.kinds ?? []));

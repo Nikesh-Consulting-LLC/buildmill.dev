@@ -121,11 +121,11 @@ export const HELP_TOPICS: HelpTopic[] = [
   },
   {
     slug: "guidelines",
-    title: "Guidelines & agent instructions",
+    title: "Agent Instructions",
     blurb:
       "What every run is told before it starts, where you edit it, and how learnings feed back in.",
     icon: FileText,
-    sections: [{ id: "guidelines", label: "Guidelines & agent instructions" }],
+    sections: [{ id: "guidelines", label: "Agent Instructions & Task Instructions" }],
   },
   {
     slug: "architecture",
@@ -190,8 +190,8 @@ export const HELP_POINTS: Record<string, HelpPoint[]> = {
     { heading: "Machines", textKey: "help/workers/machines" },
   ],
   guidelines: [
-    { heading: "Project guidelines", textKey: "help/guidelines/project" },
-    { heading: "Agent instructions", textKey: "help/guidelines/instructions" },
+    { heading: "Agent Instructions", textKey: "help/guidelines/project" },
+    { heading: "Task Instructions", textKey: "help/guidelines/instructions" },
     { heading: "Learnings", textKey: "help/guidelines/learnings" },
     { heading: "What a run receives", textKey: "help/guidelines/context" },
   ],
@@ -581,18 +581,17 @@ export const HELP_DEFAULTS: Record<string, string> = {
     "behind it. Each step links to the page where it happens.",
   "help/setup/project/1":
     "Write a Project Summary on the Overview tab — what the project is " +
-    "and its goals. Then fill in the Guidelines tab and, on Worker " +
-    "Instructions, the per-stage instructions agents are given.",
+    "and its goals. Then write the Agent Instructions and, on Task " +
+    "Instructions, the per-kind instructions agents are given.",
   "help/setup/project/2":
     "Connect the repository and pick the UAT and Production release " +
     "branches (create them from main without leaving Build Mill), plus a " +
     "development branching strategy.",
   "help/setup/project/3":
-    "Review the guidelines — including the Versioning & Release section — " +
-    "and mark them ready. Edit later and an “edited since ready” " +
+    "Review the Agent Instructions — including how releases are versioned — and mark them ready. Edit later and an “edited since ready” " +
     "nudge appears.",
   "help/setup/project/4":
-    "Review the worker instructions per run kind and mark them ready too.",
+    "Review the Task Instructions per run kind and mark them ready too.",
   "help/setup/project/5":
     "Define the build & test config an agent runs against — the runtime " +
     "and setup, the build/test/lint commands, and any write-only " +
@@ -789,23 +788,29 @@ export const HELP_DEFAULTS: Record<string, string> = {
     "story splits, plans, and code handed back git-free. Pick by whether " +
     "the work needs to execute anything.",
   "help/guidelines/project":
-    "Per project, on the Guidelines tab: how this codebase is built, what " +
-    "conventions hold, what an agent must not do. Mark them ready when " +
-    "they are worth handing to a worker; edit later and the page nudges " +
-    "you that they have changed since.",
+    "Per project, on the Agent Instructions tab: one markdown document — how " +
+    "this codebase is built, what conventions hold, what an agent must not " +
+    "do, and how releases are versioned. It is the body of the AGENTS.md the " +
+    "factory publishes to the repository, and a new project starts with its " +
+    "template's copy. Mark it ready when it is worth handing to a worker; " +
+    "edit later and the page nudges you that it has changed since.",
   "help/guidelines/instructions":
-    "Per project, on Agent Instructions: one instruction set per run kind, " +
-    "so a planning run and a code run can be told different things. The " +
-    "same tab carries Task processing — build mode, concurrency, and the " +
-    "auto-approve switches.",
+    "Per project, on Task Instructions: one instruction file per run kind " +
+    "(published as .buildmill/<File>.md and indexed from AGENTS.md), so a " +
+    "planning run and a code run can be told different things. The same tab " +
+    "carries Task processing — build mode, concurrency, and the auto-approve " +
+    "switches.",
   "help/guidelines/learnings":
-    "When a run discovers something worth keeping, it can propose a change " +
-    "to the guidelines. Proposals wait for you on Things to Do; approving " +
-    "one edits the guidelines, so the next run starts where the last one " +
-    "left off.",
+    "When a run discovers something worth keeping, it can propose a revised " +
+    "Agent Instructions document, and a refresh run studies the repository " +
+    "and proposes revised instruction files. Proposals wait for you on Things " +
+    "to Do as a diff per file; accepting one edits the factory's text " +
+    "(publish when ready), so the next run starts where the last one left " +
+    "off.",
   "help/guidelines/context":
     "Every run is handed the story and its acceptance criteria, the " +
-    "governing PRD, the approved plan (on code runs), these guidelines, the " +
+    "governing PRD, the approved plan (on code runs), the Agent Instructions, " +
+    "the " +
     "project's learnings, attached documents, and — on a retry — the " +
     "feedback from the rejection. Each work item also carries a comment " +
     "thread you and the worker share.",

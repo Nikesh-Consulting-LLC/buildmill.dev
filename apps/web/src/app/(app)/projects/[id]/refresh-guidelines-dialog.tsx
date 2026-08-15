@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toastError, toastSuccess } from "@/components/ui/toast";
 
-type Scope = "all" | "existing";
+type Scope = "all" | "document";
 
 /** US-43.2: put an agent on writing this project's guidelines.
  *
@@ -95,17 +95,20 @@ export function RefreshGuidelinesDialog({
         onClick={() => setOpen(true)}
       >
         <Sparkles className="size-4" />
-        Refresh guidelines
+        Refresh instructions
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Refresh guidelines</DialogTitle>
+            <DialogTitle>Refresh instructions</DialogTitle>
             <DialogDescription>
-              An agent reads this project&apos;s source and delivery history
-              and proposes its guidelines. Nothing is applied automatically —
-              you review the whole pass and accept section by section.
+              An agent studies this project&apos;s repository and delivery
+              history and proposes revised instruction files — the Agent
+              Instructions (AGENTS.md) and the per-task files under
+              .buildmill/. Nothing is applied automatically — you read a diff
+              per file and accept or reject the pass whole; nothing reaches
+              the repository until you publish.
             </DialogDescription>
           </DialogHeader>
 
@@ -117,13 +120,13 @@ export function RefreshGuidelinesDialog({
                   [
                     {
                       value: "all" as const,
-                      title: "Everything the repo supports",
-                      hint: "Including sections this project has not filled in yet.",
+                      title: "Agent Instructions and the per-task files",
+                      hint: "AGENTS.md plus any .buildmill/*.md the repository gives a reason to change.",
                     },
                     {
-                      value: "existing" as const,
-                      title: "Only sections that already exist",
-                      hint: "A refresh that adds nothing new — except Deployment and Release.",
+                      value: "document" as const,
+                      title: "Agent Instructions only",
+                      hint: "The AGENTS.md body — leave the per-task instruction files alone.",
                     },
                   ] satisfies { value: Scope; title: string; hint: string }[]
                 ).map((opt) => (

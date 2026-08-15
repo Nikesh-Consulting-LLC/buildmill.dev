@@ -208,6 +208,10 @@ async def refresh_guidelines(
     The run is queued at queue_rank = -1 (US-43.5): a refresh must not sit
     behind the backlog it exists to correct.
     """
+    # us-100.5: the run proposes WHOLE FILES — the Agent Instructions
+    # document and per-task instruction files — keyed by file, accepted or
+    # rejected whole. scope is 'all' (document + per-task files) or
+    # 'document' (the Agent Instructions only).
     org_id = await _project_org_for_user(settings, user.token, str(project_id))
 
     def _dispatch():

@@ -422,9 +422,11 @@ export default async function ProjectDetailPage({
         {/* US-7.6: tab order follows the setup flow. */}
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="guidelines">Guidelines</TabsTrigger>
+          {/* us-100.3: named for what it holds. The value stays
+              "guidelines" so existing deep links keep resolving. */}
+          <TabsTrigger value="guidelines">Agent Instructions</TabsTrigger>
           <TabsTrigger value="worker-instructions">
-            Agent Instructions
+            Task Instructions
           </TabsTrigger>
           <TabsTrigger value="deployments">Deployments</TabsTrigger>
           <TabsTrigger value="suites">Suites</TabsTrigger>
@@ -498,13 +500,13 @@ export default async function ProjectDetailPage({
                   href: `${base}?tab=github`,
                 },
                 {
-                  label: "Guidelines marked ready",
+                  label: "Agent Instructions marked ready",
                   detail: "Reviewed and marked good to go.",
                   done: !!project.guidelines_ready_at,
                   href: `${base}?tab=guidelines`,
                 },
                 {
-                  label: "Agent Instructions marked ready",
+                  label: "Task Instructions marked ready",
                   detail: "Reviewed and marked good to go.",
                   done: !!project.worker_instructions_ready_at,
                   href: `${base}?tab=worker-instructions`,

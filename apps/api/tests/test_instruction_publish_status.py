@@ -118,9 +118,11 @@ def test_it_names_what_would_be_written_and_removed(client, make_token, monkeypa
     _wire(monkeypatch)
     body = _get(client, make_token).json()
     assert ".buildmill/Code.md" in body["files"]
-    assert ".buildmill/Guidelines.md" in body["files"]
     assert "AGENTS.md" in body["files"]
     assert "CLAUDE.md" in body["files"]
+    # us-100.2: retired — written nowhere, deleted everywhere.
+    assert ".buildmill/Guidelines.md" not in body["files"]
+    assert ".buildmill/Guidelines.md" in body["deletes"]
     # Every kind with no content is a delete, not an empty file.
     assert ".buildmill/RCA.md" in body["deletes"]
 
@@ -202,3 +204,36 @@ def test_dispatch_with_no_project_does_nothing(monkeypatch):
 
     monkeypatch.setattr("app.repo_docs.sync_tree", boom)
     asyncio.run(issues_router._sync_repo_before_dispatch(None, None))
+
+
+# --- us-100.5: the refresh is dispatchable again, in its new shape ----------
+
+
+def test_guidelines_refresh_dispatch_reaches_the_dispatcher(
+    client, make_token, monkeypatch
+):
+    """The disabling refusal us-100.5 AC5 required while the run was still
+    section-shaped is gone: the run now proposes whole files, so dispatch
+    goes through to db.dispatch_guidelines_refresh with the new scope."""
+    seen = {}
+
+    async def fake_org(settings, token, project_id):
+        return "org-1"
+
+    def fake_dispatch(settings, org_id, project_id, scope, focus):
+        seen.update(org=org_id, project=project_id, scope=scope, focus=focus)
+        return {"refresh_id": "r-1", "run_id": "run-1"}
+
+    monkeypatch.setattr("app.routers.projects._project_org_for_user", fake_org)
+    monkeypatch.setattr(
+        "app.routers.projects.db.dispatch_guidelines_refresh", fake_dispatch
+    )
+    resp = client.post(
+        f"/api/v1/projects/{PROJECT_ID}/guidelines/refresh",
+        headers={"Authorization": f"Bearer {make_token()}"},
+        json={"scope": "document", "focus": "the test commands are stale"},
+    )
+    assert resp.status_code == 202, resp.text
+    assert seen["scope"] == "document"
+    assert seen["focus"] == "the test commands are stale"
+    assert resp.json()["refresh_id"] == "r-1"

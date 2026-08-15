@@ -802,7 +802,27 @@ async def reset_prompt_template(
 # require_platform_admin like every other /admin/* route.
 # ---------------------------------------------------------------------------
 
-_TEMPLATE_SECTION_TYPES = ("guideline", "worker_instruction", "prompt")
+# us-100.4: a template holds the Agent Instructions document (a column,
+# migration 265) and the per-task instructions — the files a project will
+# publish. `guideline` sections became the document (us-100.1) and `prompt`
+# sections are platform-global LLM prompts that no agent reads (they live at
+# /admin/prompt-templates); neither may be written any more. Existing rows of
+# both types stay in the database as a rollback (migration 265 deletes
+# nothing) — this guard narrows what can be WRITTEN, not what exists.
+_TEMPLATE_SECTION_TYPES = ("worker_instruction",)
+_RETIRED_SECTION_TYPES = {
+    "guideline": "guideline sections became the template's agent_instructions document (us-100.1)",
+    "prompt": "prompt sections retired from templates; platform prompts live at /admin/prompt-templates (us-100.4)",
+}
+
+
+def _reject_retired_section_type(section_type: str) -> None:
+    if section_type in _TEMPLATE_SECTION_TYPES:
+        return
+    reason = _RETIRED_SECTION_TYPES.get(section_type)
+    if reason:
+        raise HTTPException(status_code=422, detail=f"retired section_type: {reason}")
+    raise HTTPException(status_code=422, detail=f"unknown section_type: {section_type}")
 
 
 @router.get("/project-templates")
@@ -815,15 +835,28 @@ async def list_project_templates(
         "project_templates",
         {"select": "*", "order": "sort_order,name"},
     )
+    # file_count: how many of the template's files carry content — the
+    # document counts as one, and only worker_instruction sections are files.
     sections = await admin_get(
         settings,
         "project_template_sections",
-        {"select": "template_id"},
+        {
+            "select": "template_id",
+            "section_type": "eq.worker_instruction",
+            "content": "neq.",
+        },
     )
     counts: dict[str, int] = {}
     for s in sections:
         counts[s["template_id"]] = counts.get(s["template_id"], 0) + 1
-    return [{**t, "section_count": counts.get(t["id"], 0)} for t in templates]
+    return [
+        {
+            **t,
+            "file_count": counts.get(t["id"], 0)
+            + (1 if (t.get("agent_instructions") or "").strip() else 0),
+        }
+        for t in templates
+    ]
 
 
 class ProjectTemplateBody(BaseModel):
@@ -863,6 +896,9 @@ class ProjectTemplatePatchBody(BaseModel):
     is_default: bool | None = None
     is_disabled: bool | None = None
     sort_order: int | None = None
+    # us-100.4: the AGENTS.md body a project created from this template
+    # starts with. Same ceiling as a project's own document.
+    agent_instructions: str | None = Field(default=None, max_length=200000)
 
 
 @router.patch("/project-templates/{template_id}")
@@ -950,14 +986,22 @@ async def duplicate_project_template(
             "name": f"{source['name']} (copy)",
             "description": source["description"],
             "category": source["category"],
+            # us-100.4: the document is part of what a duplicate carries.
+            "agent_instructions": source.get("agent_instructions") or "",
         },
     )
     new_template = created[0]
 
+    # Only the files: retired guideline/prompt rows are rollback data on the
+    # source, not content a new template should inherit.
     sections = await admin_get(
         settings,
         "project_template_sections",
-        {"template_id": f"eq.{template_id}", "select": "section_type,section_key,title,content,sort_order"},
+        {
+            "template_id": f"eq.{template_id}",
+            "section_type": "eq.worker_instruction",
+            "select": "section_type,section_key,title,content,sort_order",
+        },
     )
     if sections:
         await admin_post(
@@ -1018,8 +1062,7 @@ async def upsert_project_template_section(
     admin: AuthUser = Depends(require_platform_admin),
     settings: Settings = Depends(get_settings),
 ):
-    if section_type not in _TEMPLATE_SECTION_TYPES:
-        raise HTTPException(status_code=422, detail=f"unknown section_type: {section_type}")
+    _reject_retired_section_type(section_type)
     rows = await admin_upsert(
         settings,
         "project_template_sections",

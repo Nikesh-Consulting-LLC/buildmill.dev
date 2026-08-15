@@ -237,8 +237,8 @@ _ENTRIES: dict[str, tuple[str, str, str]] = {
         "Help — Setup project, step 1",
         "Help page · Project setup stepper.",
         "Write a Project Summary on the Overview tab — what the project is "
-        "and its goals. Then fill in the Guidelines tab and, on Worker "
-        "Instructions, the per-stage instructions agents are given.",
+        "and its goals. Then write the Agent Instructions and, on Task "
+        "Instructions, the per-kind instructions agents are given.",
     ),
     "setup/project/2": (
         "Help — Setup project, step 2",
@@ -250,14 +250,13 @@ _ENTRIES: dict[str, tuple[str, str, str]] = {
     "setup/project/3": (
         "Help — Setup project, step 3",
         "Help page · Project setup stepper.",
-        "Review the guidelines — including the Versioning & Release section — "
-        "and mark them ready. Edit later and an “edited since ready” nudge "
+        "Review the Agent Instructions — including how releases are versioned — and mark them ready. Edit later and an “edited since ready” nudge "
         "appears.",
     ),
     "setup/project/4": (
         "Help — Setup project, step 4",
         "Help page · Project setup stepper.",
-        "Review the worker instructions per run kind and mark them ready too.",
+        "Review the Task Instructions per run kind and mark them ready too.",
     ),
     "setup/project/5": (
         "Help — Setup project, step 5",
@@ -561,34 +560,40 @@ _ENTRIES: dict[str, tuple[str, str, str]] = {
         "the work needs to execute anything.",
     ),
     "guidelines/project": (
-        "Help — Project guidelines",
-        "Help · Guidelines page, the project guidelines.",
-        "Per project, on the Guidelines tab: how this codebase is built, what "
-        "conventions hold, what an agent must not do. Mark them ready when "
-        "they are worth handing to a worker; edit later and the page nudges "
-        "you that they have changed since.",
+        "Help — Agent Instructions",
+        "Help · Guidelines page, the Agent Instructions document.",
+        "Per project, on the Agent Instructions tab: one markdown document — how "
+        "this codebase is built, what conventions hold, what an agent must not "
+        "do, and how releases are versioned. It is the body of the AGENTS.md the "
+        "factory publishes to the repository, and a new project starts with its "
+        "template's copy. Mark it ready when it is worth handing to a worker; "
+        "edit later and the page nudges you that it has changed since.",
     ),
     "guidelines/instructions": (
-        "Help — Agent instructions",
-        "Help · Guidelines page, per-run-kind instructions.",
-        "Per project, on Agent Instructions: one instruction set per run kind, "
-        "so a planning run and a code run can be told different things. The "
-        "same tab carries Task processing — build mode, concurrency, and the "
-        "auto-approve switches.",
+        "Help — Task Instructions",
+        "Help · Guidelines page, per-run-kind instruction files.",
+        "Per project, on Task Instructions: one instruction file per run kind "
+        "(published as .buildmill/<File>.md and indexed from AGENTS.md), so a "
+        "planning run and a code run can be told different things. The same tab "
+        "carries Task processing — build mode, concurrency, and the auto-approve "
+        "switches.",
     ),
     "guidelines/learnings": (
         "Help — Learnings",
         "Help · Guidelines page, agent-proposed changes.",
-        "When a run discovers something worth keeping, it can propose a change "
-        "to the guidelines. Proposals wait for you on Things to Do; approving "
-        "one edits the guidelines, so the next run starts where the last one "
-        "left off.",
+        "When a run discovers something worth keeping, it can propose a revised "
+        "Agent Instructions document, and a refresh run studies the repository "
+        "and proposes revised instruction files. Proposals wait for you on Things "
+        "to Do as a diff per file; accepting one edits the factory's text "
+        "(publish when ready), so the next run starts where the last one left "
+        "off.",
     ),
     "guidelines/context": (
         "Help — What a run receives",
         "Help · Guidelines page, the run context bundle.",
         "Every run is handed the story and its acceptance criteria, the "
-        "governing PRD, the approved plan (on code runs), these guidelines, the "
+        "governing PRD, the approved plan (on code runs), the Agent Instructions, "
+        "the "
         "project's learnings, attached documents, and — on a retry — the "
         "feedback from the rejection. Each work item also carries a comment "
         "thread you and the worker share.",

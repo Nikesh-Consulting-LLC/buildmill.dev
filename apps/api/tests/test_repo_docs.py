@@ -513,9 +513,11 @@ def test_differing_hash_writes_and_records(monkeypatch):
     # us-99.2: a publish is the whole set now, not two files. The two kinds
     # with content get a file each, the conventions get theirs, and the two
     # entry-point files are rewritten whole.
+    # us-100.2: Guidelines.md is gone from the WRITE set — the conventions are
+    # AGENTS.md's body now — and appears in the delete set instead, so a repo
+    # that published under us-99.3 loses the stale copy.
     assert recorded["files"] == [
         ".buildmill/Code.md",
-        ".buildmill/Guidelines.md",
         ".buildmill/Plan.md",
         "AGENTS.md",
         "CLAUDE.md",

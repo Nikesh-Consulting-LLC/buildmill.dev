@@ -3205,6 +3205,7 @@ export type Database = {
       }
       org_project_templates: {
         Row: {
+          agent_instructions: string
           archived_at: string | null
           created_at: string
           description: string
@@ -3219,6 +3220,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          agent_instructions?: string
           archived_at?: string | null
           created_at?: string
           description?: string
@@ -3233,6 +3235,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          agent_instructions?: string
           archived_at?: string | null
           created_at?: string
           description?: string
@@ -3810,6 +3813,7 @@ export type Database = {
       }
       project_templates: {
         Row: {
+          agent_instructions: string
           category: string
           created_at: string
           description: string
@@ -3824,6 +3828,7 @@ export type Database = {
           version: number
         }
         Insert: {
+          agent_instructions?: string
           category?: string
           created_at?: string
           description?: string
@@ -3838,6 +3843,7 @@ export type Database = {
           version?: number
         }
         Update: {
+          agent_instructions?: string
           category?: string
           created_at?: string
           description?: string
@@ -4183,6 +4189,7 @@ export type Database = {
           project_id: string
           promoted_at: string | null
           promoted_by: string | null
+          proposed_version: string | null
           rejected_at: string | null
           rejected_reason: string | null
           released_at: string | null
@@ -4195,6 +4202,7 @@ export type Database = {
           uat_deployment_run_id: string | null
           updated_at: string
           version: string
+          version_rationale: string | null
         }
         Insert: {
           cancelled_at?: string | null
@@ -4216,6 +4224,7 @@ export type Database = {
           project_id: string
           promoted_at?: string | null
           promoted_by?: string | null
+          proposed_version?: string | null
           rejected_at?: string | null
           rejected_reason?: string | null
           released_at?: string | null
@@ -4228,6 +4237,7 @@ export type Database = {
           uat_deployment_run_id?: string | null
           updated_at?: string
           version: string
+          version_rationale?: string | null
         }
         Update: {
           cancelled_at?: string | null
@@ -4249,6 +4259,7 @@ export type Database = {
           project_id?: string
           promoted_at?: string | null
           promoted_by?: string | null
+          proposed_version?: string | null
           rejected_at?: string | null
           rejected_reason?: string | null
           released_at?: string | null
@@ -4261,6 +4272,7 @@ export type Database = {
           uat_deployment_run_id?: string | null
           updated_at?: string
           version?: string
+          version_rationale?: string | null
         }
         Relationships: [
           {
@@ -6096,6 +6108,10 @@ export type Database = {
       curate_feature_stories: { Args: { p_feature: string }; Returns: number }
       decide_guideline_recommendation: {
         Args: { p_accept: boolean; p_note?: string; p_recommendation: string }
+        Returns: Json
+      }
+      decide_guidelines_refresh: {
+        Args: { p_accept: boolean; p_note?: string; p_refresh: string }
         Returns: Json
       }
       default_buildmill_workflow_section: { Args: never; Returns: string }

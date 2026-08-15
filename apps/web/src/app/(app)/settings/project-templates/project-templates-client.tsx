@@ -1,16 +1,27 @@
 "use client";
 
-// Phase 67 (us-67.3): mirrors the superadmin's project-templates layout —
-// a template list down the left, each expandable to its section tree, with
-// a single full-height Write/Preview editor on the right for whichever
-// section is selected. Every mutating control is disabled for a caller
-// without manage_project; the database enforces the same gate via RLS on
-// org_project_templates/org_project_template_sections, so a disabled button
-// here is a courtesy, not the real boundary.
+// Phase 67 (us-67.3) → Phase 100 (us-100.4): the org's project templates.
+// Mirrors the superadmin's layout — a template list down the left, each
+// expandable to its file tree, with a single full-height Write/Preview
+// editor on the right for whichever file is selected — and renders the tree
+// and the editor from the same shared component (`template-files-editor.tsx`),
+// so what an admin sees here is exactly what the catalog author saw and
+// exactly what a new project will get.
+//
+// A template is the contents of the files a project will publish: the
+// AGENTS.md body (`org_project_templates.agent_instructions`, migration 265)
+// and one `.buildmill/*.md` per task kind (a `worker_instruction` section
+// keyed by kind). Retired `guideline`/`prompt` section rows stay in the
+// database as a rollback and are not offered.
+//
+// Every mutating control is disabled for a caller without manage_project;
+// the database enforces the same gate via RLS on org_project_templates /
+// org_project_template_sections, so a disabled button here is a courtesy,
+// not the real boundary.
 
-import { Fragment, useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, ChevronRight, Copy, Eye, EyeOff, Plus } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, Eye, EyeOff } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { Badge } from "@/components/ui/badge";
@@ -24,11 +35,21 @@ import {
   DialogTitle,
   DialogClose,
 } from "@/components/ui/dialog";
-import { MarkdownEditor } from "@/components/markdown-editor";
 import { cn } from "@/lib/utils";
 import { toastError, toastSuccess } from "@/components/ui/toast";
 import { confirmDialog } from "@/components/ui/confirm-dialog";
-import { KIND_FILES } from "@/lib/instruction-files";
+import {
+  AGENTS_KEY,
+  contentFor,
+  filledFileCount,
+  templateFileForKey,
+  totalFileCount,
+  type TemplateContents,
+} from "@/lib/template-files";
+import {
+  TemplateFileEditor,
+  TemplateFileTree,
+} from "@/components/template-files-editor";
 
 type GlobalTemplate = {
   id: string;
@@ -39,7 +60,7 @@ type GlobalTemplate = {
   is_default: boolean;
 };
 
-type OrgTemplate = {
+export type OrgTemplate = {
   id: string;
   template_key: string | null;
   name: string;
@@ -47,61 +68,41 @@ type OrgTemplate = {
   is_default: boolean;
   is_available: boolean;
   archived_at: string | null;
+  agent_instructions: string;
 };
-
-type SectionType = "guideline" | "worker_instruction" | "prompt";
 
 type Section = {
-  section_type: SectionType;
+  section_type: string;
   section_key: string;
-  title: string;
   content: string;
-  sort_order: number;
 };
 
-// us-99.6: derived, not hand-listed. This constant omitted all five kinds
-// Phase 96 added (chore, bug_rca, bug_fix, standalone_plan, standalone_code)
-// in TWO verbatim copies, so a template could not carry per-type
-// instructions even though every project's own editor exposes them — new
-// projects silently fell through to the factory default for exactly the
-// kinds that exist to give each type its own words.
-const WORKER_INSTRUCTION_KINDS = Object.keys(KIND_FILES);
-const PROMPT_KINDS = ["test_case_elaborate", "deploy_script_generate"];
-const PROMPT_LABELS: Record<string, string> = {
-  test_case_elaborate: "Test-case elaboration",
-  deploy_script_generate: "Deploy-script generation",
-};
-const NEW_GUIDELINE = "new-guideline";
-
-function sectionParam(type: SectionType, key: string) {
-  return `${type}:${key}`;
-}
+const ORG_TEMPLATE_COLUMNS =
+  "id, template_key, name, description, is_default, is_available, archived_at, agent_instructions";
 
 export function ProjectTemplatesClient({
   orgId,
   canManage,
   globalTemplates,
   orgTemplates: initialOrgTemplates,
-  sectionCounts,
+  fileCounts: initialFileCounts,
 }: {
   orgId: string;
   canManage: boolean;
   globalTemplates: GlobalTemplate[];
   orgTemplates: OrgTemplate[];
-  sectionCounts: { org_template_id: string }[];
+  /** Filled per-task files per template (worker_instruction rows with
+   * content); the document is added client-side from the row. */
+  fileCounts: Record<string, number>;
 }) {
   const supabase = createClient();
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectedId = searchParams.get("id");
-  const sectionRef = searchParams.get("section");
+  const fileKey = searchParams.get("file");
 
   const [templates, setTemplates] = useState<OrgTemplate[]>(initialOrgTemplates);
-  const [counts, setCounts] = useState<Record<string, number>>(() => {
-    const c: Record<string, number> = {};
-    for (const s of sectionCounts) c[s.org_template_id] = (c[s.org_template_id] ?? 0) + 1;
-    return c;
-  });
+  const [counts, setCounts] = useState<Record<string, number>>(initialFileCounts);
   const [sections, setSections] = useState<Section[] | null>(null);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -111,20 +112,24 @@ export function ProjectTemplatesClient({
   const reloadTemplates = useCallback(async () => {
     const { data } = await supabase
       .from("org_project_templates")
-      .select("id, template_key, name, description, is_default, is_available, archived_at")
+      .select(ORG_TEMPLATE_COLUMNS)
       .eq("org_id", orgId)
       .order("sort_order", { ascending: true });
-    const list = data ?? [];
+    const list = (data ?? []) as OrgTemplate[];
     setTemplates(list);
     const ids = list.map((t) => t.id);
     if (ids.length) {
       const { data: secs } = await supabase
         .from("org_project_template_sections")
         .select("org_template_id")
-        .in("org_template_id", ids);
+        .in("org_template_id", ids)
+        .eq("section_type", "worker_instruction")
+        .neq("content", "");
       const c: Record<string, number> = {};
       for (const s of secs ?? []) c[s.org_template_id] = (c[s.org_template_id] ?? 0) + 1;
       setCounts(c);
+    } else {
+      setCounts({});
     }
   }, [supabase, orgId]);
 
@@ -132,8 +137,9 @@ export function ProjectTemplatesClient({
     if (!selectedId) return;
     const { data } = await supabase
       .from("org_project_template_sections")
-      .select("section_type, section_key, title, content, sort_order")
-      .eq("org_template_id", selectedId);
+      .select("section_type, section_key, content")
+      .eq("org_template_id", selectedId)
+      .eq("section_type", "worker_instruction");
     setSections((data as Section[]) ?? []);
   }, [supabase, selectedId]);
 
@@ -148,8 +154,8 @@ export function ProjectTemplatesClient({
     }
   }, [selectedId, templates, router]);
 
-  function select(templateId: string, section?: string) {
-    const q = section ? `?id=${templateId}&section=${section}` : `?id=${templateId}`;
+  function select(templateId: string, file?: string) {
+    const q = file ? `?id=${templateId}&file=${file}` : `?id=${templateId}`;
     router.push(`/settings/project-templates${q}`);
   }
 
@@ -196,19 +202,29 @@ export function ProjectTemplatesClient({
     }
     const { data: created, error } = await supabase
       .from("org_project_templates")
-      .insert({ org_id: orgId, template_key: null, name, description: t.description })
+      .insert({
+        org_id: orgId,
+        template_key: null,
+        name,
+        description: t.description,
+        agent_instructions: t.agent_instructions ?? "",
+      })
       .select("id")
       .single();
     if (error || !created) return toastError("Could not duplicate", error?.message ?? "unknown error");
 
+    // Only the files: retired guideline/prompt rows are rollback data on the
+    // source, not content a new template should inherit.
     const { data: srcSections } = await supabase
       .from("org_project_template_sections")
       .select("section_type, section_key, title, content, sort_order")
-      .eq("org_template_id", t.id);
+      .eq("org_template_id", t.id)
+      .eq("section_type", "worker_instruction");
     if (srcSections?.length) {
-      await supabase.from("org_project_template_sections").insert(
+      const { error: copyError } = await supabase.from("org_project_template_sections").insert(
         srcSections.map((s) => ({ ...s, org_template_id: created.id, org_id: orgId })),
       );
+      if (copyError) return toastError("Duplicated without its files", copyError.message);
     }
     toastSuccess("Duplicated", `${name} is ready to fine-tune.`);
     await reloadTemplates();
@@ -218,7 +234,7 @@ export function ProjectTemplatesClient({
   async function deleteTemplate(t: OrgTemplate) {
     const ok = await confirmDialog({
       title: `Delete ${t.name}?`,
-      description: "This removes the template and every section in it from this org.",
+      description: "This removes the template and every file in it from this org.",
       confirmLabel: "Delete",
       destructive: true,
     });
@@ -270,28 +286,71 @@ export function ProjectTemplatesClient({
     if (error || !created) return toastError("Could not create template", error?.message ?? "unknown error");
     toastSuccess("Created", `${name.trim()} is ready to fill in.`);
     await reloadTemplates();
-    select(created.id);
+    select(created.id, AGENTS_KEY);
+  }
+
+  /** Save one file. The document goes to the template row; a per-task file
+   * goes to its `worker_instruction` section — or is deleted when blanked,
+   * because a stored empty string would win over the factory default at
+   * project creation (`seed_worker_instructions` coalesces on it). */
+  async function saveFile(t: OrgTemplate, key: string, text: string): Promise<boolean> {
+    const file = templateFileForKey(key);
+    let message: string | null = null;
+    if (key === AGENTS_KEY) {
+      const { error } = await supabase
+        .from("org_project_templates")
+        .update({ agent_instructions: text })
+        .eq("id", t.id);
+      message = error?.message ?? null;
+    } else if (text.trim() === "") {
+      const { error } = await supabase
+        .from("org_project_template_sections")
+        .delete()
+        .eq("org_template_id", t.id)
+        .eq("section_type", "worker_instruction")
+        .eq("section_key", key);
+      message = error?.message ?? null;
+    } else {
+      const { error } = await supabase.from("org_project_template_sections").upsert(
+        {
+          org_template_id: t.id,
+          org_id: orgId,
+          section_type: "worker_instruction",
+          section_key: key,
+          title: "",
+          content: text,
+          sort_order: 0,
+        },
+        { onConflict: "org_template_id,section_type,section_key" },
+      );
+      message = error?.message ?? null;
+    }
+    if (message) {
+      toastError("Could not save", message);
+      return false;
+    }
+    toastSuccess("Saved", `${file?.path ?? key} updated.`);
+    await reload();
+    return true;
   }
 
   const selected = templates.find((t) => t.id === selectedId) ?? null;
-  const guidelineSections = (sections ?? []).filter((s) => s.section_type === "guideline");
   const copiedKeys = new Set(templates.filter((t) => t.template_key).map((t) => t.template_key));
+  const contents: TemplateContents | null =
+    selected && sections
+      ? {
+          agentInstructions: selected.agent_instructions ?? "",
+          instructions: Object.fromEntries(
+            sections.map((s) => [s.section_key, s.content ?? ""]),
+          ),
+        }
+      : null;
+  const activeFile = templateFileForKey(fileKey);
 
-  function sectionFor(type: SectionType, key: string): Section {
-    return (
-      sections?.find((s) => s.section_type === type && s.section_key === key) ?? {
-        section_type: type,
-        section_key: key,
-        title: "",
-        content: "",
-        sort_order: 0,
-      }
-    );
+  function fileCountFor(t: OrgTemplate): number {
+    if (t.id === selectedId && contents) return filledFileCount(contents);
+    return (counts[t.id] ?? 0) + ((t.agent_instructions ?? "").trim() ? 1 : 0);
   }
-
-  const [activeType, activeKey] = sectionRef?.includes(":")
-    ? sectionRef.split(":", 2)
-    : [null, null];
 
   return (
     <div className="flex h-[calc(100vh-8rem)] min-h-[600px] w-full flex-col gap-4">
@@ -301,9 +360,11 @@ export function ProjectTemplatesClient({
             Project templates
           </h1>
           <p className="max-w-3xl text-sm text-muted-foreground">
-            A named bundle of guideline sections, worker instructions and
-            project-shaped prompts. A new project in this org silently
-            inherits a copy of the default template below.
+            The files a new project in this org starts with: its Agent
+            Instructions (<span className="font-mono">AGENTS.md</span>) and
+            one per-task instruction file under{" "}
+            <span className="font-mono">.buildmill/</span>. A new project
+            silently inherits a copy of the default template below.
             {!canManage && (
               <span className="mt-1 block text-xs">
                 You can read every template here; only Owner/Admin can copy,
@@ -365,7 +426,7 @@ export function ProjectTemplatesClient({
                       }}
                       className={cn(
                         "flex w-full cursor-pointer items-start gap-1.5 px-3 py-2 text-left text-sm hover:bg-muted/50",
-                        expanded && !sectionRef && "bg-muted",
+                        expanded && !fileKey && "bg-muted",
                       )}
                     >
                       {expanded ? (
@@ -390,7 +451,9 @@ export function ProjectTemplatesClient({
                         </span>
                         <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                           <span className="font-mono">{t.template_key ?? "custom"}</span>
-                          <span>· {counts[t.id] ?? 0} sections</span>
+                          <span>
+                            · {fileCountFor(t)} of {totalFileCount()} files
+                          </span>
                         </span>
                       </span>
                       {canManage && (
@@ -427,54 +490,15 @@ export function ProjectTemplatesClient({
                       )}
                     </div>
 
-                    {expanded && (
-                      <div className="pb-2 pl-8 pr-2">
-                        <SectionGroup label="Guideline sections">
-                          {guidelineSections.map((s) => (
-                            <SectionRow
-                              key={s.section_key}
-                              label={s.title || s.section_key}
-                              active={activeType === "guideline" && activeKey === s.section_key}
-                              onClick={() => select(t.id, sectionParam("guideline", s.section_key))}
-                            />
-                          ))}
-                          {canManage && (
-                            <button
-                              type="button"
-                              onClick={() => select(t.id, NEW_GUIDELINE)}
-                              className={cn(
-                                "flex w-full items-center gap-1 rounded px-2 py-1 text-left text-xs text-muted-foreground hover:bg-muted/50",
-                                sectionRef === NEW_GUIDELINE && "bg-muted text-foreground",
-                              )}
-                            >
-                              <Plus className="size-3" /> Add guideline section
-                            </button>
-                          )}
-                        </SectionGroup>
-
-                        <SectionGroup label="Worker instructions">
-                          {WORKER_INSTRUCTION_KINDS.map((kind) => (
-                            <SectionRow
-                              key={kind}
-                              label={kind}
-                              mono
-                              active={activeType === "worker_instruction" && activeKey === kind}
-                              onClick={() => select(t.id, sectionParam("worker_instruction", kind))}
-                            />
-                          ))}
-                        </SectionGroup>
-
-                        <SectionGroup label="Prompts">
-                          {PROMPT_KINDS.map((kind) => (
-                            <SectionRow
-                              key={kind}
-                              label={PROMPT_LABELS[kind] ?? kind}
-                              active={activeType === "prompt" && activeKey === kind}
-                              onClick={() => select(t.id, sectionParam("prompt", kind))}
-                            />
-                          ))}
-                        </SectionGroup>
-                      </div>
+                    {expanded && contents && (
+                      <TemplateFileTree
+                        contents={contents}
+                        activeKey={fileKey}
+                        onSelect={(key) => select(t.id, key)}
+                      />
+                    )}
+                    {expanded && !contents && (
+                      <p className="pb-2 pl-8 text-xs text-muted-foreground">Loading files…</p>
                     )}
                   </li>
                 );
@@ -566,40 +590,20 @@ export function ProjectTemplatesClient({
                 )}
               </div>
 
-              {sections === null ? (
-                <p className="text-sm text-muted-foreground">Loading sections…</p>
-              ) : sectionRef === NEW_GUIDELINE && canManage ? (
-                <AddGuidelineSection
-                  orgTemplateId={selected.id}
-                  orgId={orgId}
-                  onAdded={async (key) => {
-                    await reload();
-                    select(selected.id, sectionParam("guideline", key));
-                  }}
-                />
-              ) : activeType && activeKey ? (
-                <SectionEditor
-                  key={sectionRef ?? ""}
-                  orgTemplateId={selected.id}
-                  orgId={orgId}
+              {!contents ? (
+                <p className="text-sm text-muted-foreground">Loading files…</p>
+              ) : activeFile ? (
+                <TemplateFileEditor
+                  key={`${selected.id}:${activeFile.key}`}
+                  file={activeFile}
+                  value={contentFor(contents, activeFile.key)}
                   canManage={canManage}
-                  section={
-                    activeType === "guideline"
-                      ? guidelineSections.find((s) => s.section_key === activeKey) ??
-                        sectionFor("guideline", activeKey)
-                      : sectionFor(activeType as SectionType, activeKey)
-                  }
-                  showTitle={activeType === "guideline"}
-                  label={
-                    activeType === "prompt"
-                      ? PROMPT_LABELS[activeKey] ?? activeKey
-                      : activeKey
-                  }
-                  onSaved={reload}
+                  orgId={orgId}
+                  onSave={(text) => saveFile(selected, activeFile.key, text)}
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  Select a section on the left to view it.
+                  Select a file on the left to {canManage ? "edit" : "view"} it.
                 </p>
               )}
             </div>
@@ -645,185 +649,6 @@ export function ProjectTemplatesClient({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-function SectionGroup({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="mt-2 first:mt-1">
-      <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </p>
-      <div className="flex flex-col">{children}</div>
-    </div>
-  );
-}
-
-function SectionRow({
-  label,
-  active,
-  mono,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  mono?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "truncate rounded px-2 py-1 text-left text-xs hover:bg-muted/50",
-        mono && "font-mono",
-        active && "bg-primary/10 font-medium text-primary",
-      )}
-    >
-      {label}
-    </button>
-  );
-}
-
-function SectionEditor({
-  orgTemplateId,
-  orgId,
-  canManage,
-  section,
-  label,
-  showTitle,
-  onSaved,
-}: {
-  orgTemplateId: string;
-  orgId: string;
-  canManage: boolean;
-  section: Section;
-  label?: string;
-  showTitle?: boolean;
-  onSaved: () => Promise<void>;
-}) {
-  const supabase = createClient();
-  const [title, setTitle] = useState(section.title);
-  const [content, setContent] = useState(section.content);
-  const [saving, setSaving] = useState(false);
-  const dirty = title !== section.title || content !== section.content;
-
-  async function save() {
-    setSaving(true);
-    const { error } = await supabase.from("org_project_template_sections").upsert(
-      {
-        org_template_id: orgTemplateId,
-        org_id: orgId,
-        section_type: section.section_type,
-        section_key: section.section_key,
-        title,
-        content,
-        sort_order: section.sort_order,
-      },
-      { onConflict: "org_template_id,section_type,section_key" },
-    );
-    setSaving(false);
-    if (error) return toastError("Could not save", error.message);
-    toastSuccess("Saved", `${label ?? title ?? section.section_key} updated.`);
-    await onSaved();
-  }
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <div className="flex items-center justify-between gap-2">
-        {showTitle ? (
-          <input
-            value={title}
-            disabled={!canManage}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Section title"
-            className="rounded-md border bg-background px-2 py-1 text-sm font-medium disabled:opacity-60"
-          />
-        ) : (
-          <span className="font-mono text-sm font-medium">{label}</span>
-        )}
-        {canManage && (
-          <Button size="sm" disabled={!dirty || saving} onClick={() => void save()}>
-            {saving ? "Saving…" : "Save"}
-          </Button>
-        )}
-      </div>
-      <MarkdownEditor
-        value={content}
-        onChange={setContent}
-        placeholder="(blank)"
-        rows={20}
-        defaultTab="preview"
-        disabled={!canManage}
-        className="min-h-0 flex-1 overflow-y-auto"
-      />
-    </div>
-  );
-}
-
-function AddGuidelineSection({
-  orgTemplateId,
-  orgId,
-  onAdded,
-}: {
-  orgTemplateId: string;
-  orgId: string;
-  onAdded: (key: string) => Promise<void>;
-}) {
-  const supabase = createClient();
-  const [key, setKey] = useState("");
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  async function add() {
-    setSaving(true);
-    const { error } = await supabase.from("org_project_template_sections").upsert(
-      {
-        org_template_id: orgTemplateId,
-        org_id: orgId,
-        section_type: "guideline",
-        section_key: key.trim(),
-        title,
-        content,
-        sort_order: 0,
-      },
-      { onConflict: "org_template_id,section_type,section_key" },
-    );
-    setSaving(false);
-    if (error) return toastError("Could not add section", error.message);
-    await onAdded(key.trim());
-  }
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <div className="grid gap-2 md:grid-cols-2">
-        <input
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          placeholder="section key, e.g. tech-stack"
-          className="rounded-md border bg-background px-2 py-1 font-mono text-sm"
-        />
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Title"
-          className="rounded-md border bg-background px-2 py-1 text-sm"
-        />
-      </div>
-      <MarkdownEditor
-        value={content}
-        onChange={setContent}
-        placeholder="Content"
-        rows={18}
-        className="min-h-0 flex-1 overflow-y-auto"
-      />
-      <div className="flex justify-end">
-        <Button size="sm" disabled={!key.trim() || saving} onClick={() => void add()}>
-          {saving ? "Adding…" : "Add section"}
-        </Button>
-      </div>
     </div>
   );
 }

@@ -112,17 +112,18 @@ def test_save_instructions_writes_both_files_in_one_commit(
     files = commits[0]["files"]
     assert sorted(files) == [
         ".buildmill/Code.md",
-        ".buildmill/Guidelines.md",
         ".buildmill/Plan.md",
         "AGENTS.md",
         "CLAUDE.md",
     ]
-    # us-99.3: the conventions are their own file now, not inlined.
-    assert "Node + Supabase." in files[".buildmill/Guidelines.md"]
-    assert "Node + Supabase." not in files["AGENTS.md"]
-    # AGENTS.md is the index: it points at what was written.
+    # us-100.2 REVERSES us-99.3, one story later: the conventions were their
+    # own file for exactly one release and are now AGENTS.md's body. The
+    # retired file is deleted rather than merely no longer written.
+    assert "Node + Supabase." in files["AGENTS.md"]
+    assert files["AGENTS.md"].startswith("## Stack")
+    assert ".buildmill/Guidelines.md" in commits[0]["deletes"]
+    # AGENTS.md still indexes the per-task files underneath the document.
     assert ".buildmill/Code.md" in files["AGENTS.md"]
-    assert ".buildmill/Guidelines.md" in files["AGENTS.md"]
     assert repo_docs.BLOCK_START not in files["AGENTS.md"]
     assert files["CLAUDE.md"] == repo_docs.CLAUDE_MD_POINTER
     # Kinds with no content are deleted, never written empty.

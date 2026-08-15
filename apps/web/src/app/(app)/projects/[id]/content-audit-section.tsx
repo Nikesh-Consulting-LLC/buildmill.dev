@@ -46,9 +46,11 @@ const MAX_SHOWN_CHARS = 2000;
 
 const SURFACE_LABELS: Record<string, string> = {
   project: "Overview",
-  guidelines: "Guidelines",
+  // us-100.3: one vocabulary. `guidelines` is the storage key for the
+  // Agent Instructions document; `worker_instructions` is the per-task set.
+  guidelines: "Agent Instructions",
   learnings: "Learnings",
-  worker_instructions: "Agent instructions",
+  worker_instructions: "Task Instructions",
 };
 
 function surfaceLabel(surface: string) {
