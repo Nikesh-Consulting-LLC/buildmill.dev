@@ -30,6 +30,7 @@ from typing import Any
 import jwt
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
+from .. import db
 from ..auth import AuthUser
 from ..config import Settings, get_settings
 from ..errors import safe_accept
@@ -309,3 +310,15 @@ async def _handle_input(
                 "message": (reply or {}).get("error") or "The agent did not accept that.",
             }
         )
+        return
+    if action == "cancel":
+        # us-96.9: the stop is now a fact on the run row, so when the
+        # runner's hand-back arrives the submit route lands it as
+        # `stopped` — a decision, never a malfunction for the repair
+        # ladder, the failure log, or the effort rollup to misread.
+        try:
+            db.set_run_stopped_reason(
+                get_settings(), run_id, "stopped by the manager"
+            )
+        except Exception:  # noqa: BLE001 — the stop itself already landed
+            logger.warning("could not mark run %s stopped", run_id)

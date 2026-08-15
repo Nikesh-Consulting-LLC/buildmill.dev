@@ -132,6 +132,10 @@ class FakeClient:
     async def heartbeat(self, run_id):
         self.beats += 1
 
+    async def claim_alive(self, run_id):
+        # us-96.9 AC4: the preflight probe — this double's claims are live.
+        return True, None
+
     async def list_pool(self):
         return {"runs": []}
 
@@ -211,3 +215,57 @@ def test_heartbeat_survives_a_failed_beat(monkeypatch):
     # exception). A second attempted beat proves the loop kept going.
     assert client.calls >= 2
     assert client.beats >= 1
+
+
+# ---------------------------------------------------------------- us-96.9
+# A stop is an answer, not a breakdown.
+
+
+def test_a_stopped_result_never_selects_a_repair_action():
+    """AC1: the field short-circuits before any keyword loop — the words
+    'the session was cancelled' alone must never buy a wait or a reclone."""
+    from supervisor.repair import classify, classify_fault
+
+    r = ModuleResult(
+        outcome="failed",
+        error="the session was cancelled",
+        stopped=True,
+    )
+    assert classify(r) == "unrecoverable"
+    # And the keyword fault logic is bypassed too.
+    assert classify_fault(r) == "work-fault"
+
+
+def test_a_stopped_payload_carries_no_fault_class():
+    """AC2/AC3: neither the box nor the story failed — the payload names
+    the decision and omits the classification entirely."""
+    from supervisor.workloop import result_to_payload
+
+    r = ModuleResult(outcome="failed", error="whatever the CLI said", stopped=True)
+    payload = result_to_payload(r)
+    assert payload["error"] == "stopped by the manager"
+    assert "fault_class" not in payload
+    assert "pause_reason" not in payload
+
+
+def test_run_claimed_never_boots_on_a_dead_claim():
+    """AC4: a lost/expired/stopped claim aborts before the CLI is invoked,
+    releases quietly, and submits nothing — the 2026-08-14 zombie."""
+
+    class DeadClaimClient(FakeClient):
+        def __init__(self, bundle):
+            super().__init__(bundle)
+            self.released = None
+
+        async def claim_alive(self, run_id):
+            return False, "no live claim on this run to extend"
+
+        async def release(self, run_id, note=""):
+            self.released = note
+
+    client = DeadClaimClient(_bundle("code"))
+    sup = Supervisor(client, config_provider=lambda: {"enabled_modules": ["sim"]})
+    result = asyncio.run(sup.run_claimed("r1"))
+    assert result is None
+    assert client.submitted is None, "a dead claim must not be submitted against"
+    assert client.released and "claim lost" in client.released

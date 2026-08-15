@@ -38,12 +38,39 @@ const KIND_META: Record<string, { title: string; description: string }> = {
       "How a worker should split an approved PRD into engineering stories.",
   },
   plan: {
-    title: "Plan runs",
-    description: "How a worker should write implementation and test plans.",
+    title: "Stories in a feature — plan",
+    description:
+      "How a worker should write implementation and test plans for a story born from a PRD breakdown.",
   },
   code: {
-    title: "Code runs",
-    description: "How a worker should implement an approved plan.",
+    title: "Stories in a feature — build",
+    description:
+      "How a worker should implement a feature-child story's approved plan.",
+  },
+  standalone_plan: {
+    title: "Standalone stories — plan",
+    description:
+      "Planning a story with no PRD and no parent feature — the story and its acceptance criteria are the whole contract.",
+  },
+  standalone_code: {
+    title: "Standalone stories — build",
+    description:
+      "Implementing a standalone story's approved plan, inside this story's slice only.",
+  },
+  bug_rca: {
+    title: "Bugs — root cause analysis",
+    description:
+      "How a worker should diagnose a bug: what broke, why, and the proposed fix — in plain language, no code.",
+  },
+  bug_fix: {
+    title: "Bugs — the fix",
+    description:
+      "How a worker should implement an approved RCA's proposed fix, with the reproduction as the regression case.",
+  },
+  chore: {
+    title: "Chores — single-shot build",
+    description:
+      "How a worker should build a chore directly — no plan phase precedes it, and the hand-back notes carry the verification story.",
   },
   test: {
     title: "Test runs",
@@ -100,14 +127,16 @@ const SECTIONS: {
   {
     key: "planning",
     label: "Planning",
-    blurb: "Deciding how a story will be built and how it will be verified.",
-    kinds: ["plan"],
+    blurb:
+      "Deciding how work will be built and verified — each work-item type in its own words (us-96.3).",
+    kinds: ["plan", "standalone_plan", "bug_rca"],
   },
   {
     key: "coding",
     label: "Coding",
-    blurb: "Writing the change and handing it back for review.",
-    kinds: ["code"],
+    blurb:
+      "Writing the change and handing it back for review — each work-item type in its own words (us-96.3).",
+    kinds: ["code", "standalone_code", "bug_fix", "chore"],
   },
   {
     key: "testing",

@@ -33,6 +33,10 @@ export type ChildIssue = {
   displayId: string | null;
   /** Whether a code run is even possible for this story. */
   hasApprovedPlan: boolean;
+  /** us-96.4: whether this story has EVER been planned (a plan artifact in
+   * any state). The feature owns the initial plan; revision stays
+   * individual, and this is the client's echo of that line. */
+  hasAnyPlan: boolean;
   /** US-48.3: where this story stands on being drawn. `no-ui` is an answer
    * an agent gave, not a gap — it reads differently from `none`. */
   wireframe: "drawn" | "no-ui" | "in-flight" | "none";
@@ -68,6 +72,7 @@ export function StoriesPanel({
   breakdownMode,
   breakdownInstructions,
   breakdownPending = false,
+  lastBreakdownError = null,
   rollup = null,
   buildMode = "story",
   featureLabel,
@@ -84,6 +89,9 @@ export function StoriesPanel({
   breakdownMode?: string;
   breakdownInstructions?: string;
   breakdownPending?: boolean;
+  /** us-96.6: the prior failed breakdown run's error, shown beside the
+   * retry so the manager redispatches informed. */
+  lastBreakdownError?: string | null;
   /** US-20.6: present only in feature/epic build mode. */
   rollup?: ChildRollup | null;
   /** Decides whether a single story may be built on its own (us-22.10). */
@@ -187,13 +195,23 @@ export function StoriesPanel({
         )}
         {childIssues.length === 0 ? (
           featureStatus === "ready" ? (
-            <BreakdownPanel
-              featureId={featureId}
-              orgId={orgId}
-              breakdownMode={breakdownMode}
-              breakdownInstructions={breakdownInstructions}
-              pending={breakdownPending}
-            />
+            <>
+              {/* us-96.6: a failed split leaves the feature standing here —
+                  the run failed, not the work item — and the retry says
+                  what went wrong last time. */}
+              {lastBreakdownError && !breakdownPending && (
+                <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+                  The last breakdown run failed: {lastBreakdownError}
+                </p>
+              )}
+              <BreakdownPanel
+                featureId={featureId}
+                orgId={orgId}
+                breakdownMode={breakdownMode}
+                breakdownInstructions={breakdownInstructions}
+                pending={breakdownPending}
+              />
+            </>
           ) : (
             <p className="text-sm text-muted-foreground">
               This feature needs an approved PRD before it can be broken into
@@ -231,6 +249,17 @@ export function StoriesPanel({
                     whether it has been drawn without a visit. */}
                 <WireframeMark state={c.wireframe} />
                 <ComplexityBadge complexity={c.complexity} />
+                {/* us-96.4: a child at a review gate is reachable from the
+                    feature — the walk goes through this list, not through
+                    hunting each story page for its review link. */}
+                {c.status === "plan-review" && (
+                  <Link
+                    href={`/review/${c.id}`}
+                    className="shrink-0 text-xs font-medium text-primary hover:underline"
+                  >
+                    Review plan
+                  </Link>
+                )}
                 <StatusBadge status={c.status as IssueStatus} />
                 <StoryDispatchMenu
                   issueId={c.id}
@@ -238,6 +267,7 @@ export function StoriesPanel({
                     orgId,
                     status: c.status,
                     hasApprovedPlan: c.hasApprovedPlan,
+                    hasAnyPlan: c.hasAnyPlan,
                     label: c.displayId ?? c.title,
                     buildMode,
                     featureLabel,

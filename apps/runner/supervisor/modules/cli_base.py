@@ -84,7 +84,7 @@ def handback_shape(run_kind: str) -> str:
     return HANDBACK_SHAPE.get(run_kind, HANDBACK_MCP)
 
 
-def _task_section(run_kind: str) -> str:
+def _task_section(run_kind: str, shape: str | None = None) -> str:
     """What the runner has to say about the task: only how to hand it back.
 
     Deliberately says nothing about WHAT the work is. That lives in the
@@ -92,8 +92,15 @@ def _task_section(run_kind: str) -> str:
     get_work_context — and which a manager can edit per project. Repeating a
     guess at it here is what made this module wrong for five run kinds, and
     what made a manager's edit lose to hardcoded prose.
+
+    us-96.8: `shape` overrides the kind's default — the transport actually
+    in play, resolved by the module (`handback_shape_for`). A code run whose
+    agent hands back over factory MCP must never read the worktree wording:
+    run 51cd4fd3 (2026-08-14) spent four minutes deliberating between this
+    section and get_work_context, then had its changeset refused for the
+    `.factory-out/test_cases.json` this section told it to write.
     """
-    shape = handback_shape(run_kind)
+    shape = shape or handback_shape(run_kind)
     if shape == HANDBACK_FILES:
         return (
             "## Handing back\nDo NOT modify any project file. Write the "
@@ -110,6 +117,24 @@ def _task_section(run_kind: str) -> str:
             "refused, read the reason, fix it and try again — never report "
             "success you were not given."
         )
+    if run_kind == "code":
+        # us-96.8: code over MCP — the agent edits the checkout but the
+        # factory does all the git. One voice, one submit tool, one route
+        # for test cases, and the echo check that catches a partial submit.
+        return (
+            "## Handing back\nEdit files in this checkout freely, but do "
+            "not commit, do not create branches, do not open PRs, and "
+            "write no factory scratch files — the factory does all the "
+            "git. Hand back with submit_changeset: it takes your changed "
+            "files, and its `test_cases` field is the one place for the "
+            "test cases a human should run (never a file). Then check the "
+            "submit's echo — the files it says it received — against your "
+            "own list of changed files before reporting done; a partial "
+            "hand-back is yours to catch.\n\n"
+            "A refused hand-back is NOT a finished run: if a tool call is "
+            "refused, read the reason, fix it and try again — never report "
+            "success you were not given."
+        )
     return (
         "## Handing back\nWrite no project file and commit nothing — this run "
         "hands back entirely through the factory's tools. get_work_context "
@@ -121,7 +146,7 @@ def _task_section(run_kind: str) -> str:
     )
 
 
-def _mcp_sections(ctx: RunContext, run_kind: str) -> str:
+def _mcp_sections(ctx: RunContext, run_kind: str, shape: str | None = None) -> str:
     """US-31.9: the prompt as a POINTER, not a payload.
 
     With the factory's MCP server wired into the CLI, the agent fetches what
@@ -174,13 +199,15 @@ def _mcp_sections(ctx: RunContext, run_kind: str) -> str:
             + "\n\nWork within that. Say so in your hand-back if it stopped you "
             "verifying something, rather than claiming you verified it."
         )
-    out.append(_task_section(run_kind))
+    out.append(_task_section(run_kind, shape=shape))
     return "\n\n".join(out)
 
 
-def _sections(ctx: RunContext, run_kind: str, mcp: bool = False) -> str:
+def _sections(
+    ctx: RunContext, run_kind: str, mcp: bool = False, shape: str | None = None
+) -> str:
     if mcp:
-        return _mcp_sections(ctx, run_kind)
+        return _mcp_sections(ctx, run_kind, shape=shape)
     c = ctx.context or {}
     out = [
         "You are completing a Software Factory work item inside this git checkout.",
@@ -202,7 +229,7 @@ def _sections(ctx: RunContext, run_kind: str, mcp: bool = False) -> str:
         if isinstance(val, list):
             val = "\n".join(f"- {v}" for v in val)
         out.append(f"## {heading}\n{val}")
-    out.append(_task_section(run_kind))
+    out.append(_task_section(run_kind, shape=shape))
     return "\n\n".join(out)
 
 
@@ -328,6 +355,19 @@ class CLIModule:
     # (us-44.1) were all refused. It is safe to widen only because the prompt
     # now speaks in hand-back shapes rather than guessing at each task.
     capabilities = set(HANDBACK_SHAPE)
+    # us-96.8: kinds THIS module's agent hands back over factory MCP even
+    # though the kind's default shape says otherwise. The interactive (ACP)
+    # module sets {"code"}: its agent submits with submit_changeset, so the
+    # harness must not commit the tree a second time — and the prompt must
+    # speak with one voice about it.
+    MCP_HANDBACK_KINDS: frozenset[str] = frozenset()
+
+    def handback_shape_for(self, run_kind: str) -> str:
+        """The transport actually in play for this module and kind — the
+        kind's default shape unless the module declares an MCP hand-back."""
+        if run_kind in self.MCP_HANDBACK_KINDS:
+            return HANDBACK_MCP
+        return handback_shape(run_kind)
 
     # US-32.4: what this module can be told. Subclasses declare their own; the
     # base declares nothing, so a module that forgets is honestly untunable
@@ -672,7 +712,12 @@ class CLIModule:
             _stage_start = time.monotonic()
             res = await self._run_cli(
                 prim,
-                _sections(ctx, kind, mcp=bool(mcp_path)),
+                _sections(
+                    ctx,
+                    kind,
+                    mcp=bool(mcp_path),
+                    shape=self.handback_shape_for(kind),
+                ),
                 kind,
                 str(workdir),
                 ctx.timeout_seconds,
@@ -719,6 +764,42 @@ class CLIModule:
                     outcome="succeeded", stdout=res.stdout[-20000:], plan=plan,
                     test_plan=test_plan,
                     test_cases=test_cases,
+                    claude_session_id=getattr(self, "_last_session_id", None),
+                )
+
+            # us-96.8: a module whose agent hands code back over factory MCP
+            # (submit_changeset) already has its commit on the branch — the
+            # factory built it. Committing the tree here would land the same
+            # change a second time and race the changeset push. Instead the
+            # harness SWEEPS: any locally-modified file whose change never
+            # reached the remote branch is named in a progress line, so a
+            # partial submit is a fact on the run rather than a silent gap
+            # in the PR (AC5).
+            if kind in self.MCP_HANDBACK_KINDS:
+                _stage_start = time.monotonic()
+                shutil.rmtree(out_dir, ignore_errors=True)  # never committed
+                leftovers: list[str] = []
+                try:
+                    leftovers = await gitwork.unsubmitted_paths(
+                        prim, workdir, ctx.branch_name
+                    )
+                except Exception as e:  # noqa: BLE001 — the sweep never fails a run
+                    logger.warning(
+                        "unsubmitted-paths sweep failed for run %s: %s",
+                        ctx.run_id, e,
+                    )
+                if leftovers and self._on_progress:
+                    self._on_progress(
+                        "progress",
+                        "modified but never submitted: " + ", ".join(leftovers),
+                    )
+                self._stage(
+                    "handback_sweep",
+                    round((time.monotonic() - _stage_start) * 1000),
+                )
+                return ModuleResult(
+                    outcome="succeeded", stdout=res.stdout[-20000:],
+                    branch_ref=ctx.branch_name,
                     claude_session_id=getattr(self, "_last_session_id", None),
                 )
 

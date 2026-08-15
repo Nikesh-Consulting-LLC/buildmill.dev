@@ -6,6 +6,7 @@ import { useRouter } from "@/lib/router-with-progress";
 import {
   AlertTriangle,
   Bot,
+  ChevronRight,
   GripVertical,
   ListOrdered,
   Loader2,
@@ -27,6 +28,11 @@ import { EmptyState } from "@/components/empty-state";
 import { CancelRunDialog } from "@/components/cancel-run-dialog";
 import { IDLE_LABELS, idleTone, type IdleReason } from "../team/team-view";
 import type { QueueGroup, QueueItem, QueueRunState } from "./data";
+import {
+  rollupQueueRows,
+  type QueueFeatureRow,
+  type QueueRowModel,
+} from "./queue-rollup";
 
 /** US-57.14: an agent the org is counting on to pick up queued work, but
  * which cannot right now — everything `worker_idle_reason` calls a condition
@@ -178,33 +184,11 @@ function StatePill({ item }: { item: QueueItem }) {
   );
 }
 
-/** US-24.2: interleave a feature row above the runs whose stories share one.
- * Presentation only — every run still appears exactly once, so the group count,
- * drag-to-reorder and pause-all are untouched. A feature owning a single run in
- * this project renders flat. */
-type NestedQueueRow =
-  | { kind: "feature"; feature: NonNullable<QueueItem["parent"]>; count: number }
-  | { kind: "item"; item: QueueItem; nested: boolean };
-
-function nestQueueItems(items: QueueItem[]): NestedQueueRow[] {
-  const counts = new Map<string, number>();
-  for (const i of items) {
-    if (i.parent) counts.set(i.parent.id, (counts.get(i.parent.id) ?? 0) + 1);
-  }
-  const seen = new Set<string>();
-  const out: NestedQueueRow[] = [];
-  for (const i of items) {
-    const p = i.parent ?? null;
-    const n = p ? (counts.get(p.id) ?? 0) : 0;
-    const grouped = !!p && n > 1;
-    if (p && grouped && !seen.has(p.id)) {
-      seen.add(p.id);
-      out.push({ kind: "feature", feature: p, count: n });
-    }
-    out.push({ kind: "item", item: i, nested: grouped });
-  }
-  return out;
-}
+// us-96.7: US-24.2's presentation nesting retired — a feature's runs now
+// collapse into ONE row (`rollupQueueRows` in data.ts): rolled-up state,
+// the active child's worker on the row, the batch's blocker when held, and
+// the feature as the drag/pause unit. The members stay reachable through
+// the row's expander, so per-run pause/cancel is never lost.
 
 function QueueRow({
   item,
@@ -359,6 +343,10 @@ export function QueueView({
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [busyRun, setBusyRun] = useState<string | null>(null);
   const [busyReorder, setBusyReorder] = useState(false);
+  // us-96.7: which feature rows are expanded to show their member runs.
+  const [expandedFeatures, setExpandedFeatures] = useState<Set<string>>(
+    new Set()
+  );
   // US-15.11: which project group's bulk action (sort / pause all / resume
   // all) is in flight, so that group's buttons disable together.
   const [busyGroup, setBusyGroup] = useState<string | null>(null);
@@ -470,26 +458,82 @@ export function QueueView({
     router.refresh();
   }
 
-  function handleDrop(group: QueueGroup, targetId: string) {
+  // us-96.7: pause/resume acts on the whole batch. Pausing targets queued
+  // and held members; resuming targets paused ones — mirroring bulkPause's
+  // per-project semantics at the feature's scale.
+  async function toggleFeaturePause(row: QueueFeatureRow) {
+    const pausing =
+      row.members.some((m) => m.state === "queued" || m.state === "held");
+    const ids = row.members
+      .filter((m) =>
+        pausing
+          ? m.state === "queued" || m.state === "held"
+          : m.state === "paused"
+      )
+      .map((m) => m.id);
+    if (!ids.length) return;
+    setBusyRun(row.feature.id);
+    const supabase = createClient();
+    await Promise.all(
+      ids.map((id) =>
+        supabase.rpc("set_run_paused", { p_run: id, p_paused: pausing })
+      )
+    );
+    setBusyRun(null);
+    router.refresh();
+  }
+
+  function toggleExpanded(featureId: string) {
+    setExpandedFeatures((prev) => {
+      const next = new Set(prev);
+      if (next.has(featureId)) next.delete(featureId);
+      else next.add(featureId);
+      return next;
+    });
+  }
+
+  /** us-96.7: the reorder unit — a lone queued run, or a feature whose
+   * members are ALL still queued. Feature members ride as a contiguous
+   * block in member order and never interleave with another unit. */
+  function draggableUnits(
+    rows: QueueRowModel[]
+  ): { id: string; runIds: string[] }[] {
+    return rows
+      .filter((r) =>
+        r.kind === "run" ? r.item.status === "queued" : r.allQueued
+      )
+      .map((r) =>
+        r.kind === "run"
+          ? { id: r.item.id, runIds: [r.item.id] }
+          : { id: r.feature.id, runIds: r.members.map((m) => m.id) }
+      );
+  }
+
+  function handleDrop(
+    group: QueueGroup,
+    rows: QueueRowModel[],
+    targetUnitId: string
+  ) {
     return (e: React.DragEvent) => {
       e.preventDefault();
       const sourceId = e.dataTransfer.getData("text/plain") || draggedId;
       setDraggedId(null);
-      if (!sourceId || sourceId === targetId) return;
+      if (!sourceId || sourceId === targetUnitId) return;
 
-      // Only the draggable subset (status === 'queued') has an order to
-      // edit — running rows are already claimed and are never reordered.
-      const draggableIds = group.items
-        .filter((i) => i.status === "queued")
-        .map((i) => i.id);
-      const fromIdx = draggableIds.indexOf(sourceId);
-      const toIdx = draggableIds.indexOf(targetId);
+      // Only queued units have an order to edit — running rows (and
+      // features with a claimed member) are never reordered.
+      const units = draggableUnits(rows);
+      const fromIdx = units.findIndex((u) => u.id === sourceId);
+      const toIdx = units.findIndex((u) => u.id === targetUnitId);
       if (fromIdx === -1 || toIdx === -1) return;
 
-      const reordered = [...draggableIds];
-      reordered.splice(fromIdx, 1);
-      reordered.splice(toIdx, 0, sourceId);
-      persistOrder(group.projectId, reordered);
+      const reordered = [...units];
+      const [moved] = reordered.splice(fromIdx, 1);
+      reordered.splice(toIdx, 0, moved);
+      persistOrder(
+        group.projectId,
+        reordered.flatMap((u) => u.runIds)
+      );
     };
   }
 
@@ -599,60 +643,205 @@ export function QueueView({
             </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
-            {nestQueueItems(group.items).map((row) => {
-              if (row.kind === "feature") {
+            {(() => {
+              const rows = rollupQueueRows(group.items);
+              return rows.map((row) => {
+                if (row.kind === "run") {
+                  const item = row.item;
+                  const draggable = item.status === "queued" && !busyReorder;
+                  return (
+                    <QueueRow
+                      key={item.id}
+                      item={item}
+                      draggable={draggable}
+                      dragging={draggedId === item.id}
+                      onDragStart={(e) => {
+                        setDraggedId(item.id);
+                        e.dataTransfer.effectAllowed = "move";
+                        e.dataTransfer.setData("text/plain", item.id);
+                      }}
+                      onDragEnd={() => setDraggedId(null)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={handleDrop(group, rows, item.id)}
+                      onTogglePause={
+                        item.state === "queued" || item.state === "paused"
+                          ? () => togglePause(item)
+                          : undefined
+                      }
+                      busy={busyRun === item.id}
+                    />
+                  );
+                }
+
+                // us-96.7: the feature is one row and one unit.
+                const f = row;
+                const draggable = f.allQueued && !busyReorder;
+                const isOpen = expandedFeatures.has(f.feature.id);
+                const pauseLabel = f.members.some(
+                  (m) => m.state === "queued" || m.state === "held"
+                )
+                  ? "Pause all"
+                  : "Resume all";
+                const mixed =
+                  f.pausedCount > 0 &&
+                  f.pausedCount < f.members.length;
+                const kinds = new Set(f.members.map((m) => m.kind));
+                const kindLabel =
+                  kinds.size === 1
+                    ? runKindLabel(f.members[0].kind)
+                    : "mixed";
                 return (
                   <div
-                    key={`feat-${row.feature.id}`}
-                    className="flex items-center gap-2 pt-1 text-xs text-muted-foreground"
+                    key={`feat-${f.feature.id}`}
+                    className="flex flex-col gap-1.5"
                   >
-                    {row.feature.displayId && (
-                      <span className="font-mono">{row.feature.displayId}</span>
-                    )}
-                    <Link
-                      href={`/issues/${row.feature.id}?from=workbench`}
-                      className="truncate font-medium text-foreground hover:underline"
+                    <div
+                      draggable={draggable}
+                      onDragStart={
+                        draggable
+                          ? (e) => {
+                              setDraggedId(f.feature.id);
+                              e.dataTransfer.effectAllowed = "move";
+                              e.dataTransfer.setData(
+                                "text/plain",
+                                f.feature.id
+                              );
+                            }
+                          : undefined
+                      }
+                      onDragEnd={
+                        draggable ? () => setDraggedId(null) : undefined
+                      }
+                      onDragOver={
+                        draggable ? (e) => e.preventDefault() : undefined
+                      }
+                      onDrop={
+                        draggable
+                          ? handleDrop(group, rows, f.feature.id)
+                          : undefined
+                      }
+                      className={`flex flex-col gap-1.5 rounded-lg border px-3 py-2.5 transition-colors ${
+                        draggedId === f.feature.id
+                          ? "opacity-40"
+                          : "hover:bg-accent/40"
+                      }`}
                     >
-                      {row.feature.title}
-                    </Link>
-                    <span>
-                      · {row.count} {row.count === 1 ? "story" : "stories"}
-                    </span>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-start gap-2">
+                          {draggable && (
+                            <GripVertical className="mt-0.5 size-4 shrink-0 cursor-grab text-muted-foreground/50" />
+                          )}
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                              {f.feature.displayId && (
+                                <span className="font-mono text-xs text-muted-foreground">
+                                  {f.feature.displayId}
+                                </span>
+                              )}
+                              <span className="text-xs text-muted-foreground">
+                                {f.members.length} run
+                                {f.members.length === 1 ? "" : "s"} ·{" "}
+                                {kindLabel}
+                              </span>
+                            </div>
+                            <Link
+                              href={`/issues/${f.feature.id}?from=${encodeURIComponent("/factory-queue")}&fromLabel=${encodeURIComponent("Factory Queue")}`}
+                              className="text-sm font-medium hover:underline"
+                            >
+                              {f.feature.title}
+                            </Link>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <Badge variant="secondary">Feature</Badge>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATE_META[f.state].className}`}
+                          >
+                            {STATE_META[f.state].label}
+                          </span>
+                        </div>
+                      </div>
+
+                      {f.active ? (
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Bot className="size-3" />
+                          <span>
+                            {f.active.displayId && `${f.active.displayId} · `}
+                            {f.active.workerName || "worker"}
+                            {f.active.activity && ` · ${f.active.activity}`}
+                            {f.active.elapsedMinutes !== null &&
+                              ` · ${f.active.elapsedMinutes}m elapsed`}
+                          </span>
+                        </div>
+                      ) : f.heldReason ? (
+                        <p className="text-xs text-muted-foreground">
+                          {f.heldReason}
+                        </p>
+                      ) : null}
+                      {mixed && (
+                        <p className="text-xs text-muted-foreground">
+                          {f.pausedCount} of {f.members.length} paused
+                        </p>
+                      )}
+
+                      <div className="flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                          onClick={() => toggleExpanded(f.feature.id)}
+                          aria-expanded={isOpen}
+                        >
+                          <ChevronRight
+                            className={cn(
+                              "size-3.5 transition-transform",
+                              isOpen && "rotate-90"
+                            )}
+                          />
+                          {isOpen ? "Hide" : "Show"} the {f.members.length}{" "}
+                          run{f.members.length === 1 ? "" : "s"}
+                        </button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1 px-2 text-xs"
+                          disabled={busyRun === f.feature.id}
+                          onClick={() => toggleFeaturePause(f)}
+                          title="Pause or resume every queued run in this feature — places are kept"
+                        >
+                          {busyRun === f.feature.id ? (
+                            <Loader2 className="size-3 animate-spin" />
+                          ) : pauseLabel === "Pause all" ? (
+                            <Pause className="size-3" />
+                          ) : (
+                            <Play className="size-3" />
+                          )}
+                          {pauseLabel}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {isOpen && (
+                      <div className="ml-1 flex flex-col gap-1.5 border-l pl-3">
+                        {f.members.map((m) => (
+                          <QueueRow
+                            key={m.id}
+                            item={m}
+                            draggable={false}
+                            dragging={false}
+                            onTogglePause={
+                              m.state === "queued" || m.state === "paused"
+                                ? () => togglePause(m)
+                                : undefined
+                            }
+                            busy={busyRun === m.id}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
-              }
-              const item = row.item;
-              const draggable = item.status === "queued" && !busyReorder;
-              const rowEl = (
-                <QueueRow
-                  key={item.id}
-                  item={item}
-                  draggable={draggable}
-                  dragging={draggedId === item.id}
-                  onDragStart={(e) => {
-                    setDraggedId(item.id);
-                    e.dataTransfer.effectAllowed = "move";
-                    e.dataTransfer.setData("text/plain", item.id);
-                  }}
-                  onDragEnd={() => setDraggedId(null)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={handleDrop(group, item.id)}
-                  onTogglePause={
-                    item.state === "queued" || item.state === "paused"
-                      ? () => togglePause(item)
-                      : undefined
-                  }
-                  busy={busyRun === item.id}
-                />
-              );
-              return row.nested ? (
-                <div key={item.id} className="ml-1 border-l pl-3">
-                  {rowEl}
-                </div>
-              ) : (
-                rowEl
-              );
-            })}
+              });
+            })()}
           </CardContent>
         </Card>
         );

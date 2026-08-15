@@ -540,7 +540,7 @@ function BoardCard({
       </div>
       <StageDots type={i.type} status={i.status} className="mb-1.5" />
       <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-        <StatusBadge status={i.status as IssueStatus} />
+        <StatusBadge status={i.status as IssueStatus} issueType={i.type} />
         {i.complexity && <ComplexityBadge complexity={i.complexity} />}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">

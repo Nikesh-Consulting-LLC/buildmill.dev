@@ -244,6 +244,13 @@ export default async function IssueDetailPage({
   const hasActiveBreakdownRun = (runs ?? []).some(
     (r) => r.kind === "breakdown" && ["queued", "running"].includes(r.status)
   );
+  // us-96.6: a failed breakdown no longer moves the feature off 'ready' —
+  // the panel stays, and the retry is informed by what went wrong last time.
+  const latestBreakdownRun = (runs ?? []).find((r) => r.kind === "breakdown");
+  const lastBreakdownError =
+    latestBreakdownRun?.status === "failed"
+      ? (latestBreakdownRun.error as string | null)
+      : null;
   // US-15.14: the one active run (if any) the manager can reset — queued or
   // running, any kind. runs are ordered newest-first, so the first match is
   // the current attempt.
@@ -285,16 +292,23 @@ export default async function IssueDetailPage({
     // not only in feature/epic mode, because the per-story dispatch menu needs
     // it in story mode too.
     const childIds = live.map((c) => c.id);
-    const { data: approvedChildPlans } = childIds.length
+    // us-96.4: all states, not just approved — an artifact in ANY state is
+    // the line between initial planning (the feature's) and revision (the
+    // story's own escape hatch).
+    const { data: childPlanArtifacts } = childIds.length
       ? await supabase
           .from("artifacts")
-          .select("issue_id")
+          .select("issue_id, status")
           .in("issue_id", childIds)
           .eq("kind", "plan")
-          .eq("status", "approved")
-      : { data: [] as { issue_id: string }[] };
+      : { data: [] as { issue_id: string; status: string }[] };
     const withApprovedPlan = new Set(
-      (approvedChildPlans ?? []).map((a) => a.issue_id)
+      (childPlanArtifacts ?? [])
+        .filter((a) => a.status === "approved")
+        .map((a) => a.issue_id)
+    );
+    const withAnyPlan = new Set(
+      (childPlanArtifacts ?? []).map((a) => a.issue_id)
     );
 
     // US-48.3: where each story stands on being drawn. The `no UI surface`
@@ -338,6 +352,7 @@ export default async function IssueDetailPage({
         subNo: c.sub_no,
       }),
       hasApprovedPlan: withApprovedPlan.has(c.id),
+      hasAnyPlan: withAnyPlan.has(c.id),
       wireframe: drawingNow.has(c.id)
         ? ("in-flight" as const)
         : (drawnByIssue.get(c.id) ?? ("none" as const)),
@@ -631,6 +646,9 @@ export default async function IssueDetailPage({
     status: issue.status,
     latestRunKind: (runs?.[0]?.kind ?? null) as "plan" | "code" | null,
     hasApprovedPlan,
+    // us-96.4/96.5: any plan artifact at all — the tracker's line between
+    // initial planning (the feature's) and revision (the story's own).
+    hasAnyPlan: planArtifacts.length > 0,
     hasApprovedPrd,
     hasPrd: prdArtifacts.length > 0,
     hasChildren,
@@ -701,6 +719,7 @@ export default async function IssueDetailPage({
     epics: (epics ?? []) as EpicOption[],
     hasActivePrdRun,
     hasActiveBreakdownRun,
+    lastBreakdownError,
     hasActiveElaborateRun,
     hasElaborationDraft: !!elaborationDraft,
     wireframe,
@@ -744,7 +763,7 @@ export default async function IssueDetailPage({
             <h1 className="truncate text-xl font-semibold tracking-tight">
               {issue.title}
             </h1>
-            <StatusBadge status={issue.status as IssueStatus} />
+            <StatusBadge status={issue.status as IssueStatus} issueType={issue.type} />
             <AssigneePicker
               issueId={issue.id}
               orgId={issue.org_id}

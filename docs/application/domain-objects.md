@@ -74,7 +74,7 @@ own row above.
 - `notification_endpoints`, `notifications` — where alerts get delivered, and per-principal delivery records
 - `project_build_config`, `project_guidelines`, `guideline_recommendations` — a project's build/gate config, its written guidelines, and worker-proposed edits to them
 - `project_learnings`, `learning_submissions` — a project's accepted learnings, and worker-submitted candidates awaiting a decision
-- `worker_instructions` — per-project, per-run-kind instructions baked into a worker's prompt
+- `worker_instructions` — per-project, per-run-kind instructions baked into a worker's prompt. Phase 96: the kind is type-differentiated through `instruction_kind_for` — a chore's code run reads `chore`, a bug's plan/code runs read `bug_rca`/`bug_fix`, a parentless story reads `standalone_plan`/`standalone_code`; feature children keep `plan`/`code`
 - `worker_capabilities`, `worker_capability_events` — the US-13.10 capability matrix: one row per
   (worker, project, capability) grant over seven named stages (`prd`, `breakdown`, `plan`, `code`,
   `test`, `release`, `deploy`). **US-31.3: the gate is fail-CLOSED — zero rows means the worker is

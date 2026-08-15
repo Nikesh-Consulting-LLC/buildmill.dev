@@ -46,6 +46,11 @@ def model_env(
     provider_type: str, gateway_base: str, key: str, model: str, module: str = ""
 ) -> dict[str, str]:
     """Env a CLI module needs to reach the gateway (mirror of the server helper)."""
+    # us-96.11: a gateway key exists here the moment it is minted into an
+    # env — register it before anything downstream can echo it into a trace.
+    from . import redact
+
+    redact.register("gateway-key", key)
     base = gateway_base.rstrip("/")
     pt = (provider_type or "").lower()
     if module == "interactive":
@@ -114,12 +119,22 @@ def subscription_env(model: str, token: str | None = None) -> dict[str, str]:
     the injected env merges over os.environ — the credential the manager can
     see, rotate and remove in the app is the one that runs.
     """
+    # us-96.11: the subscription token is a live credential the moment it
+    # is delivered into an env.
+    from . import redact
+
+    redact.register("subscription-token", token)
     env: dict[str, str] = {}
     if model:
         env["ANTHROPIC_MODEL"] = model
     if token:
         env["CLAUDE_CODE_OAUTH_TOKEN"] = token
     return env
+
+
+class ClaimLost(Exception):
+    """us-96.9 AC4: the claim ended under us — a lost lease, an expiry, or a
+    manager's stop. Do not boot a CLI, do not submit; release quietly."""
 
 
 class WorkerClient:
@@ -160,7 +175,14 @@ class WorkerClient:
         return r.json()
 
     async def submit(self, run_id: str, payload: dict[str, Any]):
-        return await self._req("POST", f"/runs/{run_id}/submit", json=payload)
+        # us-96.11: the second posting layer — module stdout, errors and
+        # notes destined for runs.stdout ride this HTTP submit rather than
+        # the control socket, and they get the same scrub.
+        from . import redact
+
+        return await self._req(
+            "POST", f"/runs/{run_id}/submit", json=redact.scrub_params(payload)
+        )
 
     async def release(self, run_id: str, note: str = ""):
         """Give a claimed run back to the pool (US-31.1: a hand-back that
@@ -172,6 +194,25 @@ class WorkerClient:
             await self._req("POST", f"/runs/{run_id}/heartbeat")
         except Exception:  # noqa: BLE001 — heartbeat is best-effort
             pass
+
+    async def claim_alive(self, run_id: str) -> tuple[bool, str | None]:
+        """us-96.9 AC4: is this claim still ours to work? Answered by the
+        heartbeat endpoint, which 409s when there is no live claim to
+        extend. A network blip answers True — killing a healthy run over a
+        dropped packet is worse than a wasted boot — so only the server
+        SAYING the claim is gone counts."""
+        try:
+            r = await self._req("POST", f"/runs/{run_id}/heartbeat")
+        except Exception:  # noqa: BLE001 — benefit of the doubt
+            return True, None
+        if r.status_code in (404, 409):
+            detail = ""
+            try:
+                detail = (r.json() or {}).get("detail") or ""
+            except Exception:  # noqa: BLE001
+                pass
+            return False, detail or f"the server answered {r.status_code}"
+        return True, None
 
     # US-63.x follow-up: release-prep is deliberately its own three-endpoint
     # contract (apps/api/app/routers/worker.py), not the /runs/* surface — a
@@ -551,6 +592,20 @@ def result_to_payload(r: ModuleResult) -> dict[str, Any]:
     if r.outcome != "succeeded":
         from .repair import classify_fault, turn_limit_hit
 
+        if getattr(r, "stopped", False):
+            # us-96.9: a manager stop carries NO fault_class — neither the
+            # box nor the story failed. The server lands it as `stopped`
+            # (the run row already carries stopped_reason), consuming no
+            # attempt and writing no agent-failure row.
+            return {
+                k: v
+                for k, v in {
+                    "error": "stopped by the manager",
+                    "stdout": r.stdout,
+                    "claude_session_id": r.claude_session_id,
+                }.items()
+                if v is not None
+            }
         return {
             k: v
             for k, v in {
@@ -727,6 +782,17 @@ class Supervisor:
                     + f" -> {outcome}",
                 )
 
+            # us-96.9 AC4: no boot without a live claim — first attempt or
+            # after any repair action. The 2026-08-14 zombie (a fresh CLI
+            # booted after a reclone, on a claim the manager's stop had
+            # already ended, probing the factory with a revoked token) is
+            # structurally impossible with this check in front of every
+            # invocation.
+            async def preflight():
+                alive, why = await self.client.claim_alive(run_id)
+                if not alive:
+                    raise ClaimLost(why or "no live claim on this run")
+
             result = await execute_with_repair(
                 module,
                 ctx,
@@ -734,7 +800,21 @@ class Supervisor:
                 max_attempts=max_attempts,
                 diagnose=diagnose,
                 on_attempt=note_attempt,
+                preflight=preflight,
             )
+        except ClaimLost as e:
+            # One trace line naming why, then release quietly — a submit
+            # against a claim we no longer hold would only 409.
+            self._trace(
+                run_id, f"claim lost before boot — {e}; releasing quietly"
+            )
+            stop.set()
+            beat.cancel()
+            try:
+                await self.client.release(run_id, f"claim lost before boot: {e}")
+            except Exception:  # noqa: BLE001 — the claim is already gone
+                pass
+            return None
         except Exception as e:  # noqa: BLE001 — report, never vanish
             result = ModuleResult(outcome="failed", error=f"module crashed: {e}")
         finally:

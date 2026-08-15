@@ -44,6 +44,13 @@ class ModuleResult:
     # so a resumed session's conversation and its code stay in sync instead
     # of the next checkout silently discarding what the agent had written.
     wip_preserved: bool = False
+    # us-96.9: the manager stopped this session. A FIELD, not a phrase in
+    # the text — on 2026-08-14 the words "the session was cancelled" died
+    # on the way out and the repair ladder recloned a workspace over a
+    # decision. classify()/classify_fault() check this before any keyword
+    # loop; a stopped result is terminal (no wait, no reinstall, no
+    # reclone, no retry).
+    stopped: bool = False
 
 
 @dataclass

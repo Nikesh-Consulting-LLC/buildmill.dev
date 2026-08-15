@@ -16,8 +16,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  deriveCompact,
   deriveTracker,
   featureOwnsBuildReason,
+  featureOwnsPlanReason,
   routedPresetIds,
   type TrackerInput,
 } from "./stage-tracker.ts";
@@ -123,14 +125,28 @@ test("no parent feature: unaffected in every mode", () => {
   }
 });
 
-test("plan-phase actions are unchanged in feature mode", () => {
-  // Planning stays per story: us-22.10 changes exactly one branch of the rail.
+test("plan-phase deferral follows us-96.4: initial plan is the feature's", () => {
+  // us-22.10 kept planning per story; us-96.4 superseded that for a child
+  // that has NEVER been planned — the feature's batch plans it, and the
+  // button says so instead of erroring.
   const { action } = deriveTracker(
     story({ status: "ready", hasApprovedPlan: false, latestRunKind: null })
   );
   assert.equal(action?.kind, "dispatch");
   assert.equal(action?.label, "Dispatch planning");
-  assert.notEqual(action?.disabled, true);
+  assert.equal(action?.disabled, true);
+  assert.match(action?.reason ?? "", /owns the plan/);
+
+  // Revision stays the story's own: any existing plan artifact lifts it.
+  const revised = deriveTracker(
+    story({
+      status: "ready",
+      hasApprovedPlan: false,
+      latestRunKind: null,
+      hasAnyPlan: true,
+    })
+  );
+  assert.notEqual(revised.action?.disabled, true);
 });
 
 test("the reason reads correctly for a one-story feature", () => {
@@ -234,4 +250,84 @@ test("fully curated: the slot becomes the bulk dispatch, not curation", () => {
   );
   assert.equal(action?.kind, "batch-dispatch");
   assert.equal(action?.label, "Plan all 15 stories");
+});
+
+// ---------------------------------------------------------------- us-96.5
+// The type shapes the rail: a chore has no plan stage, a bug speaks RCA,
+// and a never-planned feature child defers its plan to the feature.
+
+test("a chore's rail has no plan stage and dispatch means build", () => {
+  const m = deriveCompact("chore", "draft");
+  assert.deepEqual(
+    m.stages.map((s) => s.key),
+    ["draft", "build"]
+  );
+  assert.equal(m.action?.label, "Dispatch build");
+});
+
+test("a chore in review points at the diff", () => {
+  const m = deriveCompact("chore", "in-review");
+  assert.equal(m.action?.kind, "link");
+  assert.match(m.context, /waiting on your review/);
+});
+
+test("a rejected chore dispatches a fix, never a plan", () => {
+  const m = deriveCompact("chore", "needs-fixes");
+  assert.equal(m.action?.kind, "dispatch");
+  assert.equal(m.action?.label, "Dispatch fix");
+});
+
+test("a bug's rail wears RCA labels", () => {
+  const analyzing = deriveCompact("bug", "planning");
+  assert.equal(analyzing.stages[1].label, "RCA");
+  assert.match(analyzing.context, /diagnosing/);
+
+  const review = deriveCompact("bug", "plan-review");
+  assert.equal(review.action?.label, "Review RCA");
+
+  const ready = deriveCompact("bug", "planned");
+  assert.match(ready.context, /RCA approved/);
+  assert.equal(ready.action?.label, "Dispatch fix");
+  assert.equal(ready.stages[2].label, "Fix");
+});
+
+test("a never-planned feature child defers its plan to the feature", () => {
+  const m = deriveTracker({
+    issueId: "i1",
+    orgId: "o1",
+    type: "story",
+    status: "draft",
+    latestRunKind: null,
+    hasApprovedPlan: false,
+    hasAnyPlan: false,
+    hasApprovedPrd: false,
+    hasPrd: false,
+    hasChildren: false,
+    buildMode: "feature",
+    parent: { id: "f1", label: "FEAT-1.2", storyCount: 4 },
+  });
+  assert.equal(m.action?.disabled, true);
+  assert.equal(
+    m.action?.reason,
+    featureOwnsPlanReason("FEAT-1.2", 4)
+  );
+});
+
+test("a sent-back plan lifts the feature-owns-the-plan deferral", () => {
+  const m = deriveTracker({
+    issueId: "i1",
+    orgId: "o1",
+    type: "story",
+    status: "draft",
+    latestRunKind: "plan",
+    hasApprovedPlan: false,
+    hasAnyPlan: true,
+    hasApprovedPrd: false,
+    hasPrd: false,
+    hasChildren: false,
+    buildMode: "feature",
+    parent: { id: "f1", label: "FEAT-1.2", storyCount: 4 },
+  });
+  // Revision is the story's own; the rail keeps a live button.
+  assert.notEqual(m.action?.disabled, true);
 });

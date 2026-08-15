@@ -185,3 +185,64 @@ def test_coerce_criteria_strips_bullet_and_paren_markers():
 def test_coerce_criteria_non_list_non_string_is_empty():
     assert db.coerce_acceptance_criteria(None) == []
     assert db.coerce_acceptance_criteria({"a": 1}) == []
+
+
+def test_failed_breakdown_leaves_the_feature_standing(monkeypatch):
+    """us-96.6: a breakdown run's failure is the RUN's failure. The feature
+    stays 'ready' (where dispatch_breakdown and the stories panel live) —
+    complete_run must not write issues.status = 'failed' for it."""
+    executed: list[tuple[str, object]] = []
+
+    class FakeCursor:
+        def fetchone(self):
+            return {
+                "id": "run-1",
+                "org_id": "org-1",
+                "issue_id": "issue-1",
+                "kind": "breakdown",
+            }
+
+        def fetchall(self):
+            return []
+
+    class FakeConn:
+        def execute(self, sql, params=None):
+            executed.append((" ".join(sql.split()), params))
+            return FakeCursor()
+
+        def commit(self):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr("app.db._connect", lambda settings: FakeConn())
+
+    from app import db
+
+    ok = db.complete_run(
+        settings=None,
+        run_id="run-1",
+        outcome="failed",
+        stdout="out",
+        diff=None,
+        branch_ref=None,
+        pr_url=None,
+        error="the agent died mid-split",
+    )
+
+    assert ok is True
+    status_writes = [
+        (sql, params)
+        for sql, params in executed
+        if "update public.issues" in sql and "set status" in sql
+    ]
+    assert status_writes == [], (
+        "a failed breakdown must not move the feature's status: "
+        f"{status_writes}"
+    )
+    # The failure itself is still recorded on the feed.
+    assert any("issue_events" in sql for sql, _ in executed)
