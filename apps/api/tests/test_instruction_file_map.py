@@ -188,3 +188,42 @@ def test_the_phase_96_kinds_are_now_carryable():
         "standalone_code",
     ):
         assert kind in KIND_FILES
+
+
+# --- us-100.3: one vocabulary, and the old words are gone -------------------
+
+
+PROJECT_PAGE = REPO / "apps/web/src/app/(app)/projects/[id]/page.tsx"
+AUDIT_LABELS = REPO / "apps/web/src/app/(app)/projects/[id]/content-audit-section.tsx"
+
+
+def test_the_tabs_are_named_for_what_they_hold():
+    """The reported defect: the tab labelled "Agent Instructions" held the
+    per-TASK instructions, so the one place a manager would look for their
+    project's instructions showed a list of run-kind editors."""
+    src = PROJECT_PAGE.read_text(encoding="utf-8")
+    assert '<TabsTrigger value="guidelines">Agent Instructions</TabsTrigger>' in src
+    assert "Task Instructions" in src
+
+
+def test_no_surface_still_calls_the_document_guidelines():
+    """`guidelines` survives as a storage key and a deep-link value — both
+    deliberate — but nothing a manager READS may still say it."""
+    for path in (PROJECT_PAGE, AUDIT_LABELS):
+        src = path.read_text(encoding="utf-8")
+        assert ">Guidelines<" not in src, f"{path.name} still labels it Guidelines"
+        assert '"Guidelines"' not in src, f"{path.name} still labels it Guidelines"
+
+
+def test_the_audit_trail_uses_the_same_two_names():
+    src = AUDIT_LABELS.read_text(encoding="utf-8")
+    assert 'guidelines: "Agent Instructions"' in src
+    assert 'worker_instructions: "Task Instructions"' in src
+
+
+def test_the_deep_link_value_is_unchanged():
+    """us-100.3 AC4: ?tab=guidelines must keep resolving — it is in
+    notifications and bookmarks."""
+    src = PROJECT_PAGE.read_text(encoding="utf-8")
+    assert 'value="guidelines"' in src
+    assert "?tab=guidelines" in src
