@@ -9000,18 +9000,33 @@ def get_project_environment_websites(
 
 
 def get_worker_instruction(
-    settings: Settings, project_id: str, kind: str
+    settings: Settings,
+    project_id: str,
+    kind: str,
+    issue_id: str | None = None,
 ) -> str | None:
     """The project's behavioral instruction text for a run kind — the
     manager-edited template, falling back to the factory default when blank
-    (US-5.14). A live read at context-serve time, never frozen at dispatch."""
+    (US-5.14). A live read at context-serve time, never frozen at dispatch.
+
+    With issue_id, the kind first resolves through instruction_kind_for
+    (us-96.1) so a type-differentiated item reads its own text — a chore's
+    code run reads 'chore', not 'code'. Same SQL mapping the dispatch-time
+    seed uses, so the two can never disagree."""
     if not _valid_uuid(project_id):
         return None
     with _connect(settings) as conn:
-        row = conn.execute(
-            "select public.worker_instruction_for(%s, %s) as instruction",
-            (project_id, kind),
-        ).fetchone()
+        if issue_id and _valid_uuid(issue_id):
+            row = conn.execute(
+                "select public.worker_instruction_for("
+                "%s, public.instruction_kind_for(%s, %s)) as instruction",
+                (project_id, issue_id, kind),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "select public.worker_instruction_for(%s, %s) as instruction",
+                (project_id, kind),
+            ).fetchone()
     return row["instruction"] if row else None
 
 

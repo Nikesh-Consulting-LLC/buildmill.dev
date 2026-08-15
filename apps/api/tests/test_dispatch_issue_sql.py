@@ -322,3 +322,99 @@ def test_feature_with_approved_prd_still_cannot_plan(db, project):
         db.execute("delete from public.artifacts where issue_id = %s", (issue_id,))
         db.commit()
         _cleanup_issue(db, issue_id)
+
+
+# ---------------------------------------------------------------- us-96.1
+# A chore is one shot: dispatch builds it, retry never re-plans, and its
+# instructions resolve to the 'chore' kind.
+
+
+def test_chore_dispatches_code_kind_from_draft(db, project):
+    """A draft chore's dispatch creates a code run with no plan gate, no
+    plan/test_plan context keys, and a 'dispatched' (not 'plan-dispatched')
+    event."""
+    issue_id = _insert_issue(db, project, type="chore", status="draft")
+    try:
+        run_id = db.execute(
+            "select public.dispatch_issue(%s) as id", (issue_id,)
+        ).fetchone()["id"]
+        db.commit()
+        run = db.execute(
+            "select kind, input_context from public.runs where id = %s", (run_id,)
+        ).fetchone()
+        assert run["kind"] == "code"
+        assert "plan" not in run["input_context"]
+        assert "test_plan" not in run["input_context"]
+        event = db.execute(
+            """
+            select type from public.issue_events
+            where issue_id = %s and type in ('dispatched', 'plan-dispatched')
+            order by created_at desc limit 1
+            """,
+            (issue_id,),
+        ).fetchone()
+        assert event["type"] == "dispatched"
+    finally:
+        _cleanup_issue(db, issue_id)
+
+
+def test_chore_refuses_named_plan_kind(db, project):
+    issue_id = _insert_issue(db, project, type="chore", status="draft")
+    try:
+        with pytest.raises(Exception) as exc:
+            db.execute("select public.dispatch_issue(%s, 'plan')", (issue_id,))
+            db.commit()
+        assert "no planning phase" in str(exc.value)
+    finally:
+        _cleanup_issue(db, issue_id)
+
+
+def test_chore_retry_is_always_code(db, project):
+    """needs-fixes and failed both infer 'code' — a chore never re-plans,
+    where a story at 'failed' without an approved plan would."""
+    issue_id = _insert_issue(db, project, type="chore", status="needs-fixes")
+    try:
+        kind = db.execute(
+            "select public.dispatch_kind_for(%s) as k", (issue_id,)
+        ).fetchone()["k"]
+        assert kind == "code"
+        db.rollback()
+        db.execute(
+            "update public.issues set status = 'failed' where id = %s",
+            (issue_id,),
+        )
+        db.commit()
+        kind = db.execute(
+            "select public.dispatch_kind_for(%s) as k", (issue_id,)
+        ).fetchone()["k"]
+        assert kind == "code"
+    finally:
+        _cleanup_issue(db, issue_id)
+
+
+def test_chore_instruction_kind_resolves_chore(db, project):
+    """instruction_kind_for maps a chore's code run to 'chore' and leaves
+    everything else alone — including a story's plan/code."""
+    chore_id = _insert_issue(db, project, type="chore", status="draft")
+    story_id = _insert_issue(db, project, status="draft")
+    try:
+        row = db.execute(
+            """
+            select public.instruction_kind_for(%s, 'code') as chore_code,
+                   public.instruction_kind_for(%s, 'plan') as chore_plan,
+                   public.instruction_kind_for(%s, 'code') as story_code,
+                   public.instruction_kind_for(%s, 'plan') as story_plan,
+                   public.instruction_kind_for(null, 'code') as no_issue
+            """,
+            (chore_id, chore_id, story_id, story_id),
+        ).fetchone()
+        assert row["chore_code"] == "chore"
+        # A chore never has a plan run; identity here is harmless and keeps
+        # the mapping total.
+        assert row["chore_plan"] == "plan"
+        assert row["story_code"] == "code"
+        assert row["story_plan"] == "plan"
+        assert row["no_issue"] == "code"
+    finally:
+        _cleanup_issue(db, chore_id)
+        _cleanup_issue(db, story_id)

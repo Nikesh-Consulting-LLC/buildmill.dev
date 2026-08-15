@@ -6139,6 +6139,10 @@ export type Database = {
           prompt_key: string
         }[]
       }
+      instruction_kind_for: {
+        Args: { p_issue: string; p_run_kind: string }
+        Returns: string
+      }
       is_active_org_member: { Args: { org: string }; Returns: boolean }
       is_approved_user: { Args: never; Returns: boolean }
       is_interactive_placement_legal: {

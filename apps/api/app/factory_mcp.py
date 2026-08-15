@@ -708,7 +708,10 @@ async def get_work_context(run_id: str, ctx: Context) -> dict[str, Any]:
     # US-5.14: the project's editable behavioral template, read live — the
     # mechanics lines around it stay code-generated.
     template = db.get_worker_instruction(
-        settings, str(run.get("project_id") or ""), run["kind"]
+        settings,
+        str(run.get("project_id") or ""),
+        run["kind"],
+        issue_id=str(run.get("issue_id") or "") or None,
     )
     # US-5.12: the work item's comment thread — the whole prior discussion,
     # visible to any claimer including one picking up a retry.

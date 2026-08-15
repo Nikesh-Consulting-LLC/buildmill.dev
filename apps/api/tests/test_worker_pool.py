@@ -44,7 +44,7 @@ def stub_instructions(monkeypatch):
     tests stay database-free."""
     monkeypatch.setattr(
         "app.routers.worker.db.get_worker_instruction",
-        lambda s, project_id, kind: f"Stub {kind} template.",
+        lambda s, project_id, kind, issue_id=None: f"Stub {kind} template.",
     )
     monkeypatch.setattr(
         "app.routers.worker.db.list_issue_comments_for_run",
@@ -970,7 +970,7 @@ def test_context_instructions_survive_missing_template(
     """A None template (unknown project) still yields the mechanics."""
     monkeypatch.setattr(
         "app.routers.worker.db.get_worker_instruction",
-        lambda s, project_id, kind: None,
+        lambda s, project_id, kind, issue_id=None: None,
     )
     monkeypatch.setattr(
         "app.routers.worker.db.get_worker_run",

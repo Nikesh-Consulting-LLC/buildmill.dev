@@ -1034,7 +1034,7 @@ def _stub_work_context(
     )
     monkeypatch.setattr(
         "app.factory_mcp.db.get_worker_instruction",
-        lambda s, p, k: "Run the linter before submitting.",
+        lambda s, p, k, issue_id=None: "Run the linter before submitting.",
     )
     monkeypatch.setattr(
         "app.factory_mcp.db.get_run_commands_section",
