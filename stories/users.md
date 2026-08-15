@@ -62,7 +62,7 @@ the residue carried out of Phases 85–89:
 | 31 | [us-95.4](us-95.4-a-slice-narrows-and-a-view-travels.md) | A slice narrows, and a view travels | Testing |
 | 32 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
 | 33 | [us-96.1](us-96.1-a-chore-is-one-shot.md) | A chore is one shot | Testing |
-| 34 | [us-96.2](us-96.2-a-bug-explains-itself-before-the-fix.md) | A bug explains itself before the fix | New |
+| 34 | [us-96.2](us-96.2-a-bug-explains-itself-before-the-fix.md) | A bug explains itself before the fix | Testing |
 | 35 | [us-96.3](us-96.3-every-kind-of-work-gets-its-own-words.md) | Every kind of work gets its own words | New |
 | 36 | [us-96.4](us-96.4-the-feature-holds-the-steering-wheel.md) | The feature holds the steering wheel | New |
 | 37 | [us-96.7](us-96.7-the-workbench-triages-the-feature.md) | The workbench triages the feature, not its stories | New |

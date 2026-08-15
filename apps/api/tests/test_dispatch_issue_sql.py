@@ -418,3 +418,48 @@ def test_chore_instruction_kind_resolves_chore(db, project):
     finally:
         _cleanup_issue(db, chore_id)
         _cleanup_issue(db, story_id)
+
+
+# ---------------------------------------------------------------- us-96.2
+# A bug explains itself: the lifecycle is untouched (plan-kind run), but the
+# instruction resolution turns it into an RCA.
+
+
+def test_bug_dispatch_stays_plan_kind_with_rca_instructions(db, project):
+    """A draft bug still dispatches a plan-kind run — us-96.2 changes the
+    words, not the machinery — and the seeded instruction set carries the
+    bug_rca text, not the story plan text."""
+    issue_id = _insert_issue(db, project, type="bug", status="draft")
+    try:
+        run_id = db.execute(
+            "select public.dispatch_issue(%s) as id", (issue_id,)
+        ).fetchone()["id"]
+        db.commit()
+        run = db.execute(
+            "select kind from public.runs where id = %s", (run_id,)
+        ).fetchone()
+        assert run["kind"] == "plan"
+        seeded = db.execute(
+            "select instruction_set from public.issues where id = %s",
+            (issue_id,),
+        ).fetchone()["instruction_set"]
+        assert "root cause analysis" in seeded
+        assert "NO diffs" in seeded
+    finally:
+        _cleanup_issue(db, issue_id)
+
+
+def test_bug_instruction_kinds_resolve_rca_and_fix(db, project):
+    issue_id = _insert_issue(db, project, type="bug", status="draft")
+    try:
+        row = db.execute(
+            """
+            select public.instruction_kind_for(%s, 'plan') as p,
+                   public.instruction_kind_for(%s, 'code') as c
+            """,
+            (issue_id, issue_id),
+        ).fetchone()
+        assert row["p"] == "bug_rca"
+        assert row["c"] == "bug_fix"
+    finally:
+        _cleanup_issue(db, issue_id)

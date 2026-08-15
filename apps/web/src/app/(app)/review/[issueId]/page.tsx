@@ -57,7 +57,7 @@ export default async function ReviewDetailPage({
   const { data: issue } = await supabase
     .from("issues")
     .select(
-      "id, project_id, title, body, acceptance_criteria, status, complexity, touches_critical, data_model_impact, complexity_rationale, complexity_basis, complexity_model, breakdown_mode, breakdown_instructions, projects(name, repo_full_name)"
+      "id, project_id, type, title, body, acceptance_criteria, status, complexity, touches_critical, data_model_impact, complexity_rationale, complexity_basis, complexity_model, breakdown_mode, breakdown_instructions, projects(name, repo_full_name)"
     )
     .eq("id", issueId)
     .maybeSingle();
@@ -246,10 +246,11 @@ export default async function ReviewDetailPage({
               {issue.title}
             </h1>
             <p className="text-sm text-muted-foreground">
-              {project?.name} · plan review
+              {project?.name} ·{" "}
+              {issue.type === "bug" ? "RCA review" : "plan review"}
             </p>
           </div>
-          <PlanReviewActions issueId={issue.id} />
+          <PlanReviewActions issueId={issue.id} issueType={issue.type} />
         </div>
         <AgentNotes notes={await latestHandbackNotes("plan")} />
         {submissionFindings.length > 0 && (
@@ -276,7 +277,10 @@ export default async function ReviewDetailPage({
             }}
           />
         )}
-        <PlanReview artifacts={(artifacts ?? []) as PlanArtifact[]} />
+        <PlanReview
+          artifacts={(artifacts ?? []) as PlanArtifact[]}
+          isBug={issue.type === "bug"}
+        />
       </div>
     );
   }

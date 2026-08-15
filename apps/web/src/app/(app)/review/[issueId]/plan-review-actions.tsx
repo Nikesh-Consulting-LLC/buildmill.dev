@@ -22,8 +22,17 @@ import { notifyDocsWrite } from "@/lib/docs-tree-outcome";
 import { useActivitySession } from "@/lib/use-activity-session";
 
 /** Approve or send back a draft plan/test_plan (us-2.5). Approve
- * materializes the test plan into test_cases server-side. */
-export function PlanReviewActions({ issueId }: { issueId: string }) {
+ * materializes the test plan into test_cases server-side.
+ * us-96.2: on a bug the artifact is an RCA and the gate says so — same
+ * endpoints underneath, honest words on the buttons. */
+export function PlanReviewActions({
+  issueId,
+  issueType,
+}: {
+  issueId: string;
+  issueType?: string;
+}) {
+  const isBug = issueType === "bug";
   const router = useRouter();
   const [busy, setBusy] = useState<"approve" | "send-back" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -111,7 +120,13 @@ export function PlanReviewActions({ issueId }: { issueId: string }) {
         <Button onClick={approve} disabled={busy !== null}>
           {busy === "approve" && <Loader2 className="size-4 animate-spin" />}
           <Check className="size-4" />
-          {alsoDispatch ? "Approve & build" : "Approve plan"}
+          {isBug
+            ? alsoDispatch
+              ? "Approve RCA & fix"
+              : "Approve RCA"
+            : alsoDispatch
+              ? "Approve & build"
+              : "Approve plan"}
         </Button>
 
         <Dialog open={sendBackOpen} onOpenChange={setSendBackOpen}>
@@ -121,9 +136,13 @@ export function PlanReviewActions({ issueId }: { issueId: string }) {
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Send the plan back</DialogTitle>
+              <DialogTitle>
+                {isBug ? "Send the RCA back" : "Send the plan back"}
+              </DialogTitle>
               <DialogDescription>
-                Your comment becomes the feedback for the next plan attempt.
+                {isBug
+                  ? "Your comment becomes the feedback for the next analysis."
+                  : "Your comment becomes the feedback for the next plan attempt."}
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-2">
@@ -168,8 +187,12 @@ export function PlanReviewActions({ issueId }: { issueId: string }) {
           disabled={busy !== null}
         />
         {alsoDispatch
-          ? "Dispatches the code run on approval"
-          : "Approve only — dispatch the build yourself"}
+          ? isBug
+            ? "Dispatches the fix run on approval"
+            : "Dispatches the code run on approval"
+          : isBug
+            ? "Approve only — dispatch the fix yourself"
+            : "Approve only — dispatch the build yourself"}
       </label>
       {error && <p className="text-sm font-medium text-destructive">{error}</p>}
     </div>
