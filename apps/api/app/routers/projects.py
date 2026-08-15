@@ -247,6 +247,71 @@ async def refresh_guidelines(
     return result
 
 
+@router.get("/{project_id}/instructions/status")
+async def instruction_publish_status(
+    project_id: UUID,
+    user: AuthUser = Depends(verify_token),
+    settings: Settings = Depends(get_settings),
+):
+    """US-99.4: is anything edited but not yet published, and what?
+
+    Publishing stopped being automatic (the dispatch-time write retired with
+    us-99.4), so "edited but not in the repository" became a real state a
+    manager can sit in without noticing. This is what makes it visible.
+
+    The comparison is the same content hash migration 135 already defined —
+    it survives edits that cancel out, reordering that changes nothing, and a
+    failed write that must be retried, which no timestamp comparison does.
+    """
+    rows = await postgrest_get(
+        settings,
+        user.token,
+        "projects",
+        {
+            "select": "id,repo_full_name,docs_tree_enabled,"
+            "instructions_synced_hash,instructions_synced_at,"
+            "instructions_synced_sha",
+            "id": f"eq.{project_id}",
+            "limit": "1",
+        },
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project = rows[0]
+
+    guidelines = await rpc(
+        settings, user.token, "assemble_project_guidelines",
+        {"p_project": str(project_id)},
+    )
+    instructions = await asyncio.to_thread(
+        db.get_project_instructions_for_publish, settings, str(project_id)
+    )
+    files, deletes = repo_docs.instruction_file_plan(
+        instructions, guidelines, bool(project.get("docs_tree_enabled"))
+    )
+    digest = repo_docs.publish_hash(files, deletes)
+    published = project.get("instructions_synced_hash") or ""
+
+    return {
+        "unpublished": digest != published,
+        "has_repo": bool(project.get("repo_full_name")),
+        # What a publish would write and remove — so the warning can say how
+        # many files differ rather than only that something does.
+        "files": sorted(files),
+        "deletes": sorted(deletes),
+        "hash": digest,
+        "published_hash": published or None,
+        "published_at": project.get("instructions_synced_at"),
+        "published_sha": project.get("instructions_synced_sha"),
+        # us-99.2 AC6 / us-99.4 AC6: true every time, so it is copy rather
+        # than a dialog somebody dismisses once.
+        "ownership_notice": (
+            "Build Mill owns AGENTS.md, CLAUDE.md and everything under "
+            ".buildmill/, and rewrites them whole on each publish."
+        ),
+    }
+
+
 @router.post("/{project_id}/guidelines/save-instructions")
 async def save_instructions(
     project_id: UUID,

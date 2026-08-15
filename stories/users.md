@@ -83,7 +83,7 @@ Phases 85–89:
 | 50 | [us-99.1](us-99.1-every-instruction-kind-has-a-file.md) | Every instruction kind has a file, and one map says which | Testing |
 | 51 | [us-99.2](us-99.2-agents-md-is-the-index.md) | AGENTS.md is the index, and Build Mill owns it whole | Testing |
 | 52 | [us-99.3](us-99.3-project-conventions-become-guidelines-md.md) | Project conventions become Guidelines.md | Testing |
-| 53 | [us-99.4](us-99.4-an-unpublished-edit-says-so.md) | An unpublished edit says so, and the manager pushes it | New |
+| 53 | [us-99.4](us-99.4-an-unpublished-edit-says-so.md) | An unpublished edit says so, and the manager pushes it | Testing |
 | 54 | [us-99.5](us-99.5-the-agent-reads-the-file-and-mcp-fills-the-gap.md) | The agent reads the file, and MCP fills the gap | New |
 | 55 | [us-99.6](us-99.6-a-template-carries-the-whole-file-set.md) | A template carries the whole file set | New |
 | 56 | [us-99.7](us-99.7-a-template-edit-offers-itself.md) | A template edit offers itself to the projects using it | New |
