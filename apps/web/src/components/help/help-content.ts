@@ -65,21 +65,24 @@ export const HELP_TOPICS: HelpTopic[] = [
     slug: "work-items",
     title: "Work items & the pipeline",
     blurb:
-      "Features, stories, bugs and chores — and the gates each one walks through on its way to merged.",
+      "Features, stories, bugs and chores — how each type is routed, and the gates it walks through on its way to merged.",
     icon: ClipboardList,
     sections: [
       { id: "pipeline", label: "The pipeline" },
+      // us-96.5 rework: since Phase 96 the TYPE decides the path — one
+      // lane per type, drawn, before the single-rail lifecycle chart.
+      { id: "routing", label: "How each type is routed" },
       { id: "lifecycle", label: "The full lifecycle" },
       { id: "statuses", label: "Statuses & colors" },
     ],
   },
   {
     slug: "build-order",
-    title: "Build order & concurrency",
+    title: "Build order & the serial law",
     blurb:
-      "Which work may start when — build modes, the concurrency switch, and why an item shows an hourglass.",
+      "Which work may start when — the two routing switches, one item at a time, and why an item shows an hourglass.",
     icon: Workflow,
-    sections: [{ id: "build-order", label: "Build order & concurrency" }],
+    sections: [{ id: "build-order", label: "Build order & the serial law" }],
   },
   {
     slug: "github",
@@ -163,8 +166,8 @@ export type HelpPoint = { heading: string; textKey: string };
 
 export const HELP_POINTS: Record<string, HelpPoint[]> = {
   "build-order": [
-    { heading: "Build mode", textKey: "help/build-order/modes" },
-    { heading: "Concurrency", textKey: "help/build-order/concurrency" },
+    { heading: "The two switches", textKey: "help/build-order/modes" },
+    { heading: "One item at a time", textKey: "help/build-order/concurrency" },
     { heading: "Why an item shows an hourglass", textKey: "help/build-order/holds" },
     { heading: "Where to look", textKey: "help/build-order/where" },
   ],
@@ -480,22 +483,26 @@ export const HELP_DEFAULTS: Record<string, string> = {
     "define the work and make the calls; the factory plans, codes, and " +
     "ships between your decisions.",
   "help/pipeline/intro":
-    "Every dispatchable work item walks the same rail. Work items live " +
-    "inside an epic — the numbering root: one epic is active at a time, " +
-    "new items land in it, and you close it and start the next only once " +
-    "every item is completed, deployed, abandoned, or deleted. Each item " +
-    "carries a readable, epic-scoped id (FEAT-1.4, US-1.4.1, BUG-1.5). " +
-    "Features first expand into a PRD and stories — then each story walks " +
-    "the rail itself. Requirements live in Build Mill; GitHub Issue sync " +
-    "is retired. Click a stage to see what happens there.",
+    "This is the story's rail — the shape the other types vary from " +
+    "(see “How each type is routed” below: a chore skips planning, a bug's " +
+    "plan is a root cause analysis, a feature routes its stories as one). " +
+    "Work items live inside an epic — the numbering root: one epic is " +
+    "active at a time, new items land in it, and you close it and start " +
+    "the next only once every item is completed, deployed, abandoned, or " +
+    "deleted. Each item carries a readable, epic-scoped id (FEAT-1.4, " +
+    "US-1.4.1, BUG-1.5). Requirements live in Build Mill; GitHub Issue " +
+    "sync is retired. Click a stage to see what happens there.",
   "help/pipeline/draft":
     "You write the story: what to build, and acceptance criteria that " +
     "make “done” testable. Attach documents worth reading. " +
-    "Dispatch planning when the story is ready.",
+    "Dispatch planning when the story is ready — or, for a story inside a " +
+    "feature, dispatch the feature and it plans them all.",
   "help/pipeline/plan":
     "The agent studies the repository and writes an implementation plan " +
     "and a test plan — no code yet. Both land for your review; " +
-    "approving them unlocks the build.",
+    "approving them unlocks the build. On a bug this stage is the root " +
+    "cause analysis (what broke, why, the proposed fix — in words) and " +
+    "approving it unlocks the fix. A chore has no plan stage at all.",
   "help/pipeline/build":
     "The agent implements the approved plan and pushes through the " +
     "factory's git remote. How it branches follows the project's " +
@@ -680,34 +687,42 @@ export const HELP_DEFAULTS: Record<string, string> = {
     "One short page per topic. Start at the top if Build Mill is new to " +
     "you; otherwise jump to the one you need.",
   "help/build-order/modes":
-    "Set on a project under Agent Instructions → Task processing. **By " +
-    "feature (sequential)** is the default for new projects: a feature is " +
-    "built as a batch — every story planned and approved before any is " +
-    "coded — and a later feature waits until the earlier one is done. **By " +
-    "story (freeform)** routes any story on its own, holding nothing for " +
-    "its siblings. **By epic** applies the same batching one level up: " +
-    "every feature documented, then every story planned, then everything " +
-    "built.",
+    "Two checkboxes on a project under Worker instructions → Task " +
+    "processing, both on by default. **Follow build order** decides the " +
+    "ORDER: the queue drains Epic → Feature → Story; off, it drains in the " +
+    "order you dispatched. **Route feature as one** decides the UNIT: a " +
+    "feature's stories are planned as a batch and built as one " +
+    "feature-owned run and PR, and pressing Plan or Code on a healthy " +
+    "child is refused with the feature named (“FEAT-2.3 owns the plan — " +
+    "dispatch the feature to plan all 5 stories”). A story in trouble " +
+    "(failed / needs-fixes) or one being re-planned still routes on its " +
+    "own — a stuck story must never wedge its batch. Off, every story is " +
+    "its own unit. Standalone stories, bugs and chores are always their " +
+    "own unit whatever the switches say.",
   "help/build-order/concurrency":
-    "A separate switch on the same card. Build mode decides WHO owns a " +
-    "build unit; concurrency decides HOW MANY may be in flight. Leave " +
-    "concurrency on (the default) and independent work overlaps. Tick " +
-    "**Sequential** to hold every other story — plan and code — until the " +
-    "one in flight reaches merged; use it when stories collide on the same " +
-    "files often enough that merge conflicts cost more than the waiting.",
+    "There is no concurrency knob — one law with no checkbox: a project " +
+    "works ONE routing unit at a time, from its first claimed run until " +
+    "its work merges. A story (or a whole feature, when the switch groups " +
+    "them) owns the project while it is being planned, awaiting your plan " +
+    "approval, holding an approved plan, being built, or sitting unmerged. " +
+    "Everything queued behind it is held — never refused. Queueing is " +
+    "always legal; starting is what waits.",
   "help/build-order/holds":
-    "An hourglass on Things to Do means the build rules will not let that " +
-    "item start yet, and its button stays disabled until they do. The " +
-    "reason names the blocker — an earlier feature that has not finished, " +
-    "sibling stories whose plans you have not approved yet, a story ahead " +
-    "of this one still running, or siblings still being curated. Nothing " +
-    "is stuck: clear the named blocker and the hourglass goes away on the " +
-    "next refresh. Approvals are never held — you can always clear a gate.",
+    "An hourglass on Things to Do or a Held pill in the Factory Queue means " +
+    "the rules will not let that item start yet. The reason names the " +
+    "blocker in a sentence — “US-2.3.2 is awaiting your plan approval”, " +
+    "“FEAT-2.1 · Login is ahead in the queue”, “2 sibling stories still " +
+    "being curated”. Nothing is stuck: clear the named blocker and it " +
+    "moves on the next refresh. Approvals are never held — you can always " +
+    "clear a gate. A hard refusal (the feature owns this phase) shows on " +
+    "the button itself and points at the feature page.",
   "help/build-order/where":
-    "Things to Do shows work waiting on you, with the hourglass on what " +
-    "cannot move. Factory Queue shows runs already dispatched and which of " +
-    "them the pool is holding. Both read the same rules the factory " +
-    "enforces, so neither can show you something the dispatch would refuse.",
+    "Things to Do shows work waiting on you — a feature with children as " +
+    "ONE row, its batch position in a line and any troubled child named on " +
+    "the row. Factory Queue shows runs already dispatched, a feature's " +
+    "runs collapsed into one unit you drag and pause as a block. Both read " +
+    "the same rules the factory enforces, so neither can show you " +
+    "something the dispatch would refuse.",
   "help/github/connection":
     "Connect a GitHub App installation (or a fine-grained token) once under " +
     "Settings → GitHub, choose which repositories the factory may touch, " +
