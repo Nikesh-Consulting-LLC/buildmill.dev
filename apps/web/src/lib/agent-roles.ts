@@ -39,7 +39,7 @@ export const AGENT_ROLES: AgentRole[] = [
       { key: "prd", label: "PRD" },
       { key: "breakdown", label: "Breakdown" },
       { key: "plan", label: "Plan" },
-      { key: "guidelines", label: "Guidelines refresh" },
+      { key: "guidelines", label: "Instructions refresh" },
       { key: "elaborate", label: "Story elaboration" },
       // Moved out of us-61.2's "Programming" group: a wireframe draws what a
       // story should look like before it is built, and hands back over MCP

@@ -3205,6 +3205,7 @@ export type Database = {
       }
       org_project_templates: {
         Row: {
+          agent_instructions: string
           archived_at: string | null
           created_at: string
           description: string
@@ -3219,6 +3220,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          agent_instructions?: string
           archived_at?: string | null
           created_at?: string
           description?: string
@@ -3233,6 +3235,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          agent_instructions?: string
           archived_at?: string | null
           created_at?: string
           description?: string
@@ -3810,6 +3813,7 @@ export type Database = {
       }
       project_templates: {
         Row: {
+          agent_instructions: string
           category: string
           created_at: string
           description: string
@@ -3824,6 +3828,7 @@ export type Database = {
           version: number
         }
         Insert: {
+          agent_instructions?: string
           category?: string
           created_at?: string
           description?: string
@@ -3838,6 +3843,7 @@ export type Database = {
           version?: number
         }
         Update: {
+          agent_instructions?: string
           category?: string
           created_at?: string
           description?: string
@@ -6102,6 +6108,10 @@ export type Database = {
       curate_feature_stories: { Args: { p_feature: string }; Returns: number }
       decide_guideline_recommendation: {
         Args: { p_accept: boolean; p_note?: string; p_recommendation: string }
+        Returns: Json
+      }
+      decide_guidelines_refresh: {
+        Args: { p_accept: boolean; p_note?: string; p_refresh: string }
         Returns: Json
       }
       default_buildmill_workflow_section: { Args: never; Returns: string }

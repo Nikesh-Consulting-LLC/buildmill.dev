@@ -159,9 +159,10 @@ mcp = FastMCP(
         "project's design material; when you discover something the hard "
         "way, submit_learning queues it for the manager's review — once "
         "approved it reaches every future run's context; and when the "
-        "guidelines themselves are wrong or stale, "
-        "recommend_guideline_change proposes a fix graded by severity "
-        "(trivial/minor/major/severe) — the manager decides, nothing "
+        "Agent Instructions themselves are wrong or stale, "
+        "recommend_guideline_change proposes a revised document graded by "
+        "severity (trivial/minor/major/severe) — the manager reads the diff "
+        "and decides, nothing "
         "auto-applies.\n\n"
         "Scope: this server is deliberately narrow — the worker loop "
         "plus the context to work well, not a general project browser. "
@@ -930,41 +931,51 @@ async def get_work_context(run_id: str, ctx: Context) -> dict[str, Any]:
     # from AGENTS.md on disk — which is why a pass over a project whose
     # guidelines are empty placeholders reported "nothing to propose".
     if run["kind"] == "guidelines":
-        sections = ic.get("current_guidelines") or []
-        filled = [s for s in sections if (s.get("content") or "").strip()]
+        # us-100.5: the files are read LIVE, not from the dispatch snapshot —
+        # a run claimed a day after dispatch proposes against today's text.
+        files = db.get_project_instruction_files(
+            settings, str(run.get("project_id") or "")
+        ) or {"agent_instructions": "", "instructions": {}}
+        from .instruction_files import KIND_FILES, path_for
+
+        doc = (files.get("agent_instructions") or "").strip()
+        per_kind = files.get("instructions") or {}
         items = ic.get("work_items") or []
         lines = [
-            f"# Guidelines refresh — {ic.get('project_name') or 'this project'}",
+            f"# Instructions refresh — {ic.get('project_name') or 'this project'}",
             "",
             template or "",
             "",
             "## Scope",
             ic.get("scope_instruction")
-            or "Cover every section the repository supports.",
+            or "Propose the Agent Instructions and any per-task instruction "
+            "file that would steer its runs better for this project.",
         ]
         if (ic.get("focus") or "").strip():
             lines += ["", "## Focus from the manager", ic["focus"].strip()]
         lines += [
             "",
-            "## The guidelines as they stand",
+            f"## Agent Instructions as they stand (`{_AGENTS_PATH}`)",
             (
-                f"{len(sections)} section(s), {len(filled)} with real content. "
-                "These are THE guidelines — the factory's own, which is what "
-                "you are proposing against. Do not judge them by AGENTS.md in "
-                "the workspace: that file is generated FROM these, so reading "
-                "it back tells you nothing about whether they are any good. A "
-                "section whose content is a placeholder needs writing."
-                if sections
-                else "This project has NO guideline sections at all. "
-                "Everything you propose will be new."
+                "These are THE conventions — the factory's own text, which is "
+                "what you are proposing against. Do not judge them by the copy "
+                "in the workspace: that file is generated FROM this, so reading "
+                "it back tells you nothing about whether it is any good."
             ),
             "",
+            doc if doc else "_empty — this project has no Agent Instructions yet._",
+            "",
+            "## Per-task instruction files as they stand",
+            "One per run kind, published to `.buildmill/`. Propose a "
+            "replacement only where the repository gives you a reason to; "
+            "leave the rest out of your submission.",
+            "",
         ]
-        for sec in sections:
-            body = (sec.get("content") or "").strip()
+        for kind in sorted(KIND_FILES):
+            body = (per_kind.get(kind) or "").strip()
             lines.append(
-                f"### {sec.get('title')} (`{sec.get('section_key')}`)\n"
-                + (body if body else "_empty — needs writing_")
+                f"### `{kind}` → `{path_for(kind)}`\n"
+                + (body if body else "_blank — this kind currently publishes no file_")
             )
         lines += [
             "",
@@ -974,10 +985,13 @@ async def get_work_context(run_id: str, ctx: Context) -> dict[str, Any]:
             "come from here.",
             "",
             "## Handing back",
-            "One call to `submit_guidelines_refresh(run_id, summary, "
-            "sections)`. Write no project file and commit nothing. An empty "
-            "`sections` list is legal but means the guidelines are already "
-            "right — say so only if you checked them, not the generated file.",
+            "One call to `submit_guidelines_refresh(run_id, summary, files)`, "
+            "where files is a list of {key, proposed_text, rationale, "
+            "severity} — key is `agents` for the document or a run kind for "
+            "its file, proposed_text is the FULL replacement. Write no project "
+            "file and commit nothing. An empty `files` list is legal but means "
+            "the instructions are already right — say so only if you checked "
+            "them, not the generated copies.",
         ]
         return _next(
             {
@@ -987,7 +1001,9 @@ async def get_work_context(run_id: str, ctx: Context) -> dict[str, Any]:
                 "project_id": str(run.get("project_id") or ""),
                 "scope": ic.get("scope"),
                 "focus": ic.get("focus"),
-                "current_guidelines": sections,
+                "agent_instructions": files.get("agent_instructions") or "",
+                "instructions": per_kind,
+                "files": [_AGENTS_PATH] + [path_for(k) for k in sorted(KIND_FILES)],
                 "work_items": items,
             },
             (
@@ -3583,48 +3599,39 @@ def _as_string_list(value: Any) -> list[str]:
     text = str(value).strip()
     return [text] if text else []
 
-# US-43.1: the guidelines catalog, mirroring
-# apps/web/src/lib/project-guidelines-catalog.ts. A refresh may target a
-# catalog key the project has not filled in yet — that is most of the point —
-# so "does this section exist" is not the test for a legal section_key.
-# Duplicated rather than imported because the API does not read the web app's
-# source; the enumeration test in tests/test_guidelines_refresh.py is what
-# keeps the two honest.
-_CATALOG_SECTION_KEYS = {
-    "overview",
-    "tech-stack",
-    "commands",
-    "run-commands",
-    "code-style",
-    "things-to-avoid",
-    "architecture",
-    "file-structure",
-    "testing",
-    "environment",
-    "git-pr",
-    "monorepo",
-    "doc-links",
-    "known-issues",
-    "boundaries",
-    "preferred-libs",
-    "good-patterns",
-    "agent-workflows",
-    "release",
-    "deployment",
-    "buildmill-workflow",
-}
+# us-100.5: a proposal is addressed by FILE. `agents` is the Agent
+# Instructions document (AGENTS.md); any other key is a run kind and names
+# that kind's `.buildmill/*.md`. Sections retired with us-100.1.
+_AGENTS_KEY = "agents"
+_AGENTS_PATH = "AGENTS.md"
+_MAX_FILE_PROPOSAL_CHARS = 100_000
 
 
-def _proposed_section_title(proposed_text: str) -> str:
-    """A display title for a proposed NEW section: its first markdown
-    heading, else a generic label the manager can rename."""
-    for line in proposed_text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("#"):
-            title = stripped.lstrip("#").strip()
-            if title:
-                return title[:80]
-    return "Agent-recommended section"
+def _resolve_proposal_file(raw_key: str) -> tuple[str, str] | None:
+    """Accept what an agent might send — `agents`, `AGENTS.md`, a run kind,
+    or a `.buildmill/<File>.md` path — and answer (key, path), or None when
+    it names no file a project has."""
+    from .instruction_files import KIND_FILES, kind_for_path, path_for
+
+    key = (raw_key or "").strip()
+    if not key:
+        return None
+    if key in (_AGENTS_KEY, _AGENTS_PATH):
+        return _AGENTS_KEY, _AGENTS_PATH
+    if key in KIND_FILES:
+        return key, path_for(key) or ""
+    kind = kind_for_path(key) or kind_for_path(f".buildmill/{key}")
+    if kind:
+        return kind, path_for(kind) or ""
+    return None
+
+
+def _proposal_file_names() -> str:
+    from .instruction_files import KIND_FILES, path_for
+
+    return f"{_AGENTS_KEY} ({_AGENTS_PATH}), " + ", ".join(
+        f"{k} ({path_for(k)})" for k in sorted(KIND_FILES)
+    )
 
 
 @mcp.tool(**_write("Recommend a guideline change"))
@@ -3632,19 +3639,20 @@ async def recommend_guideline_change(
     proposed_text: str,
     rationale: str,
     severity: str,
-    section_key: str = "",
     project_id: str = "",
 ) -> dict[str, Any]:
-    """Propose a change to the project's guidelines instead of silently
-    working around wrong or stale guidance. The manager reviews it in
-    Things to Do, graded by your declared severity — trivial: wording or
-    typo fix, no behavior change; minor: clarification or small
-    addition; major: incorrect or missing guidance that affects how work
-    gets done; severe: actively harmful or blocking instruction.
-    proposed_text is the section's full replacement text; pass the
-    section_key it targets, or leave section_key empty to propose a NEW
-    section. No claim required — guidelines are project-wide. Severity
-    is advisory: nothing auto-applies; the manager decides."""
+    """Propose a revision of the project's Agent Instructions (the AGENTS.md
+    body every agent reads first) instead of silently working around wrong
+    or stale guidance. proposed_text is the document's FULL replacement
+    text — start from what get_project_learnings / your context shows and
+    change what is wrong. The manager reviews it as a diff in Things to Do,
+    graded by your declared severity — trivial: wording or typo fix, no
+    behavior change; minor: clarification or small addition; major:
+    incorrect or missing guidance that affects how work gets done; severe:
+    actively harmful or blocking instruction. No claim required — the
+    document is project-wide. Severity is advisory: nothing auto-applies;
+    the manager decides. (us-100.5: sections are gone; this proposes the
+    whole document.)"""
     settings = get_settings()
     worker = _worker()
     if severity not in _SEVERITY_DEFINITIONS:
@@ -3658,18 +3666,19 @@ async def recommend_guideline_change(
     if not (proposed_text or "").strip():
         return _err(
             "proposed_text is required",
-            "send the section's full proposed replacement text",
+            "send the Agent Instructions document's full proposed text",
         )
     if not (rationale or "").strip():
         return _err(
             "rationale is required",
             "say what's wrong today and why the change helps",
         )
-    if len(proposed_text) > _MAX_RECOMMENDATION_CHARS:
+    if len(proposed_text) > _MAX_FILE_PROPOSAL_CHARS:
         return _err(
             f"proposed_text is too long (over "
-            f"{_MAX_RECOMMENDATION_CHARS} characters)",
-            "propose one section's text, not a whole document",
+            f"{_MAX_FILE_PROPOSAL_CHARS} characters)",
+            "an instructions document that long is not one an agent will "
+            "read — cut it down",
         )
     pid = project_id or _scoped_project.get()
     if not pid:
@@ -3684,32 +3693,17 @@ async def recommend_guideline_change(
             "project not found",
             "check the project_id, or list_available_work to find one",
         )
-    section = None
-    key = (section_key or "").strip()
-    if key:
-        section = db.get_guideline_section(settings, pid, key)
-        if section is None:
-            keys = db.list_guideline_section_keys(settings, pid)
-            return _err(
-                f"no guideline section '{key}' on this project",
-                (
-                    "existing section keys: " + ", ".join(keys) + " — "
-                    if keys
-                    else ""
-                )
-                + "or pass section_key='' to propose a new section",
-            )
-    title = (
-        section["title"] if section else _proposed_section_title(proposed_text)
-    )
+    current = (project.get("guidelines") or "").strip()
+    if current == proposed_text.strip():
+        return _err(
+            "proposed_text is identical to the current Agent Instructions",
+            "propose the document with your change in it, or propose nothing",
+        )
     result = db.record_guideline_recommendation(
         settings,
         worker,
         str(worker["org_id"]),
         pid,
-        section,
-        key,
-        title,
         severity,
         proposed_text.strip(),
         rationale.strip(),
@@ -3720,26 +3714,22 @@ async def recommend_guideline_change(
     if result["duplicate"]:
         md = (
             "You already have an identical pending recommendation for "
-            "this section — answering it instead of queuing a duplicate. "
-            "The manager sees it in Things to Do."
+            "the Agent Instructions — answering it instead of queuing a "
+            "duplicate. The manager sees it in Things to Do."
         )
     else:
-        target = (
-            f"section '{title}'" if section else f"a new section '{title}'"
-        )
         md = (
-            f"Recommendation queued for {target} at severity "
-            f"**{severity}** — the manager reviews it in Things to Do, "
-            "sorted by severity. Severity definitions to self-calibrate: "
-            f"{definitions}."
+            f"Recommendation queued for {_AGENTS_PATH} at severity "
+            f"**{severity}** — the manager reviews it as a diff in Things "
+            "to Do, sorted by severity. Severity definitions to "
+            f"self-calibrate: {definitions}."
         )
     return {
         "markdown": md,
         "recommendation_id": result["id"],
         "status": "pending",
         "severity": severity,
-        "section_title": title,
-        "new_section": section is None,
+        "file": _AGENTS_PATH,
         "duplicate": result["duplicate"],
         "severity_definitions": _SEVERITY_DEFINITIONS,
         "ok": True,
@@ -4113,25 +4103,27 @@ async def submit_elaboration(
 async def submit_guidelines_refresh(
     run_id: str,
     summary: str,
-    sections: list[dict[str, Any]],
+    files: list[dict[str, Any]],
     notes_for_manager: str = "",
 ) -> dict[str, Any]:
     """Complete a claimed guidelines run by handing back the WHOLE pass at
-    once. sections is a list of {section_key, title, proposed_text,
-    rationale, severity} — one entry per section you are proposing. Use the
-    catalog key for a section that exists (or should); leave section_key
-    empty to propose an entirely new one, and give it a title. severity is
-    trivial/minor/major/severe, same definitions as
-    recommend_guideline_change. summary is the one line the manager reads
-    before opening the bundle.
+    once. files is a list of {key, proposed_text, rationale, severity} —
+    one entry per file you are proposing: key is `agents` for the Agent
+    Instructions document (AGENTS.md) or a run kind (code, plan, test,
+    release, ...) for that kind's `.buildmill/*.md`; proposed_text is the
+    file's FULL replacement text; rationale says what is wrong today and
+    why yours is better; severity is trivial/minor/major/severe. summary is
+    the one line the manager reads before opening the bundle.
 
-    An EMPTY sections list is a legal answer — "I read the repository and
-    have nothing to propose" is worth saying, and it closes the chore. Do not
-    invent sections to avoid it.
+    A file identical to what the project already holds is refused — leave
+    it out. An EMPTY files list is a legal answer — "I read the repository
+    and have nothing to propose" is worth saying. Do not invent changes to
+    avoid it.
 
-    Nothing you send here is applied: the manager reviews the bundle as one
-    document and accepts or skips each section. One call per run — this
-    completes it."""
+    Nothing you send here is applied: the manager reads a diff per file and
+    accepts or rejects the pass WHOLE. Accepting changes the factory's text
+    and leaves the project unpublished; nothing reaches the repository until
+    the manager publishes. One call per run — this completes it."""
     settings = get_settings()
     worker = _worker()
     run = db.get_worker_run(settings, run_id, str(worker["org_id"]))
@@ -4145,101 +4137,108 @@ async def submit_guidelines_refresh(
             "completes guidelines runs only",
             "use the submit tool matching the run's kind",
         )
-    # us-100.5 AC5: sections retired with us-100.1. Accepting a section-shaped
-    # proposal here would write it into project_guidelines, which nothing has
-    # read since migration 263 — the run would succeed and change nothing.
-    # Refuse loudly instead; the dispatch side is disabled too, so this only
-    # catches a run queued before that landed.
-    return _err(
-        "guidelines refresh is temporarily disabled",
-        "this run proposes changes section by section, and Phase 100 "
-        "replaced the sections with a single Agent Instructions document. "
-        "Release the run — the manager edits that document directly for now.",
-    )
     if not (summary or "").strip():
         return _err(
             "summary is required",
             "one line on what you read and what you are proposing — the "
             "manager reads it before opening the bundle",
         )
-    if not isinstance(sections, list):
+    if not isinstance(files, list):
         return _err(
-            "sections must be a list",
-            "send a list of {section_key, title, proposed_text, rationale, "
-            "severity} objects, or [] if you have nothing to propose",
+            "files must be a list",
+            "send a list of {key, proposed_text, rationale, severity} "
+            "objects, or [] if you have nothing to propose",
         )
-    if len(sections) > db.MAX_REFRESH_SECTIONS:
+    if len(files) > db.MAX_REFRESH_FILES:
         return _err(
-            f"too many sections ({len(sections)}) — the cap is "
-            f"{db.MAX_REFRESH_SECTIONS}",
-            "propose the sections the repository actually supports, not one "
-            "per idea",
+            f"too many files ({len(files)}) — the cap is "
+            f"{db.MAX_REFRESH_FILES}",
+            "one entry per file; there are only "
+            f"{db.MAX_REFRESH_FILES} files to propose",
         )
 
-    known = set(db.list_guideline_section_keys(settings, str(run["project_id"])))
+    current = db.get_project_instruction_files(
+        settings, str(run["project_id"])
+    ) or {"agent_instructions": "", "instructions": {}}
+    scope = (run.get("input_context") or {}).get("scope") if isinstance(
+        run.get("input_context"), dict
+    ) else None
+
     cleaned: list[dict[str, Any]] = []
-    for i, raw in enumerate(sections):
+    seen: set[str] = set()
+    for i, raw in enumerate(files):
         if not isinstance(raw, dict):
             return _err(
-                f"sections[{i}] is not an object",
-                "each entry is {section_key, title, proposed_text, "
-                "rationale, severity}",
+                f"files[{i}] is not an object",
+                "each entry is {key, proposed_text, rationale, severity}",
             )
-        key = (raw.get("section_key") or "").strip()
-        text = (raw.get("proposed_text") or "").strip()
+        resolved = _resolve_proposal_file(
+            str(raw.get("key") or raw.get("path") or raw.get("kind") or "")
+        )
+        if not resolved:
+            return _err(
+                f"files[{i}] names no file this project has "
+                f"({raw.get('key') or raw.get('path') or raw.get('kind')!r})",
+                "key is one of: " + _proposal_file_names(),
+            )
+        key, path = resolved
+        if key in seen:
+            return _err(
+                f"files[{i}] proposes {path} a second time",
+                "one entry per file — merge them",
+            )
+        seen.add(key)
+        if scope == "document" and key != _AGENTS_KEY:
+            return _err(
+                f"files[{i}] proposes {path}, but this run's scope is the "
+                "Agent Instructions document only",
+                "propose `agents` alone, or leave the per-task files out",
+            )
+        text = raw.get("proposed_text")
+        text = (text if isinstance(text, str) else "").strip()
         rationale = (raw.get("rationale") or "").strip()
         severity = (raw.get("severity") or "").strip() or "minor"
-        title = (raw.get("title") or "").strip()
         if not text:
             return _err(
-                f"sections[{i}] has no proposed_text",
-                "every proposed section needs its full text; drop the entry "
-                "instead of sending an empty one",
+                f"files[{i}] ({path}) has no proposed_text",
+                "every proposed file needs its full replacement text; drop "
+                "the entry instead of sending an empty one",
             )
-        if len(text) > _MAX_RECOMMENDATION_CHARS:
+        if len(text) > _MAX_FILE_PROPOSAL_CHARS:
             return _err(
-                f"sections[{i}] proposed_text is too long (over "
-                f"{_MAX_RECOMMENDATION_CHARS} characters)",
-                "one section's text per entry, not a whole document",
+                f"files[{i}] ({path}) proposed_text is too long (over "
+                f"{_MAX_FILE_PROPOSAL_CHARS} characters)",
+                "an instruction file that long is not one an agent will read",
             )
         if not rationale:
             return _err(
-                f"sections[{i}] has no rationale",
-                "say what the section says today and why yours is better — "
-                "the manager decides on the rationale, not the diff",
+                f"files[{i}] ({path}) has no rationale",
+                "say what the file says today and why yours is better — the "
+                "manager decides on the rationale, not the diff",
             )
         if severity not in _SEVERITY_DEFINITIONS:
             return _err(
-                f"sections[{i}] has unknown severity {severity!r}",
+                f"files[{i}] has unknown severity {severity!r}",
                 "use one of: "
                 + "; ".join(
                     f"{k} = {v}" for k, v in _SEVERITY_DEFINITIONS.items()
                 ),
             )
-        if not key and not title:
+        existing = (
+            current.get("agent_instructions")
+            if key == _AGENTS_KEY
+            else (current.get("instructions") or {}).get(key)
+        ) or ""
+        if existing.strip() == text:
             return _err(
-                f"sections[{i}] proposes a new section with no title",
-                "a new section (empty section_key) needs a title the manager "
-                "can read in the review",
-            )
-        # A key that names neither an existing section nor a catalog entry is
-        # refused rather than silently coerced into a new section: the agent
-        # meant to target something, and creating a stray section instead
-        # hides the mistake behind a plausible-looking proposal.
-        if key and key not in known and key not in _CATALOG_SECTION_KEYS:
-            return _err(
-                f"sections[{i}] names unknown section_key {key!r}",
-                "existing keys: "
-                + (", ".join(sorted(known)) if known else "(none yet)")
-                + " — catalog keys: "
-                + ", ".join(sorted(_CATALOG_SECTION_KEYS))
-                + " — or leave section_key empty and give a title to propose "
-                "a new section",
+                f"files[{i}] ({path}) is identical to what the project "
+                "already holds",
+                "leave a file out when you would not change it",
             )
         cleaned.append(
             {
-                "section_key": key,
-                "title": title,
+                "key": key,
+                "path": path,
                 "proposed_text": text,
                 "rationale": rationale,
                 "severity": severity,
@@ -4281,18 +4280,19 @@ async def submit_guidelines_refresh(
     _store_handback_notes(settings, run, worker, run_id, combined)
 
     md = (
-        f"Guidelines pass handed back — {len(cleaned)} section(s) proposed. "
-        "The manager reviews the bundle as one document and accepts section "
-        "by section; nothing is applied until they do."
+        f"Instructions refresh handed back — {len(cleaned)} file(s) proposed "
+        f"({', '.join(f['path'] for f in cleaned)}). The manager reads a diff "
+        "per file and accepts or rejects the pass whole; nothing is applied "
+        "until they do, and nothing reaches the repository until they publish."
         if cleaned
-        else "Guidelines pass handed back with nothing to propose — recorded "
-        "as read, and the work item is closed."
+        else "Instructions refresh handed back with nothing to propose — "
+        "recorded as read."
     )
     return {
         "markdown": md,
         "ok": True,
         "refresh_id": result["refresh_id"],
-        "sections_proposed": len(cleaned),
+        "files_proposed": [f["path"] for f in cleaned],
         "severity_definitions": _SEVERITY_DEFINITIONS,
     }
 

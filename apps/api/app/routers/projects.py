@@ -208,26 +208,10 @@ async def refresh_guidelines(
     The run is queued at queue_rank = -1 (US-43.5): a refresh must not sit
     behind the backlog it exists to correct.
     """
-    # us-100.5 AC5: the refresh run is SECTION-addressed, and us-100.1 retired
-    # sections. Left dispatchable it would run, succeed, and write proposals
-    # into project_guidelines — a table nothing reads since migration 263 —
-    # so the manager would see a completed refresh that changed nothing. A
-    # kind that runs and silently no-ops is worse than one that refuses.
-    #
-    # Disabled until the reshape lands: an agent proposes a revised Agent
-    # Instructions document and revised per-task instructions, accepted or
-    # rejected whole.
-    raise HTTPException(
-        status_code=409,
-        detail=(
-            "Guidelines refresh is temporarily unavailable. It proposes "
-            "changes section by section, and Phase 100 replaced the sections "
-            "with a single Agent Instructions document — so a refresh would "
-            "complete without changing anything an agent reads. Edit Agent "
-            "Instructions directly in project settings for now."
-        ),
-    )
-
+    # us-100.5: the run proposes WHOLE FILES — the Agent Instructions
+    # document and per-task instruction files — keyed by file, accepted or
+    # rejected whole. scope is 'all' (document + per-task files) or
+    # 'document' (the Agent Instructions only).
     org_id = await _project_org_for_user(settings, user.token, str(project_id))
 
     def _dispatch():

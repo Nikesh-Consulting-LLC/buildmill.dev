@@ -37,7 +37,7 @@ export function GuidelineRefreshGroup({ items }: { items: GuidelineRefresh[] }) 
   return (
     <div className="grid gap-2">
       <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Guidelines refresh ({items.filter((i) => i.ready).length || items.length})
+        Instructions refresh ({items.filter((i) => i.ready).length || items.length})
       </h3>
       {items.map((item) => (
         <div key={item.id} className="grid gap-2 rounded-lg border p-3">
@@ -51,8 +51,9 @@ export function GuidelineRefreshGroup({ items }: { items: GuidelineRefresh[] }) 
               <p className="truncate text-sm font-medium">
                 {item.ready ? (
                   <>
-                    {item.pendingSections} section
-                    {item.pendingSections === 1 ? "" : "s"} to review
+                    {item.pendingSections} file
+                    {item.pendingSections === 1 ? "" : "s"} proposed — one
+                    decision
                     {item.totalSections > item.pendingSections
                       ? ` · ${
                           item.totalSections - item.pendingSections

@@ -8098,25 +8098,24 @@ def record_guideline_recommendation(
     worker: dict[str, Any],
     org_id: str,
     project_id: str,
-    section: dict[str, Any] | None,
-    section_key: str,
-    section_title: str,
     severity: str,
     proposed_text: str,
     rationale: str,
 ) -> dict[str, Any]:
-    """US-5.32: queue a worker's guideline change proposal. Duplicate
-    damping: an identical pending proposal from the same worker for the
-    same section answers the existing row instead of piling up."""
+    """US-5.32 -> us-100.5: queue a worker's proposed revision of the
+    project's Agent Instructions document. Addressed by file (`agents` =
+    AGENTS.md), never by section — sections retired with us-100.1.
+    Duplicate damping: an identical pending proposal from the same worker
+    answers the existing row instead of piling up."""
     with _connect(settings) as conn:
         existing = conn.execute(
             """
             select id from public.guideline_recommendations
             where project_id = %s and worker_id = %s and status = 'pending'
-              and section_key = %s and proposed_text = %s
+              and section_key = 'agents' and proposed_text = %s
             limit 1
             """,
-            (project_id, str(worker["id"]), section_key, proposed_text),
+            (project_id, str(worker["id"]), proposed_text),
         ).fetchone()
         if existing:
             return {"id": str(existing["id"]), "duplicate": True}
@@ -8125,16 +8124,13 @@ def record_guideline_recommendation(
             insert into public.guideline_recommendations
               (org_id, project_id, worker_id, section_id, section_key,
                section_title, severity, proposed_text, rationale)
-            values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            values (%s, %s, %s, null, 'agents', 'AGENTS.md', %s, %s, %s)
             returning id
             """,
             (
                 org_id,
                 project_id,
                 str(worker["id"]),
-                section["id"] if section else None,
-                section_key,
-                section_title,
                 severity,
                 proposed_text,
                 rationale,
@@ -8144,13 +8140,40 @@ def record_guideline_recommendation(
     return {"id": str(row["id"]), "duplicate": False}
 
 
-# ---------------------------------------------------------------------------
+MAX_REFRESH_FILES = 20  # the document + every kind is 17; headroom, not a cap to hit
+
+
+def get_project_instruction_files(
+    settings: Settings, project_id: str
+) -> dict[str, Any] | None:
+    """us-100.5: the files a refresh proposes against, exactly as the
+    factory holds them — the Agent Instructions document and every
+    per-task instruction's RESOLVED text (the same set that publishes to
+    AGENTS.md and `.buildmill/`). Read live at context time, not snapshotted
+    at dispatch, so a run claimed a day later proposes against today's
+    files."""
+    if not _valid_uuid(project_id):
+        return None
+    with _connect(settings) as conn:
+        row = conn.execute(
+            "select name, coalesce(agent_instructions, '') as agent_instructions "
+            "from public.projects where id = %s",
+            (project_id,),
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        "project_name": row["name"],
+        "agent_instructions": row["agent_instructions"],
+        "instructions": get_project_instructions_for_publish(settings, project_id),
+    }
+
+
 # US-43: guidelines refresh
 # ---------------------------------------------------------------------------
 
 # What the agent is allowed to hand back in one pass. Twenty catalog sections
 # plus a few proposed ones; past that it is not a guidelines pass any more.
-MAX_REFRESH_SECTIONS = 30
 
 
 # ---------------------------------------------------------------------------
@@ -8434,7 +8457,11 @@ def dispatch_guidelines_refresh(
     Refusals are raised as ValueError for the router to translate; the
     project-budget refusal arrives from the BEFORE INSERT trigger on runs
     (US-37.2) and is deliberately not re-implemented here."""
-    scope = scope if scope in ("all", "existing") else "all"
+    # us-100.5: 'all' = the document and every per-task file; 'document' =
+    # the Agent Instructions only. The old 'existing' reads as 'document'.
+    if scope == "existing":
+        scope = "document"
+    scope = scope if scope in ("all", "document") else "all"
     focus = (focus or "").strip()
 
     with _connect(settings) as conn:
@@ -8467,11 +8494,12 @@ def dispatch_guidelines_refresh(
         # body. The no-active-epic refusal went with the chore: a project that
         # cannot take a work item can still fix its guidelines.
         scope_instruction = (
-            "Cover every section the repository supports, including ones "
-            "this project has not filled in yet."
+            "Propose the Agent Instructions and any per-task instruction "
+            "file (.buildmill/*.md) that would steer its runs better for "
+            "this project — only where the repository supports it."
             if scope == "all"
-            else "Refresh only sections that already exist — do not propose "
-            "new ones, except Deployment and Release."
+            else "Propose the Agent Instructions document only — leave the "
+            "per-task instruction files alone."
         )
 
         input_context = {
@@ -8483,7 +8511,9 @@ def dispatch_guidelines_refresh(
             "scope": scope,
             "scope_instruction": scope_instruction,
             "focus": focus,
-            "current_guidelines": _assembled_guidelines(conn, project_id),
+            # us-100.5: the files are NOT snapshotted here — get_work_context
+            # reads them live, so the agent proposes against what the
+            # factory holds at claim time, not at dispatch time.
             "work_items": _work_item_digest(conn, project_id),
         }
 
@@ -8524,30 +8554,19 @@ def dispatch_guidelines_refresh(
     }
 
 
-def _assembled_guidelines(conn, project_id: str) -> list[dict[str, Any]]:
-    rows = conn.execute(
-        """
-        select section_key, title, content
-        from public.project_guidelines
-        where project_id = %s
-        order by sort_order asc
-        """,
-        (project_id,),
-    ).fetchall()
-    return [dict(r) for r in rows]
-
-
 def record_guidelines_refresh(
     settings: Settings,
     worker: dict[str, Any],
     run: dict[str, Any],
     summary: str,
-    sections: list[dict[str, Any]],
+    files: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """US-43.1: the whole pass, in one transaction.
+    """US-43.1 -> us-100.5: the whole pass, in one transaction — one row per
+    proposed FILE (`key` = 'agents' or a run kind, `path` = its repo path,
+    `proposed_text` = the full replacement).
 
-    The bundle is created HERE rather than accumulated section by section as
-    the agent works, so a run that fails, is cancelled, or dies mid-flight
+    The bundle is created HERE rather than accumulated file by file as the
+    agent works, so a run that fails, is cancelled, or dies mid-flight
     leaves nothing half-written for a manager to review."""
     org_id = str(run["org_id"])
     project_id = str(run["project_id"])
@@ -8564,8 +8583,8 @@ def record_guidelines_refresh(
             (
                 str(worker["id"]),
                 summary,
-                bool(sections),
-                bool(sections),
+                bool(files),
+                bool(files),
                 str(run["id"]),
             ),
         ).fetchone()
@@ -8576,36 +8595,24 @@ def record_guidelines_refresh(
             conn.rollback()
             return {"ok": False, "reason": "no open refresh for this run"}
 
-        for s in sections:
-            key = (s.get("section_key") or "").strip()
-            section = None
-            if key:
-                section = conn.execute(
-                    "select id, title from public.project_guidelines "
-                    "where project_id = %s and section_key = %s limit 1",
-                    (project_id, key),
-                ).fetchone()
-            title = (s.get("title") or "").strip() or (
-                section["title"] if section else "Proposed section"
-            )
+        for f in files:
             conn.execute(
                 """
                 insert into public.guideline_recommendations
                   (org_id, project_id, worker_id, section_id, section_key,
                    section_title, severity, proposed_text, rationale,
                    refresh_id)
-                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                values (%s, %s, %s, null, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     org_id,
                     project_id,
                     str(worker["id"]),
-                    section["id"] if section else None,
-                    key,
-                    title,
-                    s.get("severity") or "minor",
-                    s.get("proposed_text") or "",
-                    s.get("rationale") or "",
+                    f["key"],
+                    f["path"],
+                    f.get("severity") or "minor",
+                    f["proposed_text"],
+                    f.get("rationale") or "",
                     str(refresh["id"]),
                 ),
             )
@@ -8614,7 +8621,7 @@ def record_guidelines_refresh(
         # stamped `decided` above, and since US-43.6 there is no work item to
         # close alongside it.
         conn.commit()
-    return {"ok": True, "refresh_id": str(refresh["id"]), "sections": len(sections)}
+    return {"ok": True, "refresh_id": str(refresh["id"]), "files": len(files)}
 
 
 def decide_learning_submission(
