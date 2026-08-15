@@ -227,3 +227,36 @@ def test_the_deep_link_value_is_unchanged():
     src = PROJECT_PAGE.read_text(encoding="utf-8")
     assert 'value="guidelines"' in src
     assert "?tab=guidelines" in src
+
+
+# --- us-100.4: a template carries the document, and loses nothing -----------
+
+
+def test_the_template_migration_deletes_nothing():
+    """DELIBERATE DEVIATION, pinned so it is not "corrected" later.
+
+    us-100.4 AC2 said prompt rows are dropped. Production holds 18 prompt
+    sections and every one has content; `llm_prompt_templates` does not hold
+    the same thing, so deleting them is real data loss. Retiring them from the
+    EDITOR needs no deletion, so migration 265 is purely additive.
+    """
+    src = (MIGRATIONS / "265_a_template_carries_the_document.sql").read_text(
+        encoding="utf-8"
+    )
+    lowered = src.lower()
+    assert "drop column" not in lowered
+    assert "drop table" not in lowered
+    assert "delete from" not in lowered
+    # It adds the document to both template levels.
+    assert "project_templates" in src and "org_project_templates" in src
+    assert "agent_instructions" in src
+
+
+def test_the_template_migration_verifies_its_own_backfill():
+    """Same shape as 263: compare against what it was derived from, and abort
+    rather than leave a template short of the document it should have."""
+    src = (MIGRATIONS / "265_a_template_carries_the_document.sql").read_text(
+        encoding="utf-8"
+    )
+    assert "raise exception" in src.lower()
+    assert "rolling back" in src.lower()
