@@ -64,7 +64,7 @@ the residue carried out of Phases 85–89:
 | 33 | [us-96.1](us-96.1-a-chore-is-one-shot.md) | A chore is one shot | Testing |
 | 34 | [us-96.2](us-96.2-a-bug-explains-itself-before-the-fix.md) | A bug explains itself before the fix | Testing |
 | 35 | [us-96.3](us-96.3-every-kind-of-work-gets-its-own-words.md) | Every kind of work gets its own words | Testing |
-| 36 | [us-96.4](us-96.4-the-feature-holds-the-steering-wheel.md) | The feature holds the steering wheel | New |
+| 36 | [us-96.4](us-96.4-the-feature-holds-the-steering-wheel.md) | The feature holds the steering wheel | Testing |
 | 37 | [us-96.7](us-96.7-the-workbench-triages-the-feature.md) | The workbench triages the feature, not its stories | New |
 | 38 | [us-96.5](us-96.5-the-buttons-match-the-work.md) | The buttons match the work | New |
 | 39 | [us-96.6](us-96.6-a-failed-breakdown-gets-another-try.md) | A failed breakdown gets another try | New |

@@ -494,3 +494,117 @@ def test_standalone_story_instruction_kinds(db, project):
         assert row["c"] == "standalone_code"
     finally:
         _cleanup_issue(db, story_id)
+
+
+# ---------------------------------------------------------------- us-96.4
+# The feature owns the steering wheel: initial planning flows through the
+# batch; remediation and revision stay individual.
+
+
+def _switch2(db, project) -> bool:
+    return db.execute(
+        "select coalesce(route_feature_as_one, true) as s "
+        "from public.projects where id = %s",
+        (project["id"],),
+    ).fetchone()["s"]
+
+
+def test_feature_owns_the_initial_plan(db, project):
+    if not _switch2(db, project):
+        pytest.skip("route_feature_as_one is off for this project")
+    feature_id = _insert_issue(
+        db, project, type="feature", status="ready", acceptance_criteria="[]"
+    )
+    child_id = _insert_issue(db, project, status="draft")
+    db.execute(
+        "update public.issues set parent_id = %s where id = %s",
+        (feature_id, child_id),
+    )
+    db.commit()
+    try:
+        refusal = db.execute(
+            "select public.issue_dispatch_refusal(%s, 'plan') as r", (child_id,)
+        ).fetchone()["r"]
+        assert refusal is not None and "owns the plan" in refusal
+
+        with pytest.raises(Exception) as exc:
+            db.execute("select public.dispatch_issue(%s, 'plan')", (child_id,))
+            db.commit()
+        assert "owns the plan" in str(exc.value)
+        db.rollback()
+
+        # Revision exemption: a plan artifact in ANY state lifts the refusal
+        # (the /replan endpoint supersedes artifacts, then dispatches).
+        db.execute(
+            """
+            insert into public.artifacts
+              (org_id, issue_id, kind, content, version, status, created_by)
+            values (%s, %s, 'plan', '# old plan', 1, 'superseded', 'agent')
+            """,
+            (project["org_id"], child_id),
+        )
+        db.commit()
+        refusal = db.execute(
+            "select public.issue_dispatch_refusal(%s, 'plan') as r", (child_id,)
+        ).fetchone()["r"]
+        assert refusal is None
+
+        # Trouble exemption: failed dispatches individually even unplanned.
+        db.execute("delete from public.artifacts where issue_id = %s", (child_id,))
+        db.execute(
+            "update public.issues set status = 'failed' where id = %s", (child_id,)
+        )
+        db.commit()
+        refusal = db.execute(
+            "select public.issue_dispatch_refusal(%s, 'plan') as r", (child_id,)
+        ).fetchone()["r"]
+        assert refusal is None
+    finally:
+        db.rollback()
+        db.execute("delete from public.artifacts where issue_id = %s", (child_id,))
+        db.commit()
+        _cleanup_issue(db, child_id)
+        _cleanup_issue(db, feature_id)
+
+
+def test_feature_batch_plans_late_arrivals(db, project):
+    """A story added after its siblings were planned used to wedge the
+    feature ('not ready to build' from the batch, refused individually).
+    The batch now plans exactly the unplanned children."""
+    if not _switch2(db, project):
+        pytest.skip("route_feature_as_one is off for this project")
+    feature_id = _insert_issue(
+        db, project, type="feature", status="ready", acceptance_criteria="[]"
+    )
+    planned_id = _insert_issue(db, project, status="planned")
+    late_id = _insert_issue(db, project, status="draft")
+    db.execute(
+        "update public.issues set parent_id = %s where id in (%s, %s)",
+        (feature_id, planned_id, late_id),
+    )
+    db.execute(
+        """
+        insert into public.artifacts
+          (org_id, issue_id, kind, content, version, status, created_by)
+        values (%s, %s, 'plan', '# Plan', 1, 'approved', 'agent')
+        """,
+        (project["org_id"], planned_id),
+    )
+    db.commit()
+    try:
+        result = db.execute(
+            "select public.dispatch_feature_batch(%s) as r", (feature_id,)
+        ).fetchone()["r"]
+        db.commit()
+        assert result["phase"] == "plan"
+        dispatched_ids = {d["issue_id"] for d in result["dispatched"]}
+        assert str(late_id) in dispatched_ids
+        assert str(planned_id) not in dispatched_ids
+        assert result["skipped"] == []
+    finally:
+        db.rollback()
+        db.execute("delete from public.artifacts where issue_id = %s", (planned_id,))
+        db.commit()
+        _cleanup_issue(db, late_id)
+        _cleanup_issue(db, planned_id)
+        _cleanup_issue(db, feature_id)

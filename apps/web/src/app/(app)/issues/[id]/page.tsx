@@ -285,16 +285,23 @@ export default async function IssueDetailPage({
     // not only in feature/epic mode, because the per-story dispatch menu needs
     // it in story mode too.
     const childIds = live.map((c) => c.id);
-    const { data: approvedChildPlans } = childIds.length
+    // us-96.4: all states, not just approved — an artifact in ANY state is
+    // the line between initial planning (the feature's) and revision (the
+    // story's own escape hatch).
+    const { data: childPlanArtifacts } = childIds.length
       ? await supabase
           .from("artifacts")
-          .select("issue_id")
+          .select("issue_id, status")
           .in("issue_id", childIds)
           .eq("kind", "plan")
-          .eq("status", "approved")
-      : { data: [] as { issue_id: string }[] };
+      : { data: [] as { issue_id: string; status: string }[] };
     const withApprovedPlan = new Set(
-      (approvedChildPlans ?? []).map((a) => a.issue_id)
+      (childPlanArtifacts ?? [])
+        .filter((a) => a.status === "approved")
+        .map((a) => a.issue_id)
+    );
+    const withAnyPlan = new Set(
+      (childPlanArtifacts ?? []).map((a) => a.issue_id)
     );
 
     // US-48.3: where each story stands on being drawn. The `no UI surface`
@@ -338,6 +345,7 @@ export default async function IssueDetailPage({
         subNo: c.sub_no,
       }),
       hasApprovedPlan: withApprovedPlan.has(c.id),
+      hasAnyPlan: withAnyPlan.has(c.id),
       wireframe: drawingNow.has(c.id)
         ? ("in-flight" as const)
         : (drawnByIssue.get(c.id) ?? ("none" as const)),

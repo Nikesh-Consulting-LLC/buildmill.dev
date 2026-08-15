@@ -33,6 +33,10 @@ export type ChildIssue = {
   displayId: string | null;
   /** Whether a code run is even possible for this story. */
   hasApprovedPlan: boolean;
+  /** us-96.4: whether this story has EVER been planned (a plan artifact in
+   * any state). The feature owns the initial plan; revision stays
+   * individual, and this is the client's echo of that line. */
+  hasAnyPlan: boolean;
   /** US-48.3: where this story stands on being drawn. `no-ui` is an answer
    * an agent gave, not a gap — it reads differently from `none`. */
   wireframe: "drawn" | "no-ui" | "in-flight" | "none";
@@ -231,6 +235,17 @@ export function StoriesPanel({
                     whether it has been drawn without a visit. */}
                 <WireframeMark state={c.wireframe} />
                 <ComplexityBadge complexity={c.complexity} />
+                {/* us-96.4: a child at a review gate is reachable from the
+                    feature — the walk goes through this list, not through
+                    hunting each story page for its review link. */}
+                {c.status === "plan-review" && (
+                  <Link
+                    href={`/review/${c.id}`}
+                    className="shrink-0 text-xs font-medium text-primary hover:underline"
+                  >
+                    Review plan
+                  </Link>
+                )}
                 <StatusBadge status={c.status as IssueStatus} />
                 <StoryDispatchMenu
                   issueId={c.id}
@@ -238,6 +253,7 @@ export function StoriesPanel({
                     orgId,
                     status: c.status,
                     hasApprovedPlan: c.hasApprovedPlan,
+                    hasAnyPlan: c.hasAnyPlan,
                     label: c.displayId ?? c.title,
                     buildMode,
                     featureLabel,
