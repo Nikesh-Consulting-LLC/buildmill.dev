@@ -440,10 +440,10 @@ def build_instruction_block(
 
 def build_agents_index(
     kinds_present: list[str],
-    conventions_present: bool,
+    conventions: str | None,
     docs_tree_enabled: bool,
 ) -> str:
-    """US-99.2: AGENTS.md, written WHOLE.
+    """US-99.2 / us-100.2: AGENTS.md, written WHOLE, and it IS the document.
 
     It used to be a shared file — the factory owned a fenced region and
     `merge_block` was careful never to touch a byte outside it. That was
@@ -458,25 +458,26 @@ def build_agents_index(
     visible by happening inside a commit, on a branch with history, at a
     moment the manager chose (us-99.4) rather than silently at dispatch.
     """
-    from .instruction_files import CONVENTIONS_FILE, KIND_FILES, ROOT
+    from .instruction_files import KIND_FILES, ROOT
 
-    lines = [
-        "# Agent instructions",
-        "",
+    lines: list[str] = []
+    # us-100.2: the Agent Instructions ARE the body. us-99.2 made this file an
+    # index that pointed at `.buildmill/Guidelines.md`; once the conventions
+    # are one document (us-100.1) that indirection is just a redirect — the
+    # file every agent opens first saying "the real thing is over there".
+    body = (conventions or "").strip()
+    if body:
+        # The rule separates the manager's document from the generated tail.
+        # Only meaningful when there IS a document above it — otherwise the
+        # file opens with a horizontal rule over nothing.
+        lines += [body, "", "---", ""]
+
+    lines += [
         "Build Mill owns this file and everything under "
         f"`{ROOT}/`, and rewrites them whole on each publish. Edits made "
         "here are replaced — change them in Build Mill instead.",
         "",
     ]
-    if conventions_present:
-        lines += [
-            "## Project conventions",
-            "",
-            f"How work is done in this repository: [`{ROOT}/"
-            f"{CONVENTIONS_FILE}`]({ROOT}/{CONVENTIONS_FILE}). Read it before "
-            "you change anything.",
-            "",
-        ]
     if kinds_present:
         lines += [
             "## Instructions by task",
@@ -492,7 +493,7 @@ def build_agents_index(
             name = KIND_FILES[kind]
             lines.append(f"| {label} | [`{ROOT}/{name}`]({ROOT}/{name}) |")
         lines.append("")
-    if not kinds_present and not conventions_present:
+    if not kinds_present and not body:
         lines += [
             "_Build Mill has published no instructions for this project "
             "yet._",
@@ -551,16 +552,17 @@ def instruction_file_plan(
         else:
             deletes.add(path)
 
-    conv_path = f"{ROOT}/{CONVENTIONS_FILE}"
-    conv = (conventions or "").strip()
-    if conv:
-        files[conv_path] = conv.rstrip() + "\n"
-    else:
-        deletes.add(conv_path)
+    # us-100.2: `.buildmill/Guidelines.md` RETIRES. It shipped hours earlier
+    # in us-99.3 and is superseded here — the conventions are AGENTS.md's body
+    # now. Deleted unconditionally so a project that published under us-99.3
+    # does not keep a stale conventions file that disagrees with AGENTS.md.
+    # publish_hash covers deletions, so this registers as a change and the
+    # next publish actually removes it.
+    deletes.add(f"{ROOT}/{CONVENTIONS_FILE}")
 
     files["AGENTS.md"] = build_agents_index(
         [k for k in KIND_FILES if (instructions.get(k) or "").strip()],
-        bool(conv),
+        conventions,
         docs_tree_enabled,
     )
     # us-99.2 AC4: CLAUDE.md is the pointer, unconditionally. It was already

@@ -118,9 +118,11 @@ def test_it_names_what_would_be_written_and_removed(client, make_token, monkeypa
     _wire(monkeypatch)
     body = _get(client, make_token).json()
     assert ".buildmill/Code.md" in body["files"]
-    assert ".buildmill/Guidelines.md" in body["files"]
     assert "AGENTS.md" in body["files"]
     assert "CLAUDE.md" in body["files"]
+    # us-100.2: retired — written nowhere, deleted everywhere.
+    assert ".buildmill/Guidelines.md" not in body["files"]
+    assert ".buildmill/Guidelines.md" in body["deletes"]
     # Every kind with no content is a delete, not an empty file.
     assert ".buildmill/RCA.md" in body["deletes"]
 
