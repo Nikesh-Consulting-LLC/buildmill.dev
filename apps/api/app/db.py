@@ -315,6 +315,11 @@ def complete_run(
     merged directly.
     US-59.1: `claude_session_id` rides every callback, success or not, and is
     written with coalesce so it is never blanked once captured."""
+    # us-96.11: runs.stdout is rendered by the dashboard like a trace —
+    # header-shaped credentials are masked at write time, same as
+    # record_run_trace.
+    stdout = scrub_credential_patterns(stdout)
+    error = scrub_credential_patterns(error)
     metrics = compute_diff_metrics(diff) if outcome == "succeeded" else None
 
     # US-31.1: Postgres text refuses NUL; one 0x00 in a CLI's output must
@@ -6087,6 +6092,26 @@ RUN_TRACE_KINDS = (
 DEFAULT_RUN_TRACE_KIND = "progress"
 
 
+def scrub_credential_patterns(text: str | None) -> str | None:
+    """us-96.11: credentials the API can recognise WITHOUT knowing their
+    values — header shapes — masked before anything is stored. The runner
+    scrubs the values it holds; this assumes the runner failed. Known
+    shapes only, no entropy guessing: hashes and shas legitimately ride
+    traces, and flagging them would bury the signal."""
+    if not text:
+        return text
+    for pattern in _CREDENTIAL_HEADER_PATTERNS:
+        text = pattern.sub(r"\1[redacted]", text)
+    return text
+
+
+_CREDENTIAL_HEADER_PATTERNS = (
+    re.compile(r"(?i)(x-factory-local-key['\"]?\s*[:=]\s*['\"]?)([^\s'\"]+)"),
+    re.compile(r"(?i)(x-worker-token['\"]?\s*[:=]\s*['\"]?)([^\s'\"]+)"),
+    re.compile(r"(?i)(authorization['\"]?\s*[:=]\s*['\"]?bearer\s+)([^\s'\"]+)"),
+)
+
+
 def record_run_trace(
     settings: Settings,
     run_id: str,
@@ -6101,11 +6126,16 @@ def record_run_trace(
 
     US-36.1: an unrecognised `kind` is coerced to `progress`. A trace is
     diagnostic output; losing the line AND the socket because a caller invented
-    a label is the worst of both outcomes."""
+    a label is the worst of both outcomes.
+
+    us-96.11: stored scrubbed — redaction happens at write time, so reading
+    the row with service role already shows the mask and no render-time
+    masking exists to forget."""
     if not (_valid_uuid(run_id) and _valid_uuid(worker_id)):
         return None
     if kind not in RUN_TRACE_KINDS:
         kind = DEFAULT_RUN_TRACE_KIND
+    content = scrub_credential_patterns(content) or ""
     with _connect(settings) as conn:
         row = conn.execute(
             "select public.record_run_trace(%s, %s, %s, %s) as id",

@@ -101,6 +101,11 @@ def main() -> None:
     token = os.environ.get("FACTORY_WORKER_TOKEN", "")
     if not token:
         sys.exit("FACTORY_WORKER_TOKEN is not set — mint one on Settings → Workers")
+    # us-96.11: the long-lived credential this process holds, registered
+    # before anything can emit — no telemetry leaves the box carrying it.
+    from . import redact
+
+    redact.register("worker-token", token)
     try:
         asyncio.run(_run(api_url, token))
     except KeyboardInterrupt:

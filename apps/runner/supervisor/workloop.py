@@ -46,6 +46,11 @@ def model_env(
     provider_type: str, gateway_base: str, key: str, model: str, module: str = ""
 ) -> dict[str, str]:
     """Env a CLI module needs to reach the gateway (mirror of the server helper)."""
+    # us-96.11: a gateway key exists here the moment it is minted into an
+    # env — register it before anything downstream can echo it into a trace.
+    from . import redact
+
+    redact.register("gateway-key", key)
     base = gateway_base.rstrip("/")
     pt = (provider_type or "").lower()
     if module == "interactive":
@@ -114,6 +119,11 @@ def subscription_env(model: str, token: str | None = None) -> dict[str, str]:
     the injected env merges over os.environ — the credential the manager can
     see, rotate and remove in the app is the one that runs.
     """
+    # us-96.11: the subscription token is a live credential the moment it
+    # is delivered into an env.
+    from . import redact
+
+    redact.register("subscription-token", token)
     env: dict[str, str] = {}
     if model:
         env["ANTHROPIC_MODEL"] = model
@@ -165,7 +175,14 @@ class WorkerClient:
         return r.json()
 
     async def submit(self, run_id: str, payload: dict[str, Any]):
-        return await self._req("POST", f"/runs/{run_id}/submit", json=payload)
+        # us-96.11: the second posting layer — module stdout, errors and
+        # notes destined for runs.stdout ride this HTTP submit rather than
+        # the control socket, and they get the same scrub.
+        from . import redact
+
+        return await self._req(
+            "POST", f"/runs/{run_id}/submit", json=redact.scrub_params(payload)
+        )
 
     async def release(self, run_id: str, note: str = ""):
         """Give a claimed run back to the pool (US-31.1: a hand-back that

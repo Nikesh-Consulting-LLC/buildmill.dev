@@ -41,6 +41,12 @@ class McpBroker:
     def __init__(self, api_url: str):
         self._api = (api_url or "").rstrip("/")
         self.local_key = secrets.token_urlsafe(24)
+        # us-96.11: registered the moment it exists — this exact value rode
+        # a run trace verbatim on 2026-08-14, and nothing that emits
+        # telemetry may ever see it unmasked again.
+        from . import redact
+
+        redact.register("factory-local-key", self.local_key)
         self.port: int | None = None
         self._server: asyncio.AbstractServer | None = None
         self._client: httpx.AsyncClient | None = None
