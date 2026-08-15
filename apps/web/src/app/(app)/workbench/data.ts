@@ -5,6 +5,10 @@ import { deriveBatchGate, type BatchGate } from "@/lib/batch-gate";
 import { workItemDisplayId } from "@/lib/work-items";
 import { budgetState } from "@/lib/budget";
 import { getServerClient } from "@/lib/request-cache";
+import {
+  rollupFeatureRows,
+  type FeatureRollup,
+} from "./feature-rollup";
 import type { OpenClarification } from "./clarifications-card";
 import type { GuidelineRecommendation } from "./guideline-recommendations-group";
 import type { GuidelineRefresh } from "./guideline-refresh-group";
@@ -111,6 +115,10 @@ export type TodoItem = {
    * these rules (`featureOwnsBuild` below), which is fine while it agrees
    * with the database and a lie the moment it doesn't. */
   blocked?: DispatchBlock | null;
+  /** us-96.7: set only on a synthesized feature row — the children it
+   * replaced, what inside needs the manager by name, and the unanimous
+   * batch gate when one exists. See feature-rollup.ts. */
+  rollup?: FeatureRollup;
 };
 
 /** US-74.5: a build-order block on a work item, as the database reports it. */
@@ -1152,6 +1160,14 @@ export async function loadWaiting(
     for (const item of g.items) item.parent = parentOf(item.id);
   }
 
+  // us-96.7: the feature is the triage unit — parented items across every
+  // actionable group collapse into one synthesized feature row (the
+  // stranded group deliberately keeps per-run rows: it lists what nothing
+  // has claimed, which is a fact about runs, not a decision about work).
+  // Mutates the group arrays in place, so `waitingCount` below counts the
+  // rolled units and stays in step with org_pending_count (migration 259).
+  rollupFeatureRows(groups);
+
   // Guideline recommendations count as items waiting on the manager.
   // US-43.3: a refresh counts ONCE, not once per section it proposed — the
   // manager has one review to open, and counting twenty would make a single
@@ -1167,7 +1183,9 @@ export async function loadWaiting(
     // US-36.3: what the page renders — the actionable groups plus anything
     // nothing claimed. `waitingCount` above deliberately counts only the
     // actionable ones.
-    groups: visibleGroups,
+    // Re-filtered: the rollup above can empty a group whose only rows were
+    // children now carried by a feature row in an earlier group.
+    groups: visibleGroups.filter((g) => g.items.length > 0),
     clarificationItems,
     parkedRuns,
     recommendationItems,
