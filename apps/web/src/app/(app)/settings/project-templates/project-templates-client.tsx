@@ -28,6 +28,7 @@ import { MarkdownEditor } from "@/components/markdown-editor";
 import { cn } from "@/lib/utils";
 import { toastError, toastSuccess } from "@/components/ui/toast";
 import { confirmDialog } from "@/components/ui/confirm-dialog";
+import { KIND_FILES } from "@/lib/instruction-files";
 
 type GlobalTemplate = {
   id: string;
@@ -58,10 +59,13 @@ type Section = {
   sort_order: number;
 };
 
-const WORKER_INSTRUCTION_KINDS = [
-  "prd", "plan", "code", "release", "breakdown", "test",
-  "deploy", "guidelines", "elaborate", "wireframe",
-];
+// us-99.6: derived, not hand-listed. This constant omitted all five kinds
+// Phase 96 added (chore, bug_rca, bug_fix, standalone_plan, standalone_code)
+// in TWO verbatim copies, so a template could not carry per-type
+// instructions even though every project's own editor exposes them — new
+// projects silently fell through to the factory default for exactly the
+// kinds that exist to give each type its own words.
+const WORKER_INSTRUCTION_KINDS = Object.keys(KIND_FILES);
 const PROMPT_KINDS = ["test_case_elaborate", "deploy_script_generate"];
 const PROMPT_LABELS: Record<string, string> = {
   test_case_elaborate: "Test-case elaboration",

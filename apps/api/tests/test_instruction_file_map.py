@@ -154,3 +154,37 @@ def test_the_root_is_dotbuildmill_on_both_sides():
     assert ROOT == ".buildmill"
     src = TS_MAP.read_text(encoding="utf-8")
     assert f'INSTRUCTION_ROOT = "{ROOT}"' in src
+
+
+# --- us-99.6: the template editors carry the whole set ----------------------
+
+
+TEMPLATE_EDITORS = (
+    REPO / "apps/web/src/app/(app)/admin/project-templates/page.tsx",
+    REPO
+    / "apps/web/src/app/(app)/settings/project-templates/project-templates-client.tsx",
+)
+
+
+def test_neither_template_editor_hand_lists_the_kinds():
+    """The list was duplicated verbatim in both files and omitted all five
+    kinds Phase 96 added, so a template could not carry per-type
+    instructions. Deriving it from the map is what stops that recurring —
+    a hand-written list here is the regression."""
+    for path in TEMPLATE_EDITORS:
+        src = path.read_text(encoding="utf-8")
+        assert "WORKER_INSTRUCTION_KINDS = Object.keys(KIND_FILES)" in src, (
+            f"{path.name} hand-lists the instruction kinds again"
+        )
+        assert 'from "@/lib/instruction-files"' in src
+
+
+def test_the_phase_96_kinds_are_now_carryable():
+    for kind in (
+        "chore",
+        "bug_rca",
+        "bug_fix",
+        "standalone_plan",
+        "standalone_code",
+    ):
+        assert kind in KIND_FILES
