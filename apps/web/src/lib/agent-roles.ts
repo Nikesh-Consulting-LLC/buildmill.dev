@@ -50,8 +50,14 @@ export const AGENT_ROLES: AgentRole[] = [
   {
     key: "programming",
     label: "Programming",
-    help: "Writes the code for an approved plan and hands back a changeset.",
-    kinds: [{ key: "code", label: "Code" }],
+    help: "Writes the code for an approved plan and hands back a changeset; lands finished branches onto the default branch (us-98.1).",
+    // us-98.1: merge is programming work — an agent that can resolve a
+    // conflict is the one that wrote code. Without a role here no agent
+    // could ever be configured to claim a merge run.
+    kinds: [
+      { key: "code", label: "Code" },
+      { key: "merge", label: "Merge" },
+    ],
   },
   {
     key: "testing",

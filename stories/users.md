@@ -93,7 +93,7 @@ Phases 85–89:
 | 57 | [us-100.1](us-100.1-agent-instructions-is-one-document.md) | Agent Instructions is one document | New |
 | 58 | [us-100.2](us-100.2-agents-md-is-the-agent-instructions.md) | AGENTS.md is the Agent Instructions | Testing |
 | 59 | [us-100.3](us-100.3-the-tabs-say-what-they-hold.md) | The tabs say what they hold | Testing |
-| 60 | [us-100.4](us-100.4-a-template-defines-the-agent-instructions.md) | A template defines the Agent Instructions | New |
+| 60 | [us-100.4](us-100.4-a-template-defines-the-agent-instructions.md) | A template defines the Agent Instructions | Testing |
 | 61 | [us-100.5](us-100.5-the-refresh-run-proposes-a-document.md) | The refresh run proposes a document, not sections | New |
 | 62 | [us-100.6](us-100.6-versioning-is-agent-work.md) | Versioning is agent work | Testing |
 | 63 | [us-101.1](us-101.1-the-release-agent-reads-the-whole-story.md) | The release agent reads the whole story, not just its title | New |

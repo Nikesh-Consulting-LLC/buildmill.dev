@@ -166,17 +166,34 @@ TEMPLATE_EDITORS = (
 )
 
 
+TEMPLATE_FILES_TS = REPO / "apps/web/src/lib/template-files.ts"
+SHARED_EDITOR = REPO / "apps/web/src/components/template-files-editor.tsx"
+
+
 def test_neither_template_editor_hand_lists_the_kinds():
     """The list was duplicated verbatim in both files and omitted all five
     kinds Phase 96 added, so a template could not carry per-type
-    instructions. Deriving it from the map is what stops that recurring —
-    a hand-written list here is the regression."""
+    instructions. us-100.4 moved the derivation into one shared module
+    (`template-files.ts`, which reads KIND_FILES) and both editors render
+    from the one shared component — a hand-written list in either page is
+    the regression."""
+    src = TEMPLATE_FILES_TS.read_text(encoding="utf-8")
+    assert "Object.keys(KIND_FILES)" in src
+    assert 'from "./instruction-files.ts"' in src
     for path in TEMPLATE_EDITORS:
-        src = path.read_text(encoding="utf-8")
-        assert "WORKER_INSTRUCTION_KINDS = Object.keys(KIND_FILES)" in src, (
+        page = path.read_text(encoding="utf-8")
+        assert 'from "@/components/template-files-editor"' in page, (
+            f"{path.name} does not use the shared template file editor"
+        )
+        assert "WORKER_INSTRUCTION_KINDS" not in page, (
             f"{path.name} hand-lists the instruction kinds again"
         )
-        assert 'from "@/lib/instruction-files"' in src
+        # us-100.4 AC2: neither retired section type is offered any more —
+        # no code path names them (prose in comments may).
+        for token in ('"guideline"', '"prompt"', "NEW_GUIDELINE", "PROMPT_KINDS"):
+            assert token not in page, f"{path.name} still offers {token} sections"
+    shared = SHARED_EDITOR.read_text(encoding="utf-8")
+    assert "templateFileGroups()" in shared
 
 
 def test_the_phase_96_kinds_are_now_carryable():
@@ -268,9 +285,14 @@ def test_the_template_editors_no_longer_offer_prompt_sections():
     involved."""
     for path in TEMPLATE_EDITORS:
         src = path.read_text(encoding="utf-8")
-        assert "const PROMPT_KINDS: string[] = [];" in src, (
+        assert "PROMPT_KINDS" not in src and "PROMPT_LABELS" not in src, (
             f"{path.name} still offers prompt sections in a template"
         )
+    # And the server refuses to write them (AC6).
+    from app.routers import admin as admin_router
+
+    assert "prompt" not in admin_router._TEMPLATE_SECTION_TYPES
+    assert "guideline" not in admin_router._TEMPLATE_SECTION_TYPES
 
 
 def test_a_new_project_inherits_its_templates_document():
