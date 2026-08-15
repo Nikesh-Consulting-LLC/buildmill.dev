@@ -411,6 +411,7 @@ that land on the review surface and the item's thread.
 | `submit_learning` | Contributes a discovery to the project's learnings; queues for the manager's review — the curated LLM merge runs at approval | New `learning_submissions` row | Any time a durable discovery is worth passing to the next run |
 | `recommend_guideline_change` | Proposes a change to one guideline section (or a new one), with a self-declared severity — advisory only, the manager decides | New `guideline_recommendations` row | Any time working guidance looks wrong or stale |
 | `release_work` | Hands a claim back to the pool with an optional note | `runs.worker_id` cleared; `issues.status` forced to `queued` | The run's state doesn't match what was expected — see the note on this at the end of [Lifecycles](#lifecycles) |
+| `report_merge_failure` | **us-98.5**: ends a merge that cannot be finished, naming the branch that defeated it, the conflicting paths and what was tried. Refuses a branch outside the run, a blank branch, and a blank attempt — the text reaches the retry verbatim as feedback, so what it omits the next agent rediscovers | Run completes `failed` with the report as its error and `fault_class = work-fault` (code that genuinely conflicts is the work's problem, not the machine's, and must not count against runner health); the chore returns to a redispatchable state | A merge run hits a conflict it cannot resolve. Before this, an MCP agent could only `release_work` silently — a real conflict looked like an agent that wandered off |
 
 ### Runner WebSocket
 

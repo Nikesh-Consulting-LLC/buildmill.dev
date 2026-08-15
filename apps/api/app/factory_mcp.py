@@ -4212,6 +4212,131 @@ async def submit_code_work(
     )
 
 
+def _merge_failure_report(
+    run: dict[str, Any],
+    branch: str,
+    conflicting_paths: list[str] | None,
+    tried: str,
+) -> tuple[str | None, dict[str, Any] | None]:
+    """US-98.5 AC3: the text of a named merge failure, or a refusal.
+
+    Returns `(error_text, None)` when the report is usable, `(None, err)`
+    when it is not. Pure, so the shape is testable without a database.
+
+    A merge that cannot be done is a legitimate answer and has to arrive as
+    one. What makes it useful rather than merely honest is that it names the
+    branch, the paths, and the attempt — the retry run receives this verbatim
+    as feedback, so a vague "it conflicted" costs the next agent the same
+    discovery all over again.
+    """
+    if (run.get("kind") or "") != "merge":
+        return None, _err(
+            f"this is a {run.get('kind')} run, not a merge",
+            "only a merge reports a branch it could not land",
+        )
+    name = (branch or "").strip()
+    if not name:
+        return None, _err(
+            "say which branch defeated you",
+            "the retry reads this to know where to start",
+        )
+    licence = _merge_refs(run)
+    asked = list(licence[1] if licence else [])
+    if name not in asked:
+        return None, _err(
+            f"'{name}' is not one of this run's branches",
+            "this merge was asked for: " + ", ".join(asked),
+        )
+    if not (tried or "").strip():
+        return None, _err(
+            "say what you tried",
+            "the next agent repeats whatever you do not rule out",
+        )
+    paths = [p.strip() for p in (conflicting_paths or []) if (p or "").strip()]
+    text = (
+        f"MERGE FAILED — could not land `{name}` onto "
+        f"`{(licence[0] if licence else 'the base')}`.\n\n"
+        + (
+            "Conflicting paths:\n"
+            + "\n".join(f"- `{p}`" for p in paths)
+            + "\n\n"
+            if paths
+            else "No specific paths were named.\n\n"
+        )
+        + f"What was tried:\n{tried.strip()}\n\n"
+        + "This merge was all-or-nothing, so nothing was submitted: the "
+        + f"other {max(len(asked) - 1, 0)} branch(es) were not landed either."
+    )
+    return text, None
+
+
+@mcp.tool(**_write("Report a branch a merge could not land"))
+async def report_merge_failure(
+    run_id: str,
+    branch: str,
+    tried: str,
+    conflicting_paths: list[str] | None = None,
+) -> dict[str, Any]:
+    """Stop a merge you cannot finish, and say why — us-98.5.
+
+    A merge is all or nothing, so a branch you cannot resolve ends the whole
+    run. That is a real answer, not a breakdown: report it here rather than
+    submitting the branches that did work, and rather than releasing the
+    claim silently.
+
+    Name `branch` (the one that defeated you), `tried` (what you attempted —
+    the retry repeats whatever you do not rule out) and, where you can,
+    `conflicting_paths`. The run ends failed with this attached, the chore
+    goes back to a state the manager can redispatch, and this text reaches
+    the next attempt as its feedback.
+
+    The failure is classed **work-fault**: the code genuinely conflicts, which
+    is the work's problem and not the machine's, so it must not count against
+    runner health.
+    """
+    from .routers.worker import Submit, perform_submit
+
+    settings = get_settings()
+    worker = _worker()
+    run = db.get_worker_run(settings, run_id, str(worker["org_id"]))
+    if not run:
+        return _err("run not found", "list_my_work shows what you hold")
+    if str(run.get("worker_id") or "") != str(worker["id"]):
+        return _err("you do not hold this run", "claim_work it first")
+
+    error_text, refusal = _merge_failure_report(
+        run, branch, conflicting_paths, tried
+    )
+    if refusal:
+        return refusal
+
+    try:
+        await perform_submit(
+            settings,
+            worker,
+            run_id,
+            # us-98.5 AC5: work-fault. A merge that fails because two changes
+            # genuinely contradict is not a broken bench, and classing it as
+            # one would feed the repair ladder a false premise — the mistake
+            # us-27.12 was written about.
+            Submit(error=error_text, fault_class="work-fault"),
+        )
+    except HTTPException as e:
+        return _err(
+            str(e.detail),
+            getattr(e, "hint", "check claim_work / the run id and retry"),
+        )
+    return {
+        "markdown": (
+            f"# Merge stopped\n\n`{branch}` could not be landed, so nothing "
+            "was submitted. The manager has the reason and can redispatch."
+        ),
+        "reported": True,
+        "branch": branch,
+        "fault_class": "work-fault",
+    }
+
+
 def _resolve_member_ids(
     members: list[dict[str, Any]], given: list[str]
 ) -> tuple[list[str], list[str]]:
