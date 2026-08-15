@@ -19,14 +19,16 @@ phases did *not* prove, the Phase 78 known gaps, and the
 retired-unbuilt-do-not-re-propose list — is in
 [APPLICATION.md → Delivery history](../APPLICATION.md#delivery-history).
 
-Sixty-one stories are open — Phase 91's usability work first (requested
+Sixty-six stories are open — Phase 91's usability work first (requested
 2026-08-13), then Phase 92's phone work, the public site and its beta gate
 (requested 2026-08-14), Phase 95's cost management (requested 2026-08-14),
 Phase 97's GitHub linkage repair (requested 2026-08-15, ahead of Phase 96
 because it is costing live runs today), Phase 96's per-type work-item paths
 and its runner-health addendum from the 2026-08-14 run-log analysis, then
 Phase 98's merge kind and Phase 99's move of the instructions into the
-repository (both requested 2026-08-15), and the residue carried out of
+repository (both requested 2026-08-15), Phase 100's collapse of the
+twenty-two guideline sections into one Agent Instructions document
+(requested 2026-08-15), and the residue carried out of
 Phases 85–89:
 
 | Order | Story | Title | Status |
@@ -87,11 +89,16 @@ Phases 85–89:
 | 54 | [us-99.5](us-99.5-the-agent-reads-the-file-and-mcp-fills-the-gap.md) | The agent reads the file, and MCP fills the gap | Testing |
 | 55 | [us-99.6](us-99.6-a-template-carries-the-whole-file-set.md) | A template carries the whole file set | Testing |
 | 56 | [us-99.7](us-99.7-a-template-edit-offers-itself.md) | A template edit offers itself to the projects using it | Testing |
-| 57 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
-| 58 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
-| 59 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
-| 60 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
-| 61 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+| 57 | [us-100.1](us-100.1-agent-instructions-is-one-document.md) | Agent Instructions is one document | New |
+| 58 | [us-100.2](us-100.2-agents-md-is-the-agent-instructions.md) | AGENTS.md is the Agent Instructions | New |
+| 59 | [us-100.3](us-100.3-the-tabs-say-what-they-hold.md) | The tabs say what they hold | New |
+| 60 | [us-100.4](us-100.4-a-template-defines-the-agent-instructions.md) | A template defines the Agent Instructions | New |
+| 61 | [us-100.5](us-100.5-the-refresh-run-proposes-a-document.md) | The refresh run proposes a document, not sections | New |
+| 62 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
+| 63 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
+| 64 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
+| 65 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
+| 66 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
 
 **Phase 91 — Usability: the dashboard reads like the job** (drafted 2026-08-13,
 the manager's own list). Nothing here is broken; all of it is friction the
@@ -289,6 +296,32 @@ give each type its own words. us-99.7 lets a corrected template reach the
 projects already using it by **offering**, per instruction, using the
 `updated_by` stamp to say which ones the project has never touched and which
 would lose a local edit — and never publishing on the superadmin's behalf.
+
+**Phase 100 — One document, not twenty-two sections** (drafted 2026-08-15,
+the manager's request while inspecting project templates). Phase 99 put the
+instructions in the repository; this fixes what they *are*. A project's
+conventions are twenty-two catalog sections — Tech stack, Commands, Testing
+expectations, Versioning & Release and the rest — that the agent receives
+concatenated back into one document anyway. The structure buys nothing and
+costs a form with twenty-two boxes where a person wants an editor. It becomes
+one markdown document called **Agent Instructions** (us-100.1), the Guidelines
+section is decommissioned on a schedule rather than left to rot, and that
+document **is** `AGENTS.md`'s body — retiring `.buildmill/Guidelines.md`,
+which shipped hours earlier in us-99.3 and is superseded here (us-100.2).
+us-100.3 fixes the naming collision the manager actually reported: the tab
+labelled **Agent Instructions** today holds the *per-task* worker
+instructions, so the one place you would go for your project's instructions
+shows you a list of run-kind editors instead — both tabs get named for what
+they hold, in one vocabulary shared by project settings, both template
+editors, and the audit trail. us-100.4 narrows a template to exactly what a
+project has: the Agent Instructions document plus the per-task instructions,
+dropping `guideline` sections (retired) and `prompt` sections (platform
+machinery that does not belong in a project template). And us-100.5 reshapes
+the refresh run, which is section-addressed today and would otherwise keep
+writing to a table nothing reads — an agent now proposes a revised Agent
+Instructions **and** revised per-task instructions, accepted or rejected
+whole, because after Phase 99 improving what agents are told means more than
+one file.
 
 **Phase 85 residue — us-85.3** (drafted 2026-08-12) closes the loop on the incident
 that motivated us-85.1's workspace verification. A run that fails on a broken bench —
