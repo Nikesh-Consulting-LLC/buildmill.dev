@@ -19,7 +19,7 @@ phases did *not* prove, the Phase 78 known gaps, and the
 retired-unbuilt-do-not-re-propose list — is in
 [APPLICATION.md → Delivery history](../APPLICATION.md#delivery-history).
 
-Sixty-six stories are open — Phase 91's usability work first (requested
+Seventy-two stories are open — Phase 91's usability work first (requested
 2026-08-13), then Phase 92's phone work, the public site and its beta gate
 (requested 2026-08-14), Phase 95's cost management (requested 2026-08-14),
 Phase 97's GitHub linkage repair (requested 2026-08-15, ahead of Phase 96
@@ -28,7 +28,8 @@ and its runner-health addendum from the 2026-08-14 run-log analysis, then
 Phase 98's merge kind and Phase 99's move of the instructions into the
 repository (both requested 2026-08-15), Phase 100's collapse of the
 twenty-two guideline sections into one Agent Instructions document
-(requested 2026-08-15), and the residue carried out of
+(requested 2026-08-15), Phase 101's rebuild of what a release hands the
+manager (requested 2026-08-15), and the residue carried out of
 Phases 85–89:
 
 | Order | Story | Title | Status |
@@ -94,11 +95,18 @@ Phases 85–89:
 | 59 | [us-100.3](us-100.3-the-tabs-say-what-they-hold.md) | The tabs say what they hold | New |
 | 60 | [us-100.4](us-100.4-a-template-defines-the-agent-instructions.md) | A template defines the Agent Instructions | New |
 | 61 | [us-100.5](us-100.5-the-refresh-run-proposes-a-document.md) | The refresh run proposes a document, not sections | New |
-| 62 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
-| 63 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
-| 64 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
-| 65 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
-| 66 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+| 62 | [us-100.6](us-100.6-versioning-is-agent-work.md) | Versioning is agent work | New |
+| 63 | [us-101.1](us-101.1-the-release-agent-reads-the-whole-story.md) | The release agent reads the whole story, not just its title | New |
+| 64 | [us-101.2](us-101.2-a-release-case-knows-its-section-and-its-story.md) | A release case knows its section, its story, and whether it is critical | New |
+| 65 | [us-101.3](us-101.3-every-check-is-a-step-and-an-expectation.md) | Every check is a step and an expectation | New |
+| 66 | [us-101.4](us-101.4-the-notes-are-a-declaration.md) | The notes are a declaration, not a wall of markdown | New |
+| 67 | [us-101.5](us-101.5-the-release-page-is-the-plan-a-tester-follows.md) | The release page is the plan a tester follows | New |
+| 68 | [us-101.6](us-101.6-the-release-instruction-reaches-the-agent.md) | The instruction the release agent reads is the one the manager edits | New |
+| 69 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
+| 70 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
+| 71 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
+| 72 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
+| 73 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
 
 **Phase 91 — Usability: the dashboard reads like the job** (drafted 2026-08-13,
 the manager's own list). Nothing here is broken; all of it is friction the
