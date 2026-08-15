@@ -79,6 +79,9 @@ export type WorkItemViewData = {
   epics: EpicOption[];
   hasActivePrdRun: boolean;
   hasActiveBreakdownRun: boolean;
+  /** us-96.6: the latest breakdown run's error when it failed — the retry
+   * is informed, not a mystery button. */
+  lastBreakdownError?: string | null;
   runs: RunLike[];
   /** US-27.2: the feature run that built this story, when the story owns no
    * code run of its own. `covered` is null on a run that predates US-27.1's
@@ -360,6 +363,7 @@ export function StoriesSection({ data }: { data: WorkItemViewData }) {
       breakdownMode={issue.breakdown_mode ?? "automatic"}
       breakdownInstructions={issue.breakdown_instructions ?? ""}
       breakdownPending={data.hasActiveBreakdownRun}
+      lastBreakdownError={data.lastBreakdownError ?? null}
       rollup={data.childRollup ?? null}
       buildMode={data.buildMode}
       featureLabel={data.displayId ?? issue.title}

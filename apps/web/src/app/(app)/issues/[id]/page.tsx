@@ -244,6 +244,13 @@ export default async function IssueDetailPage({
   const hasActiveBreakdownRun = (runs ?? []).some(
     (r) => r.kind === "breakdown" && ["queued", "running"].includes(r.status)
   );
+  // us-96.6: a failed breakdown no longer moves the feature off 'ready' —
+  // the panel stays, and the retry is informed by what went wrong last time.
+  const latestBreakdownRun = (runs ?? []).find((r) => r.kind === "breakdown");
+  const lastBreakdownError =
+    latestBreakdownRun?.status === "failed"
+      ? (latestBreakdownRun.error as string | null)
+      : null;
   // US-15.14: the one active run (if any) the manager can reset — queued or
   // running, any kind. runs are ordered newest-first, so the first match is
   // the current attempt.
@@ -712,6 +719,7 @@ export default async function IssueDetailPage({
     epics: (epics ?? []) as EpicOption[],
     hasActivePrdRun,
     hasActiveBreakdownRun,
+    lastBreakdownError,
     hasActiveElaborateRun,
     hasElaborationDraft: !!elaborationDraft,
     wireframe,

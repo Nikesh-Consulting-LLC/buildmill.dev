@@ -433,7 +433,15 @@ def complete_run(
             # rewrite is exactly as good as it was before the run started,
             # and marking the item `failed` would block the dispatch paths
             # that only accept draft/ready.
-            issue_status = None if kind in ("prd", "test", "elaborate") else "failed"
+            # us-96.6: breakdown joins them. A failed split is the RUN's
+            # failure, not the feature's: 'failed' stranded the feature
+            # outright (dispatch_breakdown only accepts 'ready', the
+            # stories panel only renders there, and dispatch_issue would
+            # re-plan — the wrong kind). The feature stays 'ready' and the
+            # manager just dispatches the breakdown again.
+            issue_status = (
+                None if kind in ("prd", "test", "elaborate", "breakdown") else "failed"
+            )
             # US-33.2: a distinct event, because a stop is a distinct outcome —
             # the feed should not read as if the work failed.
             event = "run-stopped" if outcome == "stopped" else "run-failed"
@@ -1582,10 +1590,15 @@ def reap_orphaned_provider_runs(settings: Settings) -> int:
             """,
         ).fetchall()
         for row in rows:
-            conn.execute(
-                "update public.issues set status = 'failed' where id = %s",
-                (row["issue_id"],),
-            )
+            # us-96.6: the think-phase kinds whose failure never moves the
+            # issue (see perform_submit's exemption) are exempt here too —
+            # the reaper previously forced prd/breakdown issues to 'failed'
+            # unconditionally, the second dead end lifecycles.md documented.
+            if row["kind"] not in ("prd", "test", "elaborate", "breakdown"):
+                conn.execute(
+                    "update public.issues set status = 'failed' where id = %s",
+                    (row["issue_id"],),
+                )
             conn.execute(
                 """
                 insert into public.issue_events (org_id, issue_id, type, payload)

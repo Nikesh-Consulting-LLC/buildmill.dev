@@ -72,6 +72,7 @@ export function StoriesPanel({
   breakdownMode,
   breakdownInstructions,
   breakdownPending = false,
+  lastBreakdownError = null,
   rollup = null,
   buildMode = "story",
   featureLabel,
@@ -88,6 +89,9 @@ export function StoriesPanel({
   breakdownMode?: string;
   breakdownInstructions?: string;
   breakdownPending?: boolean;
+  /** us-96.6: the prior failed breakdown run's error, shown beside the
+   * retry so the manager redispatches informed. */
+  lastBreakdownError?: string | null;
   /** US-20.6: present only in feature/epic build mode. */
   rollup?: ChildRollup | null;
   /** Decides whether a single story may be built on its own (us-22.10). */
@@ -191,13 +195,23 @@ export function StoriesPanel({
         )}
         {childIssues.length === 0 ? (
           featureStatus === "ready" ? (
-            <BreakdownPanel
-              featureId={featureId}
-              orgId={orgId}
-              breakdownMode={breakdownMode}
-              breakdownInstructions={breakdownInstructions}
-              pending={breakdownPending}
-            />
+            <>
+              {/* us-96.6: a failed split leaves the feature standing here —
+                  the run failed, not the work item — and the retry says
+                  what went wrong last time. */}
+              {lastBreakdownError && !breakdownPending && (
+                <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+                  The last breakdown run failed: {lastBreakdownError}
+                </p>
+              )}
+              <BreakdownPanel
+                featureId={featureId}
+                orgId={orgId}
+                breakdownMode={breakdownMode}
+                breakdownInstructions={breakdownInstructions}
+                pending={breakdownPending}
+              />
+            </>
           ) : (
             <p className="text-sm text-muted-foreground">
               This feature needs an approved PRD before it can be broken into

@@ -25,8 +25,7 @@ such path was found, the row says so rather than inventing one.
 | `planning` | `plan-review` | Worker hands back the plan (`submit_plan`) | Worker (MCP) | Run → `succeeded`; `plan`/`test_plan` artifacts stored as `draft` |
 | `running` (code) | `in-review` | Worker hands back code (`submit_code_work` / `submit_changeset`) on a project whose branching strategy opens a PR (`story` or `work_item`) | Worker (MCP) | Run → `succeeded`; the factory verifies the branch, opens/finds the PR, pulls the diff |
 | `running` (code) | `merged` | Same submit calls, but the project's branching strategy is `main`, which commits straight to the default branch (`submit_mode == 'direct'`) | Worker (MCP) | Run → `succeeded`; no PR — the review gate is bypassed entirely |
-| `planning` / `running` | `failed` | Runner submits with `error` set — `POST /worker/runs/{run_id}/submit`, the `Submit` body's `error` field; not a `submit_*` MCP tool call | Runner (HTTP) | Run → `failed`; for `code` runs a synced GitHub issue is closed |
-| `ready` (feature, breakdown run) | `failed` | Runner submits the breakdown run with `error` set — same `POST /worker/runs/{run_id}/submit` endpoint | Runner (HTTP) | Run → `failed` — see the note below the table |
+| `planning` / `running` | `failed` | Runner submits with `error` set — `POST /worker/runs/{run_id}/submit`, the `Submit` body's `error` field; not a `submit_*` MCP tool call | Runner (HTTP) | Run → `failed`; for `code` runs a synced GitHub issue is closed. us-96.6: `breakdown`-kind runs join `prd`/`test`/`elaborate` in the exemption — the run fails, the feature **stays `ready`** and its breakdown panel shows the error beside the retry |
 | `planning` / `running` | `queued` | Worker releases the claim (`release_work`), or the lease expires unattended | Worker (MCP) / system (expiry sweep — API startup, before every pool listing, and a 60-second timer since US-13.6) | Run → `queued`, `worker_id` cleared; issue forced to `queued` **for `plan`/`code` claims only** (US-13.6 kind-guard); a `claim-expired` event names the worker and how long it held the claim |
 | `plan-review` | `planned` | Manager approves the plan (`POST /issues/{id}/plan/approve`) | Manager (web) | Plan/test-plan artifacts → `approved`; the test plan's cases materialize into `test_cases` |
 | `plan-review` | `draft` / `ready` / `failed` / `planned` | Manager sends the plan back with a comment (`POST /issues/{id}/plan/send-back`) | Manager (web) | Returns to whatever status the issue had when this plan run was dispatched (recorded on the `plan-dispatched` event); falls back to `draft` if that value isn't one of these four |
@@ -57,12 +56,11 @@ now touch `issues.status` only for `plan`/`code` kinds.)
   calls. A direct-strategy merge reaches `db.complete_run`'s own `direct` branch instead, which
   sets the issue straight to `merged` without ever calling `approve_run` — so a feature whose
   every child merged this way never receives the `done` status.
-- **A breakdown-run failure leaves no code path back to a dispatchable state.** `dispatch_breakdown`
-  only accepts a feature already at `ready`; a failed breakdown run leaves the feature at `failed`,
-  and the web UI's breakdown panel (`stories-panel.tsx`) only renders for `ready`. No endpoint
-  moves a `failed` feature with an approved PRD back to `ready` — `dispatch_issue` would instead
-  re-plan it (`draft`/`ready`/`failed` → `plan`-kind run), which is the wrong run kind for a
-  feature that still needs its story split.
+- ~~A breakdown-run failure leaves no code path back to a dispatchable state.~~ **Fixed by
+  us-96.6** (2026-08-15): a failed breakdown leaves the feature at `ready` (the same exemption
+  `prd` runs had), the orphan reaper stops forcing `prd`/`breakdown`/`test`/`elaborate` issues to
+  `failed`, and migration 260 repaired any feature the old behavior had stranded (zero found on
+  either live project at apply time).
 
 ### Run outcome
 
