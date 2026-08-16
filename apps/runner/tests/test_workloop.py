@@ -269,3 +269,216 @@ def test_run_claimed_never_boots_on_a_dead_claim():
     assert result is None
     assert client.submitted is None, "a dead claim must not be submitted against"
     assert client.released and "claim lost" in client.released
+
+
+# --------------------------------------------------------------------- US-103.2
+# A restarted runner re-adopts the prep it was already holding.
+#
+# On 2026-08-16 the runner restarted ten minutes into preparing release
+# 2026.08.16.3. Its supervising task died with the process; the
+# release_prep_runs row did not. Two and a half hours later the row was still
+# `running`, the runner was online and healthy, and it had no idea the job
+# existed — because the pool it polls asks for `queued`, so the job it held
+# was invisible to it precisely because it held it.
+
+
+class PrepClient(FakeClient):
+    """A worker client with the release-prep contract on it."""
+
+    def __init__(self, held=None, pool=None):
+        super().__init__(_bundle("code"))
+        self.held = held or []
+        self.prep_pool = pool or []
+        self.claims = []
+        self.failed = []
+        self.prep_beats = 0
+        self.status = "succeeded"
+
+    async def list_held_release_prep(self):
+        return {"items": self.held}
+
+    async def list_release_prep(self):
+        return {"items": self.prep_pool}
+
+    async def claim_release_prep(self, prep_id):
+        self.claims.append(prep_id)
+        return {"ok": True, "id": prep_id, "instruction": "from the claim"}
+
+    async def release_prep_heartbeat(self, prep_id):
+        self.prep_beats += 1
+
+    async def release_prep_status(self, prep_id):
+        return self.status
+
+    async def fail_release_prep(self, prep_id, error):
+        self.failed.append((prep_id, error))
+
+
+HELD = {
+    "id": "prep-1",
+    "release_id": "rel-1",
+    "project_id": "proj-1",
+    "version": "2026.08.16.3",
+    "claimed_at": "2026-08-16T13:36:16+00:00",
+    "instruction": "the project's own Release instruction",
+    "agent_instructions": "house style",
+    "notes_vocabulary": "sections: ...",
+}
+
+
+def _sim(config=None):
+    return config or {"enabled_modules": ["sim"], "module_routes": {}}
+
+
+def test_startup_re_adopts_a_held_prep_without_re_claiming():
+    client = PrepClient(held=[dict(HELD)])
+    sup = Supervisor(client, config_provider=_sim)
+    seen = {}
+
+    async def fake_supervise(prep_id, item, claimed):
+        seen["args"] = (prep_id, item, claimed)
+
+    sup._supervise_release_prep = fake_supervise
+    adopted = asyncio.run(sup.adopt_held_release_preps())
+
+    assert adopted == 1
+    assert client.claims == [], "it is already claimed — by this worker"
+    prep_id, item, claimed = seen["args"]
+    assert prep_id == "prep-1"
+    # The briefing rides the held listing, so the job runs exactly as a fresh
+    # claim would run it — with the project's Release instruction, not without.
+    assert claimed["instruction"] == "the project's own Release instruction"
+    assert item["version"] == "2026.08.16.3"
+
+
+def _mcp_module(monkeypatch, outcome="succeeded"):
+    """Release prep needs a module that can be given an MCP config (the whole
+    job is claim/read/submit over the factory's MCP tools), and `sim` cannot
+    be. Stand one in rather than spawning a real CLI."""
+    from supervisor import workloop as wl
+
+    class FakeModule:
+        supports_mcp = True
+        provider_type = ""
+        settings = ()
+
+        async def execute(self, ctx, prim):
+            return ModuleResult(outcome=outcome, error=None if outcome == "succeeded" else "boom")
+
+    monkeypatch.setattr(wl, "select_release_prep_module", lambda cfg: "fake")
+    monkeypatch.setattr(wl.modules, "get", lambda name: FakeModule())
+    return FakeModule
+
+
+def test_re_adoption_drives_the_job_to_a_verified_submit(monkeypatch):
+    """End to end through the real supervision path: the module runs and the
+    outcome is checked against the server's own status, exactly as a freshly
+    claimed prep is — a clean exit is not taken as done."""
+    _mcp_module(monkeypatch)
+    client = PrepClient(held=[dict(HELD)])
+    sup = Supervisor(client, config_provider=_sim)
+
+    adopted = asyncio.run(sup.adopt_held_release_preps())
+
+    assert adopted == 1
+    assert client.failed == [], "a job that reached 'succeeded' is not failed"
+    assert client.claims == []
+
+
+def test_a_re_adopted_prep_that_never_submits_is_failed_not_orphaned_again(
+    monkeypatch,
+):
+    """The failure mode this whole phase exists for: a job must never end by
+    quietly staying `running`."""
+    _mcp_module(monkeypatch)
+    client = PrepClient(held=[dict(HELD)])
+    client.status = "running"  # the CLI exited clean without submitting
+    sup = Supervisor(client, config_provider=_sim)
+
+    asyncio.run(sup.adopt_held_release_preps())
+
+    assert client.failed and "without calling submit_release_notes" in client.failed[0][1]
+
+
+def test_the_live_prep_registry_is_cleared_after_supervision(monkeypatch):
+    """Otherwise one adopted prep would poison the guard for the rest of the
+    process's life."""
+    _mcp_module(monkeypatch)
+    client = PrepClient(held=[dict(HELD)])
+    sup = Supervisor(client, config_provider=_sim)
+
+    asyncio.run(sup.adopt_held_release_preps())
+
+    assert sup._live_preps == set()
+
+
+def test_nothing_held_adopts_nothing():
+    client = PrepClient(held=[])
+    sup = Supervisor(client, config_provider=_sim)
+    assert asyncio.run(sup.adopt_held_release_preps()) == 0
+
+
+def test_a_prep_already_being_supervised_is_never_adopted_twice():
+    """AC3: the guard. Two supervisors on one job would heartbeat and submit
+    over each other."""
+    client = PrepClient(held=[dict(HELD)])
+    sup = Supervisor(client, config_provider=_sim)
+    sup._live_preps.add("prep-1")
+
+    assert asyncio.run(sup.adopt_held_release_preps()) == 0
+
+
+def test_a_failing_held_query_never_blocks_startup():
+    class Broken(PrepClient):
+        async def list_held_release_prep(self):
+            raise RuntimeError("api is still booting")
+
+    sup = Supervisor(Broken(), config_provider=_sim)
+    assert asyncio.run(sup.adopt_held_release_preps()) == 0
+
+
+def test_re_adoption_with_no_module_fails_cleanly_rather_than_orphaning():
+    client = PrepClient(held=[dict(HELD)])
+    sup = Supervisor(client, config_provider=lambda: {"enabled_modules": []})
+
+    asyncio.run(sup.adopt_held_release_preps())
+
+    assert client.failed and "no enabled module" in client.failed[0][1]
+
+
+def test_supervise_adopts_held_work_before_its_first_poll():
+    """The whole point: the restart that orphaned the prep is the one that
+    has to find it again, and it must happen before idling on an empty pool."""
+    client = PrepClient(held=[dict(HELD)])
+    sup = Supervisor(client, config_provider=_sim, poll_seconds=0.01)
+    order = []
+
+    async def fake_supervise(prep_id, item, claimed):
+        order.append(f"adopt:{prep_id}")
+
+    async def watch_pool():
+        order.append("poll")
+        return {"runs": []}
+
+    sup._supervise_release_prep = fake_supervise
+    client.list_pool = watch_pool
+
+    asyncio.run(sup.supervise(once=True))
+
+    assert order[0] == "adopt:prep-1", f"adoption must precede the poll: {order}"
+
+
+def test_adoption_happens_once_per_process_not_every_loop():
+    client = PrepClient(held=[dict(HELD)])
+    sup = Supervisor(client, config_provider=_sim, poll_seconds=0.01)
+    adopted = []
+
+    async def fake_supervise(prep_id, item, claimed):
+        adopted.append(prep_id)
+
+    sup._supervise_release_prep = fake_supervise
+
+    asyncio.run(sup.supervise(once=True))
+    asyncio.run(sup.supervise(once=True))
+
+    assert adopted == ["prep-1"]

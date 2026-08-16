@@ -224,6 +224,16 @@ class WorkerClient:
         r.raise_for_status()
         return r.json()
 
+    async def list_held_release_prep(self) -> dict[str, Any]:
+        """US-103.2: what this worker is already holding.
+
+        The pool asks for `queued`, so a prep this runner claimed before it
+        restarted is invisible to it precisely because it holds it.
+        """
+        r = await self._req("GET", "/release-prep/held")
+        r.raise_for_status()
+        return r.json()
+
     async def claim_release_prep(self, prep_id: str) -> dict[str, Any] | None:
         r = await self._req("POST", f"/release-prep/{prep_id}/claim")
         return r.json() if r.status_code == 200 else None
@@ -663,6 +673,10 @@ class Supervisor:
         self.env_provider = env_provider
         self.connection = connection  # RunnerConnection, for the shell auditor
         self.poll_seconds = poll_seconds
+        # US-103.2: preps this process is supervising right now. The guard
+        # that stops re-adoption ever running a live job a second time.
+        self._live_preps: set[str] = set()
+        self._adopted_held = False
 
     async def run_claimed(self, run_id: str) -> ModuleResult | None:
         """Supervise one already-claimed run to a submit. Never vanishes."""
@@ -850,6 +864,63 @@ class Supervisor:
         claimed = await self.client.claim_release_prep(prep_id)
         if not claimed:
             return  # lost the race to another worker; not an error
+        await self._supervise_release_prep(prep_id, item, claimed)
+
+    async def adopt_held_release_preps(self) -> int:
+        """US-103.2: pick back up what this worker was already holding.
+
+        On 2026-08-16 the runner restarted ten minutes into preparing release
+        2026.08.16.3. Its supervising task died with the process; the
+        `release_prep_runs` row did not. Two and a half hours later the row
+        was still `running`, the runner was online and healthy, and it had no
+        idea the job existed — because the pool it polls asks for `queued`.
+
+        Asked at STARTUP only. A prep this process is already supervising must
+        never be adopted twice, and startup is the one moment the live-prep
+        registry is provably empty. A prep that was reaped (us-103.1) or
+        stopped (us-103.3) is no longer `running`, so the server does not
+        return it and it is never resurrected here.
+        """
+        try:
+            held = await self.client.list_held_release_prep()
+        except Exception as e:  # noqa: BLE001 — never block startup on this
+            logger.warning("held release-prep check failed: %s", e)
+            return 0
+        adopted = 0
+        for item in held.get("items") or []:
+            prep_id = item.get("id")
+            if not prep_id or prep_id in self._live_preps:
+                continue
+            logger.warning(
+                "re-adopting release prep %s (%s) held since %s",
+                prep_id,
+                item.get("version") or "?",
+                item.get("claimed_at") or "?",
+            )
+            # No re-claim: it is already claimed, by this worker. The briefing
+            # rode along on the held listing, so the job runs exactly as a
+            # fresh claim would run it — from the top, against the same pinned
+            # commit. Nothing is written before submit, so there is no partial
+            # work to resume and this story does not pretend otherwise.
+            await self._supervise_release_prep(prep_id, item, item)
+            adopted += 1
+        return adopted
+
+    async def _supervise_release_prep(
+        self, prep_id: str, item: dict[str, Any], claimed: dict[str, Any]
+    ) -> None:
+        """Drive a claimed prep to a submit — shared by a fresh claim and by
+        us-103.2's re-adoption, so neither can diverge on what supervision
+        means."""
+        self._live_preps.add(prep_id)
+        try:
+            await self._run_release_prep_claimed(prep_id, item, claimed)
+        finally:
+            self._live_preps.discard(prep_id)
+
+    async def _run_release_prep_claimed(
+        self, prep_id: str, item: dict[str, Any], claimed: dict[str, Any]
+    ) -> None:
         config = self.config_provider() or {}
         name = select_release_prep_module(config)
         if not name:
@@ -1107,6 +1178,12 @@ class Supervisor:
                     )
 
     async def supervise(self, stop: asyncio.Event | None = None, once: bool = False) -> None:
+        # US-103.2: before the first poll, pick back up whatever this worker
+        # was holding when it last stopped. A restart mid-prep is an ordinary
+        # event; it should cost a minute, not a release.
+        if not self._adopted_held:
+            self._adopted_held = True
+            await self.adopt_held_release_preps()
         while stop is None or not stop.is_set():
             if self.connection is not None:
                 # US-31.1: evidence stranded by a socket drop lands on the
