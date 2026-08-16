@@ -18,7 +18,7 @@ same commit as the change it describes:
 - [Interface catalog](docs/application/interface-catalog.md) — every route/tool/message, grouped by surface (Web UI, Supabase, FastAPI, Worker MCP, Runner WebSocket, run_items, docs tree, wireframes, instruction files, Git proxy, LLM Gateway)
 - [End to end: one story](docs/application/end-to-end-one-story.md) — the mainstream path, start to finish
 - [Rules & invariants](#rules--invariants) — below: always-true properties; a violation is a bug, not a preference
-- [Delivery history](#delivery-history) — below: the shipped phases (1–90), condensed to what still matters; full summaries in git history
+- [Delivery history](#delivery-history) — below: the shipped phases (1–96), condensed to what still matters; full summaries in git history
 
 Operating a worker or runner? Read Actors & surfaces, the Worker MCP / Runner WebSocket / Git proxy
 subsections of the Interface catalog, and End to end: one story. Changing code? Read Domain objects,
@@ -477,6 +477,106 @@ release that can retry.
   request names a different commit — and every attempt is audited
   (`release_prep_runs.requested_by`, migration 251) and counted, so a third try reads
   as a third try.
+
+**Phases 91–96** (42 stories, closed 2026-08-15 — built and released to production;
+the manager tests on live rather than through per-story UAT sittings, so what each
+story recorded as *not proven* is listed rather than assumed) — the manager's surfaces
+made to read like the job, the app on a phone, the front door, the beta gate, cost
+management, and the type-shaped pipeline.
+
+- **The dashboard reads like the job** (91) — "Waiting on you" became **Dispatch**
+  (`?tab=waiting` kept for saved links) with **In Progress** above it: only rows with a
+  live worker claim, in the factory table's row shape, the Stage column reading the *run*
+  rather than `issues.status`; a CLI-window door per running row (91.3), project grouping
+  with per-section collapse in `localStorage` (91.4 — folding is a view state, never a
+  filter). Work Items' status filter is a checkbox set opening on "all but merged, done"
+  (91.5); the test library pages ten rows with page-scoped select-all (91.6); Reports are
+  **Bug Reports** under Activity (91.7); the activity feed pages ten (91.8); project cards
+  say `Live: <version> · deployed <when>` (91.9); SuperAdmin is four menus (91.10). The
+  measurement spine is migration **252** (91.11): `runs.work_seconds` written once at
+  terminal state, `agent_effort_daily` maintained by trigger in the closing transaction —
+  prod backfill 35 agent-day rows, 181/185 runs timed — feeding Team's three KPI tiles
+  (91.12) and a cost column plus stored `issues.cost_usd` (91.14). Notifications name the
+  agent and go where the thing is (91.15); the build stamp is `commit/built_at/ref/version`
+  written identically by all three workflows and echoed at `/api/v1/health` (91.16); the
+  workspace picker reached mobile (91.17); merged-but-unreleased work asks to be released,
+  and an in-flight release *becomes* the card (91.18); the page collapsed to one tabless
+  **Workdesk** at `/workbench` with a 301 from `/dashboard` (91.19, route chosen by the
+  manager over the story's AC4).
+- **The app on a phone** (92) — measured at 375px: Things to Do's 555px of tabs became a
+  full-width select still riding `?tab=`, In Progress became cards, five preamble blocks
+  folded into one strip (92.1); Work Items' eleven controls became three plus a `Filters`
+  sheet, Table cut from 856px to 353px (92.2); Releases' nine-column tables became cards
+  with a UAT → Production journey line and full-width actions (92.3); test cases and Bug
+  Reports became cards leading with their own words, one `detailFor(report)` shared by row
+  and card (92.4, 92.5); project cards lead with state, Archive/Delete behind `⋯` (92.6).
+- **The front door** (93.1) — `apps/public/index.html` rewritten as one static page (what
+  it is, the seven-step journey with three "your gate" steps, the real git remote and
+  MCP agents beside traditional clients); exactly 3 same-origin requests, zero console
+  errors, audited at 375×812 and 360×780 with zero overflow. `buildmill.dev` had been
+  serving it all along — the login the manager saw was `app.buildmill.dev`.
+- **The beta gate** (94.1, migration **253**) — a new account logs in and waits at `/gate`;
+  enforcement is one choke point, `is_approved_user()` folded into `is_org_member` /
+  `is_org_owner` / `has_org_capability` (the three live bodies md5-pinned across prod and
+  dev, raising on drift), so RLS and every capability RPC refuse a pending user; a pending
+  queue with Approve on `/admin/users`. Proven as the `authenticated` role in rolled-back
+  transactions; grandfathering 7 profiles / 0 pending on both projects.
+- **Cost management** (95, migration **254**) — `view_costs` seeded true for owner and
+  admin only; `/costs` takes the report whole (four dimensions, four windows, tokens,
+  cache share, unmeasured-calls badge, subscription off-meter line), rates moved to
+  `/settings/llm-providers`, `/settings/spend` redirects (95.1); a daily curve and
+  window-over-window via `spend_trend` (previous window `None` rather than a percentage of
+  zero; 403 for anyone without `view_costs`) (95.2); three work-shaped dimensions — Type,
+  Epic, Work item — with an honest "Not attributable to a work item" bucket (95.3; the
+  type query answered on live dev); Project/Agent/Type filters entirely in the URL (95.4).
+  Found in passing: the breakdown's `order by 4` had meant "order by cache reads" since
+  US-38.1 inserted two columns — fixed, with a regression test.
+- **The type shapes the path** (96) — a chore is single-shot (**255**: `dispatch_kind_for`
+  answers `code` from draft/ready/failed/needs-fixes; a plan dispatch on a chore refuses
+  by name; `chore` instruction kind backfilled everywhere) (96.1); a bug explains itself
+  before the fix (**256**: the think-phase is a five-section RCA reusing the plan machinery
+  whole — `bug_rca`/`bug_fix` kinds, "NO diffs, NO patches", the repro as the regression
+  case, "Approve RCA" on the gate) (96.2); `standalone_plan`/`standalone_code` complete the
+  family, resolved by parentage in one shared mapping (**257**) (96.3); the feature holds
+  the steering wheel for planning too — a never-planned child refuses individually and
+  `dispatch_feature_batch` lifts it through a transaction-local flag (**258**) (96.4); the
+  rails, status labels and a drawn **How each type is routed** help section match the work
+  (96.5); a failed breakdown leaves the feature at `ready` with the prior error beside the
+  retry (**260**) (96.6); a feature is one triage item — one Workbench row, one queue row
+  that is also the drag/pause unit, `org_pending_count` on `distinct coalesce(parent_id,
+  id)` (**259**) (96.7). Three incident-driven closes: the hand-back speaks one voice per
+  transport and echoes `received`/`dropped` (96.8, from run `51cd4fd3`); a manager stop
+  is an answer — short-circuits the repair ladder, closes the run as "stopped by the
+  manager", writes no `agent_failures` row, returns the issue to `prev_issue_status`, with
+  a claim preflight before every boot (96.9, from run `22b807a5`); the stage shapes the
+  model (96.10, `claude-opus-4-8` gone from first-party code); and a key never rides the
+  trace — `supervisor/redact.py` plus `db.scrub_credential_patterns` at write time
+  (96.11).
+
+**What Phases 91–96 recorded as not proven, and what is left to the manager.** In
+91: the feature-owned build as one row (91.2 AC3) and the version/release link on a
+project card (91.9) were never exercised on dev (no feature build, no release build
+there); **paused spans are not subtracted from `work_seconds`** (91.11 AC1 amended —
+nothing records a pause interval; closing it needs a pause ledger); the per-agent effort
+line was not visible on dev (91.12); the readable-count contrast (91.13) and the status
+filter's real pointer path (91.5) were unit-tested, not driven. In 92: Bug Reports cards
+were built to measured widths but never seen with data (92.5). In 93: the live deploy,
+real social scrapers and a physical phone. In 94: **the gate page names no contact
+address** — no mailbox exists yet (94.1 AC2, one line once one does); the approval record
+is `approved_by/approved_at` plus the API log, not a platform audit table (AC6
+deviation); the fresh-signup → approve → next-load loop was not driven in a browser. In
+95: the turn-away as a non-admin sees it, the rendered curve and group-bys with data,
+and `test_costs_spend_sql.py` (no `DATABASE_URL`) — code-read and route tests only. In
+96: the RCA review against a real bug, a full plan-batch → approve → feature-build cycle,
+a live failed-breakdown round-trip, a live stop on an interactive run, and every
+click-through the stories name as "the UAT script" (96.1–96.9). Two items are **manager
+actions**: (96.10) prod's `agent_presets` Plan/Code sit at effort `high` where the table
+says `xhigh`, and every `llm_function_routes` row still points at `grok-4.6` — applying
+the table is a live rewrite of production routing and was deliberately left as a
+manager click (the SQL is in the story's git history), so 96.10 AC3's ledger proof is
+unmet until it lands; and (96.11) the prod sweep scrubbed **119** credential-shaped
+`run_trace` rows, **11 of them worker tokens** that had sat readable in the dashboard —
+**rotate the worker token(s) on Settings → Workers**.
 
 **What these phases did not prove.** Much of 81–82 is verified by tests and build, not
 by a live round trip: no suite has yet run end-to-end against a real server, no machine
