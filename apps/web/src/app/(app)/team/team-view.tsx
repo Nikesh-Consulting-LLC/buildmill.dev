@@ -6,16 +6,13 @@ import Link from "next/link";
 import {
   Bot,
   ChevronDown,
-  Cpu,
   TerminalSquare,
   KeyRound,
-  Loader2,
   Pause,
   Play,
   SlidersHorizontal,
   SquareTerminal,
   User,
-  UserMinus,
   Users,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -23,6 +20,11 @@ import { RoleCapabilities } from "@/components/role-icon";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { money } from "@/lib/budget";
+import {
+  formatHumanHours,
+  humanEquivalentDays,
+  humanEquivalentHours,
+} from "@/lib/human-equivalent";
 import { compactTokens, formatWorkSeconds } from "@/lib/work-seconds";
 import { formatLastSeen } from "@/lib/format-time";
 import { ROLES, ROLE_LABELS, type Role } from "@/lib/permissions";
@@ -177,7 +179,7 @@ export function idleTone(reason: string) {
   return "text-amber-600 dark:text-amber-400";
 }
 
-function formatWhen(iso: string) {
+export function formatWhen(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, {
     year: "numeric",
     month: "short",
@@ -205,12 +207,22 @@ export type TeamKpis = {
   completed: number;
   queued: number;
   workSeconds: number;
+  /** us-109.2: the org's totals over the same window — the lines tile, the
+   *  spend tile, and the human-equivalent estimate derived from the two line
+   *  counts. */
+  linesAdded: number;
+  linesRemoved: number;
+  costUsd: number;
 };
 
-/** The three numbers the manager brings to this page. Two are 30-day windows
- *  and one is live — a tile that does not say which is a number nobody can
- *  act on, so each says it on its face. */
+/** The numbers the manager brings to this page. All but one are 30-day
+ *  windows — a tile that does not say which is a number nobody can act on, so
+ *  each says it on its face. */
 function KpiRow({ kpis }: { kpis: TeamKpis }) {
+  // us-109.2: an approximation, and the note says so rather than letting a
+  // confident-looking number be read as a measurement.
+  const humanHours = humanEquivalentHours(kpis.linesAdded, kpis.linesRemoved);
+  const humanDays = humanEquivalentDays(humanHours);
   const tiles = [
     {
       label: "Work items completed",
@@ -227,9 +239,24 @@ function KpiRow({ kpis }: { kpis: TeamKpis }) {
       value: formatWorkSeconds(kpis.workSeconds),
       note: `across every agent · last ${kpis.windowDays} days`,
     },
+    {
+      label: "Human equivalent",
+      value: formatHumanHours(humanHours),
+      note: `~${humanDays < 10 ? humanDays.toFixed(1) : Math.round(humanDays)} days · rough estimate from lines changed`,
+    },
+    {
+      label: "Lines of code",
+      value: `+${compactTokens(kpis.linesAdded)} −${compactTokens(kpis.linesRemoved)}`,
+      note: `added and removed · last ${kpis.windowDays} days`,
+    },
+    {
+      label: "Spent",
+      value: money(kpis.costUsd),
+      note: `agent model spend · last ${kpis.windowDays} days`,
+    },
   ];
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {tiles.map((t) => (
         <div key={t.label} className="rounded-lg border p-3">
           <p className="text-xs font-medium text-muted-foreground">{t.label}</p>
@@ -427,6 +454,7 @@ export function TeamView({
         moduleByPrincipal={moduleByPrincipal}
         runningRunByPrincipal={runningRunByPrincipal}
         effortByPrincipal={effortByPrincipal}
+        effortWindowDays={kpis.windowDays}
         claudeBillingByPrincipal={claudeBillingByPrincipal}
         principals={principals}
         projects={projects as ConnectProject[]}
@@ -469,6 +497,7 @@ function MemberList({
   moduleByPrincipal,
   runningRunByPrincipal,
   effortByPrincipal,
+  effortWindowDays,
   claudeBillingByPrincipal,
   principals,
   projects,
@@ -496,6 +525,9 @@ function MemberList({
   runningRunByPrincipal: Record<string, string>;
   /** US-91.12: each agent's totals over the KPI window. */
   effortByPrincipal: Record<string, AgentEffort>;
+  /** us-109.1: the window those totals cover, so the expanded panel can label
+   *  them instead of showing five unattributed numbers. */
+  effortWindowDays: number;
   claudeBillingByPrincipal: Record<string, string | null>;
   principals: ConnectPrincipal[];
   projects: ConnectProject[];
@@ -544,33 +576,6 @@ function MemberList({
       const { error: dbError } = await supabase
         .from("organization_members")
         .update(changes)
-        .eq("org_id", orgId)
-        .eq("principal_id", principalId);
-      if (dbError) setError(dbError.message);
-      else router.refresh();
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function remove(principalId: string) {
-    if (
-      !(await confirmDialog({
-        title: "Remove member?",
-        description:
-          "They lose access to this org and their tokens are revoked.",
-        confirmLabel: "Remove",
-        destructive: true,
-      }))
-    )
-      return;
-    setError(null);
-    setBusyId(principalId);
-    const supabase = createClient();
-    try {
-      const { error: dbError } = await supabase
-        .from("organization_members")
-        .delete()
         .eq("org_id", orgId)
         .eq("principal_id", principalId);
       if (dbError) setError(dbError.message);
@@ -635,7 +640,21 @@ function MemberList({
             .sort()
             .pop() as string | undefined;
           const moduleKeys = moduleByPrincipal[m.principal_id] ?? [];
-          const moduleLabel = MODULES.find((mod) => mod.key === moduleKeys[0])?.label;
+          const moduleLabel =
+            MODULES.find((mod) => mod.key === moduleKeys[0])?.label ?? null;
+          // us-109.1: who this is and where it runs. US-32.2: two agents may
+          // share a name, so the seat that distinguishes them stays on the row
+          // — it is the one fact here that is not a lookup.
+          const subline = [
+            m.principals?.email,
+            seat
+              ? `${seat.hostName} slot ${seat.slotIndex}`
+              : isAgent && mine.length > 0
+                ? "self-hosted"
+                : null,
+          ]
+            .filter(Boolean)
+            .join(" · ");
           const expanded = expandedId === m.principal_id;
           const toggle = () =>
             setExpandedId((cur) => (cur === m.principal_id ? null : m.principal_id));
@@ -686,11 +705,11 @@ function MemberList({
                           iconClassName="size-3.5"
                         />
                       )}
-                      {isAgent && moduleLabel && (
-                        <span className="rounded-full border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                          {moduleLabel}
-                        </span>
-                      )}
+                      {/* us-109.1: the module ("Buildmill Interactive
+                          Agent") moved into the expand panel. It never
+                          changes and it is the longest thing on the line —
+                          it was pushing the status pills off a narrow row to
+                          say something a manager reads once. */}
                       {isAgent && status && (
                         <>
                           <span
@@ -729,19 +748,22 @@ function MemberList({
                         </span>
                       )}
                     </span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {m.principals?.email ? `${m.principals.email} · ` : ""}
-                      {tokenCount} token{tokenCount === 1 ? "" : "s"} · Joined{" "}
-                      {formatWhen(m.created_at)}
-                      {/* US-32.2: two agents may share a name, so the seat that
-                          distinguishes them travels with it. */}
-                      {seat && ` · ${seat.hostName} slot ${seat.slotIndex}`}
-                      {!seat && isAgent && mine.length > 0 && " · self-hosted"}
-                    </span>
+                    {/* us-109.1: identity and where it sits — nothing else.
+                        The token count and the join date are facts a manager
+                        looks up once, not scans, so they moved into the
+                        expand panel and left the line readable. */}
+                    {subline && (
+                      <span className="truncate text-xs text-muted-foreground">
+                        {subline}
+                      </span>
+                    )}
                     {/* US-91.12: what this agent actually did. A person's row
                         shows nothing here rather than a line of zeroes —
                         `user_activity_sessions` measures something else
-                        (us-91.11 AC6) and must not be shown as the same. */}
+                        (us-91.11 AC6) and must not be shown as the same.
+                        us-109.1: output — lines, tokens, cost — is in the
+                        expand panel; the row keeps only the two figures that
+                        say whether this agent is earning its seat. */}
                     {isAgent && effortByPrincipal[m.principal_id] && (
                       <span className="truncate text-[11px] text-muted-foreground">
                         {(() => {
@@ -749,9 +771,6 @@ function MemberList({
                           return [
                             `${formatWorkSeconds(e.workSeconds)} worked`,
                             `${e.issuesCompleted} completed`,
-                            `+${e.linesAdded} −${e.linesRemoved} lines`,
-                            `${compactTokens(e.tokens)} tokens`,
-                            money(e.costUsd),
                           ].join(" · ");
                         })()}
                       </span>
@@ -871,31 +890,19 @@ function MemberList({
                           <KeyRound className="size-4" />
                         </Button>
                       )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        title="Remove"
-                        disabled={busyId === m.principal_id}
-                        onClick={() => remove(m.principal_id)}
-                      >
-                        {busyId === m.principal_id ? (
-                          <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                          <UserMinus className="size-4" />
-                        )}
-                      </Button>
+                      {/* us-109.1: Remove is gone from this cluster. It was
+                          the one irreversible action here, wearing the same
+                          outline button as Suspend and sitting next to it —
+                          an agent's now lives on its settings page, a
+                          person's inside their expand panel. */}
                     </>
                   )}
                   {isAgent && (
                     <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        title="Open runner console"
-                        onClick={() => router.push(`/team/${m.principal_id}/runner`)}
-                      >
-                        <Cpu className="size-4" />
-                      </Button>
+                      {/* us-109.1: the runner console button is gone too. The
+                          console is still a page (`/team/{id}/runner`) and
+                          the Console tab on the settings page reaches it —
+                          it did not need a second door on every row. */}
                       {/* US-78.11: the interactive agent's CLI window, reachable
                           whether or not it is working. Every other way in
                           (Activity → a run) requires a run to exist, so an idle
@@ -985,6 +992,13 @@ function MemberList({
                         projects={projects}
                         slot={seat ?? null}
                         embedded
+                        // us-109.1: what the row stopped showing.
+                        moduleLabel={moduleLabel}
+                        tokenCount={tokenCount}
+                        effort={effortByPrincipal[m.principal_id] ?? null}
+                        effortWindowDays={effortWindowDays}
+                        canManage={canManage}
+                        onRemoved={() => router.refresh()}
                       />
                     </TabsContent>
                     <TabsContent value="connect" className="grid gap-5 pt-3">

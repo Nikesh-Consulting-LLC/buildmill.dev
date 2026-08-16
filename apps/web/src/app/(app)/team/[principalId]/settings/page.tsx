@@ -8,11 +8,13 @@
 // stays the org's — the module (from the platform's catalog), billing, and
 // which kinds this agent claims.
 
-import { useState } from "react";
-import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { apiCall } from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
+import { loadOrgCapabilities } from "@/lib/permissions";
 import {
   AGENT_ROLES,
   kindsForRoles,
@@ -26,6 +28,7 @@ import { RoleIcon } from "@/components/role-icon";
 import { cn } from "@/lib/utils";
 
 import { BillingReadiness } from "../../billing-readiness";
+import { RemoveMember } from "../../remove-member";
 import { AgentTabs } from "../agent-tabs";
 import {
   AUTH_LABELS,
@@ -39,9 +42,11 @@ import {
 
 export default function AgentSettingsPage() {
   const { principalId } = useParams<{ principalId: string }>();
+  const router = useRouter();
   const {
     loading,
     name,
+    orgId,
     workers,
     otherWorkers,
     slot,
@@ -51,6 +56,27 @@ export default function AgentSettingsPage() {
     orgModels,
     reload,
   } = useAgentRunner(principalId, { activity: false });
+
+  // us-109.1: removing the agent moved here off the Team row, so this page
+  // needs the one capability the roster already had. The database re-checks it
+  // under RLS either way — this only decides whether the button is offered.
+  const [canManage, setCanManage] = useState(false);
+  useEffect(() => {
+    if (!orgId) return;
+    let cancelled = false;
+    (async () => {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      const { can } = await loadOrgCapabilities(supabase, orgId, user.id);
+      if (!cancelled) setCanManage(can("manage_members"));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [orgId]);
 
   if (loading) {
     return <div className="p-1 text-sm text-muted-foreground">Loading agent settings…</div>;
@@ -140,6 +166,30 @@ export default function AgentSettingsPage() {
             />
           </div>
         ))
+      )}
+
+      {/* us-109.1: Remove lives here now, not as an icon button on the Team
+          row beside Suspend. It sits outside the per-worker card on purpose —
+          an agent with no runner at all is exactly the one a manager comes
+          here to delete. */}
+      {canManage && orgId && (
+        <div className="rounded-lg border border-destructive/30 p-4">
+          <h2 className="text-sm font-semibold">Remove this agent</h2>
+          <p className="mt-1 max-w-2xl text-xs text-muted-foreground">
+            {name} loses access to this org, its tokens are revoked and its
+            machine slot is freed for another agent. Work it has already
+            merged is unaffected. This cannot be undone — suspend it on the
+            Team page instead if it may come back.
+          </p>
+          <RemoveMember
+            orgId={orgId}
+            principalId={principalId}
+            name={name}
+            isAgent
+            onRemoved={() => router.push("/team")}
+            className="mt-3"
+          />
+        </div>
       )}
     </div>
   );
