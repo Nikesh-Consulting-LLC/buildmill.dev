@@ -187,6 +187,18 @@ async def reject(
         raise HTTPException(
             status_code=409, detail=f'release is already {release["status"]}'
         )
+    # US-103.3 AC5: rejecting a release that still has a live prep left the
+    # JOB running. A zombie agent could then write notes onto a rejected
+    # release and fire its UAT deploy — `release_prep.submit` gates on the
+    # prep being `running`, and nothing had ever moved it off that.
+    counts = await _stop_prep_runs(
+        settings,
+        user.token,
+        str(release_id),
+        user.email or "the manager",
+        f"release rejected: {body.comment.strip()}",
+    )
+
     await postgrest_patch(
         settings,
         user.token,
@@ -198,7 +210,78 @@ async def reject(
             "rejected_reason": body.comment.strip(),
         },
     )
-    return {"ok": True, "status": "rejected"}
+    return {"ok": True, "status": "rejected", **counts}
+
+
+# US-103.3: the states a Stop can end, and — for everything else in the
+# lifecycle — the action that DOES apply, because a refusal that only says no
+# is what sent the manager to the database on 2026-08-16.
+STOPPABLE = ("queued", "running", "notes-ready", "uat-deploy-failed")
+
+_STOP_REFUSALS = {
+    "deploying": "the UAT deploy is running — let it finish, then stop or "
+    "reject the release",
+    "uat-deployed": "this build is on UAT — reject it if testing found it "
+    "bad; stop is for an attempt that never got there",
+    "uat-signed-off": "this build is signed off — reject it if you no longer "
+    "want it in production",
+    "promoting": "the production deploy is running — let it finish, then roll "
+    "it back if it is wrong",
+    "released": "this build is live — roll it back rather than stopping it",
+    "rejected": "this release is already rejected",
+    "rolled-back": "this release was already rolled back",
+    "cancelled": "this release is already stopped",
+    "failed": "this release already failed — retry it, or cut a new one",
+}
+
+
+async def _stop_prep_runs(
+    settings: Settings, token: str, release_id: str, actor: str, reason: str | None
+) -> dict[str, int]:
+    """US-103.3: end the JOB, not only the release.
+
+    A queued row is deleted (US-23.1's reasoning holds — work that never began
+    should not fabricate a failure in the activity feed). A running row moves
+    to `cancelled`: migration 215 gave `release_prep_runs` that status and
+    nothing has ever written it. Not deleted — it happened, it cost a session,
+    and the release detail page's attempt list should say so.
+
+    This is the half that makes Stop safe. `release_prep.submit` refuses any
+    prep that is not `running`, so a zombie agent coming back cannot write
+    notes onto a stopped release or fire its UAT deploy.
+    """
+    runs = await postgrest_get(
+        settings,
+        token,
+        "release_prep_runs",
+        {
+            "select": "id,status,worker_id",
+            "release_id": f"eq.{release_id}",
+            "status": "in.(queued,running)",
+        },
+    )
+    removed = stopped = 0
+    note = f"stopped by {actor}" + (f": {reason}" if reason else "")
+    for r in runs or []:
+        if r["status"] == "queued" and not r.get("worker_id"):
+            await postgrest_delete(
+                settings, token, "release_prep_runs", {"id": f"eq.{r['id']}"}
+            )
+            removed += 1
+        else:
+            await postgrest_patch(
+                settings,
+                token,
+                "release_prep_runs",
+                {"id": f"eq.{r['id']}"},
+                {
+                    "status": "cancelled",
+                    "finished_at": "now()",
+                    "error": note[:2000],
+                },
+            )
+            stopped += 1
+    return {"runs_removed": removed, "runs_stopped": stopped}
 
 
 @router.post("/{release_id}/cancel")
@@ -208,52 +291,39 @@ async def cancel(
     user: AuthUser = Depends(verify_token),
     settings: Settings = Depends(get_settings),
 ):
-    """US-23.1/US-63.3: abandon a release whose prep job has not been picked up.
+    """US-23.1/US-63.3, widened by US-103.3: stop a release that is going
+    nowhere.
 
-    Only before an agent starts. Once a worker holds the prep job it is doing
-    real work — writing notes, the UAT deploy about to fire — and the honest
-    routes are the existing ones: stop the run, or let it reach UAT and
-    reject it.
+    The original restriction — queued only — was principled and turned out to
+    be wrong in one respect. It reasoned that once a worker holds the prep it
+    is doing real work, so the honest routes are "stop the run, or let it
+    reach UAT and reject it". But release prep is not a `runs` row: there is
+    no Stop-work button pointed at it anywhere, and rejecting a release stuck
+    at `running` leaves the prep row live. The escape hatch it pointed at did
+    not exist, which is how release 2026.08.16.3 came to be cleared by editing
+    the production database.
 
-    The queued release_prep_runs row is deleted rather than marked: its
-    status enum has no `cancelled` value that means "never started", and
-    marking it `failed` would put a fabricated failure in the activity feed
-    for work that never began.
+    Stop is a verdict on the ATTEMPT — the agent died, the job hung, I changed
+    my mind — and nothing was learned about the build. Reject is a verdict on
+    the BUILD, and burns the version forever. Keeping them apart is why a
+    release whose runner crashed ten minutes in does not enter the record as a
+    rejected build.
     """
     release = await _release_for_user(settings, user.token, str(release_id))
-    if release["status"] != "queued":
+    status = release["status"]
+    if status not in STOPPABLE:
         raise HTTPException(
             status_code=409,
             detail=(
-                f'release is {release["status"]} — only a queued release can '
-                "be cancelled"
+                f"release is {status} — "
+                + _STOP_REFUSALS.get(status, "it cannot be stopped from here")
             ),
         )
 
-    runs = await postgrest_get(
-        settings,
-        user.token,
-        "release_prep_runs",
-        {
-            "select": "id,status,worker_id",
-            "release_id": f"eq.{release_id}",
-            "status": "in.(queued,running)",
-        },
+    reason = ((body.comment or "").strip() or None) if body else None
+    counts = await _stop_prep_runs(
+        settings, user.token, str(release_id), user.email or "the manager", reason
     )
-    claimed = [r for r in runs or [] if r.get("worker_id") or r["status"] == "running"]
-    if claimed:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "an agent has already picked this release up — stop the run, "
-                "or let it reach UAT and reject it"
-            ),
-        )
-
-    for r in runs or []:
-        await postgrest_delete(
-            settings, user.token, "release_prep_runs", {"id": f"eq.{r['id']}"}
-        )
 
     await postgrest_patch(
         settings,
@@ -265,12 +335,10 @@ async def cancel(
             "cancelled_at": "now()",
             "cancelled_by": user.id,
             # Reuse the reason column; a cancellation may say nothing at all.
-            "rejected_reason": ((body.comment or "").strip() or None)
-            if body
-            else None,
+            "rejected_reason": reason,
         },
     )
-    return {"ok": True, "status": "cancelled", "runs_removed": len(runs or [])}
+    return {"ok": True, "status": "cancelled", **counts}
 
 
 @router.post("/{release_id}/retry")

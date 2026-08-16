@@ -1384,6 +1384,46 @@ async def list_release_prep(
     return {"items": rows}
 
 
+# Declared BEFORE /release-prep/{prep_id}: FastAPI matches in order, and a
+# literal path registered after a parameterised one is never reached.
+@router.get("/release-prep/held")
+async def list_held_release_prep(
+    worker: dict = Depends(verify_worker),
+    settings: Settings = Depends(get_settings),
+):
+    """US-103.2: the release preps this worker is already holding.
+
+    A runner that restarts mid-prep asks this at startup and re-adopts what it
+    finds, so a routine restart costs a minute rather than a release. Scoped
+    to the caller's own worker id and org — it never reports another worker's
+    claim, and a reaped or stopped prep is no longer `running`, so it is never
+    returned and never resumed.
+    """
+    rows = db.list_held_release_preps(
+        settings, str(worker["id"]), str(worker["org_id"])
+    )
+    return {
+        "items": [
+            {
+                "id": str(r["id"]),
+                "release_id": str(r["release_id"]),
+                "project_id": str(r["project_id"]),
+                "project_name": r["project_name"],
+                "repo_full_name": r["repo_full_name"],
+                "version": r["version"],
+                "commit_sha": r["commit_sha"],
+                "claimed_at": _iso(r["claimed_at"]),
+                "claim_expires_at": _iso(r["claim_expires_at"]),
+                # The identical briefing a fresh claim hands back, so
+                # re-adoption runs the job exactly as claiming it would —
+                # read live, so a restart picks up today's instruction.
+                **release_prep.briefing(settings, str(r["id"]), worker),
+            }
+            for r in rows
+        ]
+    }
+
+
 @router.get("/release-prep/{prep_id}")
 async def get_release_prep_status(
     prep_id: str,
@@ -1419,7 +1459,17 @@ async def heartbeat_release_prep(
     settings: Settings = Depends(get_settings),
 ):
     if not db.heartbeat_release_prep(settings, prep_id, str(worker["id"])):
-        raise HTTPException(status_code=409, detail="no live claim to extend")
+        # us-103.3: an agent whose release was stopped under it learns why
+        # here, on its next beat, rather than reading "no live claim".
+        row = db.get_release_prep(settings, prep_id, str(worker["org_id"]))
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                release_prep.not_running_error(row["status"])
+                if row and row["status"] != "running"
+                else "no live claim to extend"
+            ),
+        )
     return {"ok": True}
 
 

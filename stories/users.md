@@ -25,17 +25,51 @@ seed-publishes-files and section preview, 99.7's accept/decline, 100.1's
 retired-unbuilt-do-not-re-propose list — is in
 [APPLICATION.md → Delivery history](../APPLICATION.md#delivery-history).
 
-Six stories are open: Phase 97's GitHub linkage repair (requested 2026-08-15,
-costing live runs today), and the residue carried out of Phases 85–89:
+Eleven stories are open: Phase 103's release deadlock (drafted 2026-08-16, from
+an incident that had to be cleared by hand against the production database),
+Phase 97's GitHub linkage repair (requested 2026-08-15, costing live runs
+today), and the residue carried out of Phases 85–89:
 
 | Order | Story | Title | Status |
 |---|---|---|---|
-| 1 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
-| 2 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
-| 3 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
-| 4 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
-| 5 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
-| 6 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+| 1 | [us-103.1](us-103.1-an-abandoned-release-prep-is-reaped.md) | An abandoned release prep is reaped | Testing |
+| 2 | [us-103.3](us-103.3-the-manager-can-stop-an-in-flight-release.md) | The manager can stop an in-flight release | Testing |
+| 3 | [us-103.2](us-103.2-a-restarted-runner-re-adopts-its-prep.md) | A restarted runner re-adopts the prep it was holding | Testing |
+| 4 | [us-103.4](us-103.4-the-workbench-shows-the-release-in-flight.md) | The Workbench shows the release in flight | Testing |
+| 5 | [us-103.5](us-103.5-a-release-in-flight-freezes-dispatch.md) | A release in flight freezes dispatch, and says so | Testing |
+| 6 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
+| 7 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
+| 8 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
+| 9 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
+| 10 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
+| 11 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+
+**Phase 103 — A release cannot get stuck** (drafted 2026-08-16, from the
+2026.08.16.3 incident). The runner restarted ten minutes into preparing a
+release. Its supervising task died; the `release_prep_runs` row did not. Two
+and a half hours later the prep was still `running`, its lease 26 minutes
+expired, the worker online and healthy — and nothing anywhere was ever going
+to change that. Release prep is the one claimed job in the factory with **no
+lease reaper**: `requeue_expired_claims` sweeps `runs` only, and nothing reads
+`release_prep_runs.claim_expires_at`. The manager had no move either — `/cancel`
+takes only `queued`, `/retry` only `failed`, and `running` sits between them
+with an empty Actions cell — while `releases_one_in_flight_per_project` counted
+the dead release as in flight and blocked every future cut for the project. It
+was cleared by editing the production database. us-103.1 reaps an expired prep
+lease down the failure path that already exists, so Retry becomes reachable
+by itself; us-103.3 gives the manager a Stop that ends the job as well as the
+release (and closes the matching hole in `/reject`, where a zombie agent could
+still write notes onto a rejected release); us-103.2 has a restarted runner
+re-adopt the prep it is holding, so a routine restart costs a minute rather
+than a release. The two surfaces the manager asked for follow: us-103.4 gives
+the Workbench release card the same liveness reading story runs already get —
+who holds it, how long, whether it is silent or abandoned, and Stop — because
+for two and a half hours that card cheerfully read "being prepared"; and
+us-103.5 freezes `plan`/`code` dispatch on a project while its release is in
+flight, through migration 235's existing `issue_dispatch_refusal` so the button
+and the RPC cannot disagree. Writing stories, bugs and chores stays open;
+routing them waits for the release to be released, stopped or rejected, and
+every surface says so in those words.
 
 **Phase 97 — GitHub linkage stays true** (drafted 2026-08-15, from the
 run-`ff9ef2be` incident). A repository rename/transfer on GitHub answers

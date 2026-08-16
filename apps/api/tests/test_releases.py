@@ -363,6 +363,9 @@ def _wire_cancel(monkeypatch, *, status="queued", runs=None):
 
     deleted = []
     patched = {}
+    # us-103.3: Stop touches two tables now — the release AND the job — so the
+    # harness has to be able to tell them apart.
+    patches = []
 
     async def fake_get(settings, token, table, params):
         if table == "releases":
@@ -380,13 +383,15 @@ def _wire_cancel(monkeypatch, *, status="queued", runs=None):
         return []
 
     async def fake_patch(settings, token, table, where, payload):
-        patched.update(payload)
+        patches.append((table, payload))
+        if table == "releases":
+            patched.update(payload)
         return []
 
     monkeypatch.setattr(rel_router, "postgrest_get", fake_get)
     monkeypatch.setattr(rel_router, "postgrest_delete", fake_delete)
     monkeypatch.setattr(rel_router, "postgrest_patch", fake_patch)
-    return {"deleted": deleted, "patched": patched}
+    return {"deleted": deleted, "patched": patched, "patches": patches}
 
 
 def test_cancel_removes_the_queued_run_and_marks_it_cancelled(
@@ -404,36 +409,110 @@ def test_cancel_removes_the_queued_run_and_marks_it_cancelled(
     assert captured["patched"]["status"] == "cancelled"
 
 
-def test_cancel_refused_once_an_agent_holds_the_run(client, make_token, monkeypatch):
-    captured = _wire_cancel(
-        monkeypatch, runs=[{"id": RUN_ID, "status": "running", "worker_id": "w-1"}]
-    )
-    resp = client.post(f"/api/v1/releases/{RELEASE_ID}/cancel", headers=_auth(make_token))
-    assert resp.status_code == 409
-    assert "already picked this release up" in resp.json()["detail"]
-    assert captured["deleted"] == []
-
-
-def test_cancel_refused_for_a_claimed_but_still_queued_run(
+def test_stop_ends_the_running_prep_as_well_as_the_release(
     client, make_token, monkeypatch
 ):
-    """worker_id set with status still queued is a claim in progress."""
+    """US-103.3: the half that makes Stop safe.
+
+    Before this, `running` was refused outright — which is how release
+    2026.08.16.3 came to be cleared by editing the production database. Now it
+    stops, and the JOB stops with it: the prep row moves to `cancelled`, so
+    `release_prep.submit` (which requires `running`) refuses a zombie agent
+    that comes back with notes.
+    """
+    captured = _wire_cancel(
+        monkeypatch,
+        status="running",
+        runs=[{"id": RUN_ID, "status": "running", "worker_id": "w-1"}],
+    )
+    resp = client.post(
+        f"/api/v1/releases/{RELEASE_ID}/cancel",
+        headers=_auth(make_token),
+        json={"comment": "runner died"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "cancelled"
+    assert body["runs_stopped"] == 1 and body["runs_removed"] == 0
+    # Not deleted: it happened, it cost a session, and the attempt list says so.
+    assert captured["deleted"] == []
+    prep_patch = next(p for t, p in captured["patches"] if t == "release_prep_runs")
+    assert prep_patch["status"] == "cancelled"
+    assert "stopped by" in prep_patch["error"] and "runner died" in prep_patch["error"]
+    assert captured["patched"]["status"] == "cancelled"
+    assert captured["patched"]["rejected_reason"] == "runner died"
+
+
+def test_stop_ends_a_claimed_but_still_queued_run(client, make_token, monkeypatch):
+    """worker_id set with status still queued is a claim in progress — it is
+    ended rather than deleted, because someone may already be holding it."""
     captured = _wire_cancel(
         monkeypatch, runs=[{"id": RUN_ID, "status": "queued", "worker_id": "w-1"}]
     )
     resp = client.post(f"/api/v1/releases/{RELEASE_ID}/cancel", headers=_auth(make_token))
-    assert resp.status_code == 409
+    assert resp.status_code == 200
+    assert resp.json()["runs_stopped"] == 1
     assert captured["deleted"] == []
 
 
-@pytest.mark.parametrize("status", ["uat-deployed", "released", "rejected", "running"])
-def test_cancel_refused_for_any_status_but_queued(
+@pytest.mark.parametrize(
+    "status", ["queued", "running", "notes-ready", "uat-deploy-failed"]
+)
+def test_stop_accepts_every_state_that_needs_it(
     client, make_token, monkeypatch, status
 ):
     _wire_cancel(monkeypatch, status=status)
     resp = client.post(f"/api/v1/releases/{RELEASE_ID}/cancel", headers=_auth(make_token))
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "cancelled"
+
+
+@pytest.mark.parametrize(
+    ("status", "guidance"),
+    [
+        ("deploying", "let it finish"),
+        ("uat-deployed", "reject it if testing found it bad"),
+        ("uat-signed-off", "reject it if you no longer want it"),
+        ("promoting", "roll it back"),
+        ("released", "roll it back"),
+        ("rejected", "already rejected"),
+        ("rolled-back", "already rolled back"),
+        ("cancelled", "already stopped"),
+        ("failed", "retry it, or cut a new one"),
+    ],
+)
+def test_stop_refused_elsewhere_names_the_action_that_applies(
+    client, make_token, monkeypatch, status, guidance
+):
+    """A refusal that only says no is what sent the manager to the database."""
+    _wire_cancel(monkeypatch, status=status)
+    resp = client.post(f"/api/v1/releases/{RELEASE_ID}/cancel", headers=_auth(make_token))
     assert resp.status_code == 409
-    assert "only a queued release can be cancelled" in resp.json()["detail"]
+    detail = resp.json()["detail"]
+    assert f"release is {status}" in detail
+    assert guidance in detail
+
+
+def test_reject_stops_the_prep_it_used_to_leave_running(
+    client, make_token, monkeypatch
+):
+    """US-103.3 AC5: rejecting left the JOB alive, so a zombie agent could
+    write notes onto a rejected release and fire its UAT deploy."""
+    captured = _wire_cancel(
+        monkeypatch,
+        status="running",
+        runs=[{"id": RUN_ID, "status": "running", "worker_id": "w-1"}],
+    )
+    resp = client.post(
+        f"/api/v1/releases/{RELEASE_ID}/reject",
+        headers=_auth(make_token),
+        json={"comment": "bad build"},
+    )
+    assert resp.status_code == 200
+    prep_patch = next(p for t, p in captured["patches"] if t == "release_prep_runs")
+    assert prep_patch["status"] == "cancelled"
+    assert "bad build" in prep_patch["error"]
+    assert captured["patched"]["status"] == "rejected"
 
 
 # --- US-50.4: cutting also cuts release/<version> ---------------------------

@@ -9,7 +9,7 @@ import {
   resolveGlobalSelection,
 } from "@/lib/global-project-selection";
 import { CutReleaseDialog } from "./cut-release-dialog";
-import { CancelReleaseButton } from "./cancel-release-button";
+import { StopReleaseButton, STOPPABLE } from "./stop-release-button";
 import { DeleteReleaseButton } from "./delete-release-button";
 import { RetryReleaseButton } from "./retry-release-button";
 import { EmptyState } from "@/components/empty-state";
@@ -263,8 +263,16 @@ export default async function ReleasesPage({
           {new Date(r.created_at).toLocaleDateString()}
         </TableCell>
         <TableCell className="whitespace-nowrap text-right">
-          {r.status === "queued" && (
-            <CancelReleaseButton releaseId={r.id} version={r.version} />
+          {/* us-103.3: every state a Stop can end, not only `queued` —
+              `running` used to render nothing at all, which is how a dead
+              release came to need a database edit. */}
+          {STOPPABLE.has(r.status) && (
+            <StopReleaseButton
+              releaseId={r.id}
+              version={r.version}
+              status={r.status}
+              size="icon-sm"
+            />
           )}
           {/* US-90.1: the attempt died before anything shipped — retry the
               failed leg. Rejected/cancelled rows never show this. */}
@@ -297,11 +305,12 @@ export default async function ReleasesPage({
         ? r.included_items.length
         : 0;
       const actions = [
-        r.status === "queued" && (
-          <CancelReleaseButton
-            key="cancel"
+        STOPPABLE.has(r.status) && (
+          <StopReleaseButton
+            key="stop"
             releaseId={r.id}
             version={r.version}
+            status={r.status}
           />
         ),
         (r.status === "failed" || r.status === "uat-deploy-failed") && (

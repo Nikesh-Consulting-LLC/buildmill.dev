@@ -20,23 +20,23 @@ from . import db, deploy, documents, release_notes
 from .config import Settings
 
 
-async def claim(
-    settings: Settings, prep_id: str, worker: dict[str, Any]
-) -> dict[str, Any]:
-    row = db.claim_release_prep(settings, prep_id, worker)
-    if not row:
-        return {"error": "not available to claim — already claimed or not queued"}
+def briefing(settings: Settings, prep_id: str, worker: dict[str, Any]) -> dict[str, str]:
+    """The project's own words for this job.
 
-    # us-101.6: the claim is where the project's own words reach this job.
-    #
-    # Instruction delivery everywhere else is keyed on a `runs` row, and a
-    # release prep deliberately has none — so the project's Release
-    # instruction, editable in the app and published to
-    # `.buildmill/Release_Prep.md` since us-99.1, reached nobody at all. The
-    # only text steering a release agent was a string in the runner.
-    #
-    # Read LIVE rather than snapshotted at dispatch (us-100.5's rule): a prep
-    # claimed a day after it was queued should be steered by today's text.
+    us-103.2 moved this out of `claim`: a runner re-adopting a prep it already
+    holds needs the identical briefing, and re-claiming to get it is not
+    available — it is already claimed, by itself.
+
+    us-101.6: the claim is where the project's own words reach this job.
+    Instruction delivery everywhere else is keyed on a `runs` row, and a
+    release prep deliberately has none — so the project's Release instruction,
+    editable in the app and published to `.buildmill/Release_Prep.md` since
+    us-99.1, reached nobody at all. The only text steering a release agent was
+    a string in the runner.
+
+    Read LIVE rather than snapshotted at dispatch (us-100.5's rule): a prep
+    claimed a day after it was queued should be steered by today's text.
+    """
     instruction = ""
     agent_instructions = ""
     try:
@@ -52,9 +52,6 @@ async def claim(
         pass
 
     return {
-        "ok": True,
-        "id": prep_id,
-        "release_id": str(row["release_id"]),
         "instruction": instruction,
         "agent_instructions": agent_instructions,
         # Generated from the section and block definitions the renderer uses,
@@ -62,6 +59,39 @@ async def claim(
         # it cannot describe different things.
         "notes_vocabulary": release_notes.vocabulary_brief(),
     }
+
+
+async def claim(
+    settings: Settings, prep_id: str, worker: dict[str, Any]
+) -> dict[str, Any]:
+    row = db.claim_release_prep(settings, prep_id, worker)
+    if not row:
+        return {"error": "not available to claim — already claimed or not queued"}
+    return {
+        "ok": True,
+        "id": prep_id,
+        "release_id": str(row["release_id"]),
+        **briefing(settings, prep_id, worker),
+    }
+
+
+def not_running_error(status: str) -> str:
+    """Why a prep that is no longer `running` refuses work, in words.
+
+    us-103.1/103.3: this refusal is read in an agent's transcript, and it is
+    the only place the agent learns that the job was taken away from it. "is
+    failed, not running" told nobody anything; each of these states has a
+    cause and the cause is what stops a retry loop.
+    """
+    return {
+        "cancelled": "the manager stopped this release — nothing submitted "
+        "here will be recorded. Do not retry.",
+        "failed": "this release prep was failed after its claim expired — the "
+        "agent holding it stopped reporting. The release is waiting for the "
+        "manager to retry it, which dispatches a fresh job. Do not retry.",
+        "succeeded": "this release prep has already been submitted.",
+        "queued": "this release prep is not claimed — claim it first.",
+    }.get(status, f"release prep is {status}, not running")
 
 
 async def submit(
@@ -82,7 +112,7 @@ async def submit(
     if str(prep.get("worker_id") or "") != str(worker["id"]):
         return {"error": "you do not hold this release prep"}
     if prep["status"] != "running":
-        return {"error": f"release prep is {prep['status']}, not running"}
+        return {"error": not_running_error(prep["status"])}
 
     release = db.get_release(settings, str(prep["release_id"]))
     if not release:
