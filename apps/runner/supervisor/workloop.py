@@ -905,6 +905,13 @@ class Supervisor:
                 "prep_id": prep_id,
                 "version": item.get("version") or "",
                 "project_id": item.get("project_id"),
+                # us-101.6: the project's own Release instruction and its
+                # Agent Instructions, handed back by the claim. Before this
+                # they reached no release agent at all — the instruction the
+                # manager edits was steering nothing.
+                "instruction": (claimed or {}).get("instruction") or "",
+                "agent_instructions": (claimed or {}).get("agent_instructions") or "",
+                "notes_vocabulary": (claimed or {}).get("notes_vocabulary") or "",
             },
             model_env=env,
         )

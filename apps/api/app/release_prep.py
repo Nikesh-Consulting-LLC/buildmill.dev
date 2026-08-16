@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import db, deploy, documents
+from . import db, deploy, documents, release_notes
 from .config import Settings
 
 
@@ -26,7 +26,42 @@ async def claim(
     row = db.claim_release_prep(settings, prep_id, worker)
     if not row:
         return {"error": "not available to claim — already claimed or not queued"}
-    return {"ok": True, "id": prep_id, "release_id": str(row["release_id"])}
+
+    # us-101.6: the claim is where the project's own words reach this job.
+    #
+    # Instruction delivery everywhere else is keyed on a `runs` row, and a
+    # release prep deliberately has none — so the project's Release
+    # instruction, editable in the app and published to
+    # `.buildmill/Release_Prep.md` since us-99.1, reached nobody at all. The
+    # only text steering a release agent was a string in the runner.
+    #
+    # Read LIVE rather than snapshotted at dispatch (us-100.5's rule): a prep
+    # claimed a day after it was queued should be steered by today's text.
+    instruction = ""
+    agent_instructions = ""
+    try:
+        prep = db.get_release_prep(settings, prep_id, str(worker["org_id"]))
+        files = (
+            db.get_project_instruction_files(settings, str(prep["project_id"]))
+            if prep
+            else None
+        ) or {}
+        instruction = (files.get("instructions") or {}).get("release") or ""
+        agent_instructions = files.get("agent_instructions") or ""
+    except Exception:  # noqa: BLE001 — a claim must not fail over its briefing
+        pass
+
+    return {
+        "ok": True,
+        "id": prep_id,
+        "release_id": str(row["release_id"]),
+        "instruction": instruction,
+        "agent_instructions": agent_instructions,
+        # Generated from the section and block definitions the renderer uses,
+        # so the text telling an agent what it may write and the page drawing
+        # it cannot describe different things.
+        "notes_vocabulary": release_notes.vocabulary_brief(),
+    }
 
 
 async def submit(
@@ -35,9 +70,11 @@ async def submit(
     worker: dict[str, Any],
     notes_summary: str,
     notes_detail: str,
-    test_cases: list[dict[str, str]] | None = None,
+    test_cases: list[dict[str, Any]] | None = None,
     proposed_version: str | None = None,
     version_rationale: str | None = None,
+    notes_doc: Any = None,
+    uncovered: list[str] | None = None,
 ) -> dict[str, Any]:
     prep = db.get_release_prep(settings, prep_id, str(worker["org_id"]))
     if not prep:
@@ -70,18 +107,61 @@ async def submit(
             f"(got: {first_line[:80]!r})"
         }
 
+    # us-100.6's version proposal, checked HERE rather than only in the MCP
+    # tool. us-101.2 found the HTTP transport had no way to send one at all;
+    # putting the rule at the choke point is what stops the two from
+    # disagreeing again, which is this module's whole reason for existing.
+    if (proposed_version or "").strip() or (version_rationale or "").strip():
+        # Imported here, not at module scope: factory_mcp imports this module.
+        from .factory_mcp import version_proposal_error
+
+        bad = version_proposal_error(
+            proposed_version or "",
+            version_rationale or "",
+            db.release_versions_for_prep(settings, prep_id),
+        )
+        if bad:
+            hint = bad.get("hint")
+            return {"error": bad["error"] + (f" — {hint}" if hint else "")}
+
+    # us-101.3: every check is a step and an expectation, and the release
+    # accounts for what it shipped. Checked BEFORE anything is written, for
+    # the reason us-100.6 established for the version proposal: a refused
+    # hand-back must never half-complete the job. Every failure is collected
+    # and returned at once — one rule per re-run is one agent session per
+    # rule.
+    items = list(release.get("included_items") or [])
+    inherited_ids = db.release_inheritable_display_ids(
+        settings,
+        str(worker["org_id"]),
+        str(prep["project_id"]),
+        items,
+    )
+    checked, case_errors = release_notes.check_cases(
+        test_cases,
+        included=items,
+        inherited_display_ids=inherited_ids,
+        uncovered=uncovered,
+    )
+    if case_errors:
+        return {"error": "\n".join(["this release's checks are not ready:", *case_errors])}
+
+    # us-101.4: the notes declaration is coerced, never refused — findings are
+    # advice handed back with a successful submit.
+    doc, doc_findings = release_notes.as_declaration(notes_doc)
+
     # US-21.4: the release's test-case set is ASSEMBLED, not invented — every
     # included work item's active cases come across first, then whatever the
     # agent authored sits alongside them.
     inherited = db.attach_release_inherited_cases(settings, str(release["id"]))
     attached = 0
-    if test_cases:
+    if checked:
         attached = db.attach_release_test_cases(
             settings,
             release_id=str(release["id"]),
             org_id=str(worker["org_id"]),
             project_id=str(prep["project_id"]),
-            cases=test_cases,
+            cases=checked,
         )
 
     db.update_release(
@@ -90,6 +170,7 @@ async def submit(
         {
             "notes_summary": notes_summary,
             "notes_detail": notes_detail,
+            "notes_doc": doc,
             "status": "notes-ready",
             # us-100.6: advisory. `releases.version` is untouched — a proposal
             # is an input to the manager's cut, never the cut itself.
@@ -111,24 +192,31 @@ async def submit(
     )
 
     doc_id = ""
+    doc_error = None
     try:
-        doc = await documents.create_or_replace(
+        exported = await documents.create_or_replace(
             settings,
             org_id=str(worker["org_id"]),
             project_id=str(prep["project_id"]),
             name=f"release-notes-{version.lower()}.md",
-            content="\n\n".join(
-                [f"# Release {version}", notes_summary.strip(), notes_detail.strip()]
+            # us-101.4: rendered FROM the declaration, so the exported file
+            # and the page cannot say different things.
+            content=release_notes.render_markdown(
+                version, notes_summary, notes_detail, doc, checked
             ).encode(),
             source="agent",
             attached_to="project",
             mime_type="text/markdown",
         )
-        doc_id = str(doc.get("id") or "")
-    except Exception:
+        doc_id = str(exported.get("id") or "")
+    except Exception as e:  # noqa: BLE001
         # A failed document write must not fail a release whose notes and
-        # test cases are already recorded on the release row.
+        # test cases are already recorded on the release row. us-101.4: it
+        # must not be SILENT either — this swallowed everything and left
+        # doc_id = "", so a release could finish with no exported notes and
+        # nothing anywhere saying why.
         doc_id = ""
+        doc_error = getattr(e, "message", str(e)) or e.__class__.__name__
 
     db.complete_release_prep(settings, prep_id, "succeeded")
 
@@ -178,6 +266,8 @@ async def submit(
         "test_cases_attached": attached,
         "test_cases_inherited": inherited,
         "document_id": doc_id,
+        "document_error": doc_error,
+        "notes_doc_findings": doc_findings,
         "deployment_run_id": deployment_run_id,
         "deploy_error": deploy_error,
     }

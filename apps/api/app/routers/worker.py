@@ -1431,8 +1431,18 @@ class ReleasePrepSubmit(BaseModel):
 
     notes_summary: str
     notes_detail: str
-    test_cases: list[dict[str, str]] | None = None
+    # us-101.2: `dict[str, str]` could not carry `critical` (a bool) or `sort`
+    # (an int), and pydantic would have coerced or 422'd them at the door.
+    test_cases: list[dict[str, Any]] | None = None
     error: str | None = None
+    # us-100.6 added these to the MCP tool and NOT here, so a git-native
+    # worker submitting over HTTP could not propose a version at all. The
+    # module docstring below says both transports call the same functions;
+    # that only holds if both transports can express the same call.
+    proposed_version: str | None = None
+    version_rationale: str | None = None
+    notes_doc: dict[str, Any] | None = None
+    uncovered: list[str] | None = None
 
 
 @router.post("/release-prep/{prep_id}/submit")
@@ -1454,6 +1464,10 @@ async def submit_release_prep(
         body.notes_summary,
         body.notes_detail,
         body.test_cases,
+        proposed_version=(body.proposed_version or "").strip() or None,
+        version_rationale=(body.version_rationale or "").strip() or None,
+        notes_doc=body.notes_doc,
+        uncovered=body.uncovered,
     )
     if "error" in result:
         raise HTTPException(status_code=422, detail=result["error"])

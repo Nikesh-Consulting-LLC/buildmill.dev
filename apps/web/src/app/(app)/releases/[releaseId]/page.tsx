@@ -13,7 +13,17 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import { MarkdownView } from "@/components/markdown-view";
 import { fetchActorNames } from "@/lib/approvals";
+import {
+  compareCases,
+  DEFAULT_RELEASE_SECTION,
+} from "@/lib/release-sections";
 import { ReleaseActions } from "./release-actions";
+import { buildFacts, ReleaseMasthead } from "./release-masthead";
+import {
+  hasNotesDoc,
+  ReleaseNotesDoc,
+  type NotesDoc,
+} from "./release-notes-doc";
 import { ReleaseTestCases, type ReleaseCase } from "./release-test-cases";
 import { ReleaseSuites, type ReleaseSuiteRun } from "./release-suites";
 import {
@@ -62,12 +72,17 @@ export default async function ReleaseDetailPage({
   const releaseBranch = `release/${release.version}`;
   const repoFullName = project?.repo_full_name ?? "";
 
+  // us-101.2/101.5: the checklist carries its running order. Ordered in TS
+  // rather than SQL because the canonical section order is not alphabetical —
+  // pre-flight before happy-path before refusals — and `compareCases` is the
+  // one place that order lives on this side.
   const { data: caseRows } = await supabase
     .from("test_cases")
-    .select("id, title, steps, expected_result, source, issue_id, status")
+    .select(
+      "id, title, steps, expected_result, source, issue_id, status, section, sort, critical"
+    )
     .eq("release_id", releaseId)
     .eq("status", "active")
-    .order("issue_id", { ascending: true, nullsFirst: false })
     .order("title", { ascending: true });
 
   const { data: resultRows } = await supabase
@@ -103,19 +118,24 @@ export default async function ReleaseDetailPage({
     included.map((i) => [i.issue_id, i.display_id])
   );
 
-  const cases: ReleaseCase[] = (caseRows ?? []).map((c) => ({
-    id: c.id,
-    title: c.title,
-    steps: c.steps,
-    expected_result: c.expected_result,
-    source: c.source,
-    issue_id: c.issue_id,
-    origin_display_id: c.issue_id
-      ? displayByIssue.get(c.issue_id) ?? null
-      : null,
-    result: (resultByCase.get(c.id) ?? null) as ReleaseCase["result"],
-    machine: machineCases.has(c.id),
-  }));
+  const cases: ReleaseCase[] = (caseRows ?? [])
+    .map((c) => ({
+      id: c.id,
+      title: c.title,
+      steps: c.steps,
+      expected_result: c.expected_result,
+      source: c.source,
+      issue_id: c.issue_id,
+      section: c.section ?? DEFAULT_RELEASE_SECTION,
+      sort: c.sort,
+      critical: c.critical ?? false,
+      origin_display_id: c.issue_id
+        ? displayByIssue.get(c.issue_id) ?? null
+        : null,
+      result: (resultByCase.get(c.id) ?? null) as ReleaseCase["result"],
+      machine: machineCases.has(c.id),
+    }))
+    .sort(compareCases);
 
   // US-82.3: manual regression cases tagged with a touched module, not yet
   // in this release's set — suggestions while the release sits on UAT.
@@ -184,6 +204,23 @@ export default async function ReleaseDetailPage({
   const hasFailedAttempt =
     prepAttempts.some((a) => a.status === "failed") ||
     deployAttempts.some((a) => a.status === "failed");
+
+  // us-101.5: the masthead's two live facts. The deploy attempt is the LAST
+  // one — a release that failed once and succeeded on retry is deployed, and
+  // the Attempts card below still tells the fuller story.
+  const latestDeployAttempt = deployAttempts.length
+    ? deployAttempts[deployAttempts.length - 1]
+    : null;
+  // us-101.5 (migration 274): recorded at the cut, when the changed-file list
+  // still existed. Empty on a first release and on a project whose migrations
+  // live somewhere the rule does not recognise — in both cases the masthead
+  // says "none" rather than inventing a number.
+  const releaseMigrations = ((release.migrations ?? []) as string[])
+    .filter(Boolean)
+    .map((p) => p.split("/").pop() ?? p);
+
+  const rawDoc = release.notes_doc as unknown as NotesDoc | null;
+  const notesDoc = hasNotesDoc(rawDoc) ? rawDoc : null;
 
   const actorNames = await fetchActorNames(supabase, [
     release.created_by,
@@ -286,6 +323,23 @@ export default async function ReleaseDetailPage({
           )}
           <span>{included.length} work items</span>
         </p>
+        {/* us-101.5: the facts a tester checks first, from data this page
+            already loads. Shown on a successful release too — the deployment
+            attempts used to render only inside a card gated on failure, so
+            the single most-checked fact was fetched and never displayed. */}
+        <div className="mt-4">
+          <ReleaseMasthead
+            facts={buildFacts({
+              commitSha: release.commit_sha ?? "",
+              migrations: releaseMigrations,
+              includedCount: included.length,
+              checks: cases.length,
+              criticalChecks: cases.filter((c) => c.critical).length,
+              deploy: latestDeployAttempt,
+              suites: suiteRunRows ?? [],
+            })}
+          />
+        </div>
         {release.rejected_reason && (
           <p className="mt-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
             {release.rejected_reason}
@@ -307,11 +361,15 @@ export default async function ReleaseDetailPage({
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          {release.notes_summary || release.notes_detail ? (
+          {release.notes_summary || release.notes_detail || notesDoc ? (
             <>
               {release.notes_summary && (
                 <MarkdownView>{release.notes_summary}</MarkdownView>
               )}
+              {/* us-101.4: the page the agent authored. A release cut before
+                  this has no declaration and renders exactly as it always
+                  did — no backfill, no migration of prose. */}
+              {notesDoc && <ReleaseNotesDoc doc={notesDoc} />}
               {release.notes_detail && (
                 <div className="border-t pt-4">
                   <MarkdownView>{release.notes_detail}</MarkdownView>
@@ -356,6 +414,7 @@ export default async function ReleaseDetailPage({
         version={release.version}
         cases={cases}
         editable={release.status === "uat-deployed"}
+        sectionNotes={notesDoc?.sections ?? {}}
       />
 
       <div className="grid gap-6 lg:grid-cols-2">

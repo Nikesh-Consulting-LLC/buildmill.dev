@@ -15,6 +15,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
+import { MarkdownView } from "@/components/markdown-view";
+import {
+  DEFAULT_RELEASE_SECTION,
+  sectionLabel,
+} from "@/lib/release-sections";
 import {
   Bot,
   CheckCheck,
@@ -34,6 +39,10 @@ export type ReleaseCase = {
   result: "pass" | "fail" | "blocked" | null;
   /** US-81.4: this verdict was recorded by a suite run, not a person. */
   machine?: boolean;
+  /** us-101.2: where this check sits in the run, and how hard it matters. */
+  section?: string | null;
+  sort?: number | null;
+  critical?: boolean;
 };
 
 const RESULTS = [
@@ -56,11 +65,14 @@ export function ReleaseTestCases({
   version,
   cases,
   editable,
+  sectionNotes = {},
 }: {
   releaseId: string;
   version: string;
   cases: ReleaseCase[];
   editable: boolean;
+  /** us-101.4: the agent's note for each section, from the notes declaration. */
+  sectionNotes?: Record<string, string>;
 }) {
   const router = useRouter();
   const [local, setLocal] = useState<Record<string, string | null>>(
@@ -108,11 +120,24 @@ export function ReleaseTestCases({
   // is a judgement someone made, and one click must never erase it.
   const notRun = cases.filter((c) => !local[c.id]);
 
-  async function passAll() {
-    if (!notRun.length) return;
+  // us-101.5: the running order, grouped. `cases` arrives already sorted by
+  // the page (section rank, then sort, then title), so a Map preserves it.
+  const groups = (() => {
+    const m = new Map<string, ReleaseCase[]>();
+    for (const c of cases) {
+      const key = c.section || DEFAULT_RELEASE_SECTION;
+      const list = m.get(key);
+      if (list) list.push(c);
+      else m.set(key, [c]);
+    }
+    return [...m.entries()];
+  })();
+
+  async function passAll(subset?: ReleaseCase[]) {
+    const targets = (subset ?? notRun).filter((c) => !local[c.id]);
+    if (!targets.length) return;
     setBulkBusy(true);
     setError(null);
-    const targets = notRun;
     let saved = 0;
     for (const c of targets) {
       try {
@@ -131,6 +156,8 @@ export function ReleaseTestCases({
       );
     }
   }
+
+  const passSection = (subset: ReleaseCase[]) => passAll(subset);
 
   const counts = cases.reduce(
     (acc, c) => {
@@ -162,7 +189,7 @@ export function ReleaseTestCases({
               size="sm"
               variant="outline"
               disabled={bulkBusy || busy !== null}
-              onClick={passAll}
+              onClick={() => passAll()}
             >
               {bulkBusy ? (
                 <Loader2 className="size-3.5 animate-spin" />
@@ -182,10 +209,46 @@ export function ReleaseTestCases({
             description="The release run attaches the included work items' cases and its own regression cases once it has deployed to UAT."
           />
         ) : (
-          cases.map((c) => {
+          groups.map(([sectionKey, sectionCases]) => (
+            <section key={sectionKey} className="flex flex-col gap-2">
+              {/* us-101.5: the order IS the instruction — a tester works top
+                  to bottom, and a section note says what this part is for. */}
+              <div className="mt-2 flex flex-wrap items-baseline gap-x-2 border-b pb-1 first:mt-0">
+                <h3 className="text-sm font-semibold tracking-tight">
+                  {sectionLabel(sectionKey)}
+                </h3>
+                <span className="font-mono text-[0.7rem] text-muted-foreground">
+                  {sectionCases.length}
+                </span>
+                {editable &&
+                  sectionCases.some((c) => !local[c.id]) &&
+                  groups.length > 1 && (
+                    <button
+                      type="button"
+                      disabled={bulkBusy || busy !== null}
+                      onClick={() => passSection(sectionCases)}
+                      className="ml-auto text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                    >
+                      Pass this section
+                    </button>
+                  )}
+                {sectionNotes[sectionKey] ? (
+                  <p className="basis-full text-xs text-muted-foreground">
+                    {sectionNotes[sectionKey]}
+                  </p>
+                ) : null}
+              </div>
+              {sectionCases.map((c) => {
             const isOpen = open.has(c.id);
             return (
-              <div key={c.id} className="rounded-md border">
+              <div
+                key={c.id}
+                className={cn(
+                  "rounded-md border",
+                  // us-101.5: the checks a test suite cannot make for anyone.
+                  c.critical && "border-destructive/50"
+                )}
+              >
                 <div className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                   <button
                     type="button"
@@ -207,6 +270,19 @@ export function ReleaseTestCases({
                     >
                       {c.title}
                     </span>
+                    {c.critical && (
+                      <span
+                        className="inline-flex shrink-0 items-center rounded border border-destructive/40 px-1 text-[0.65rem] font-semibold tracking-wide text-destructive uppercase"
+                        title="The test suite cannot make this check for you"
+                      >
+                        Must
+                      </span>
+                    )}
+                    {c.origin_display_id && (
+                      <span className="hidden shrink-0 font-mono text-[0.65rem] text-muted-foreground sm:inline">
+                        {c.origin_display_id}
+                      </span>
+                    )}
                     {c.machine && c.result && (
                       <span
                         className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground"
@@ -236,6 +312,35 @@ export function ReleaseTestCases({
                     ))}
                   </div>
                 </div>
+                {/* us-101.5: a check reads as an instruction and an
+                    observation, WITHOUT being opened. A collapsed list of
+                    titles is what made a release plan unreadable — a tester
+                    working top to bottom should never have to click to find
+                    out what to do. */}
+                {(c.steps || c.expected_result) && (
+                  <div className="border-t px-3 py-2 pl-8 text-xs">
+                    {c.steps && (
+                      <div className="text-foreground">
+                        <MarkdownView className="text-xs">
+                          {c.steps}
+                        </MarkdownView>
+                      </div>
+                    )}
+                    {c.expected_result && (
+                      <p className="mt-1 text-muted-foreground">
+                        <span
+                          className={cn(
+                            "mr-1.5 text-[0.65rem] font-semibold tracking-wider uppercase",
+                            c.critical ? "text-destructive" : "text-primary"
+                          )}
+                        >
+                          {c.critical ? "Must" : "Expect"}
+                        </span>
+                        {c.expected_result}
+                      </p>
+                    )}
+                  </div>
+                )}
                 {isOpen && (
                   <div className="border-t px-3 py-2 pl-8">
                     <p className="text-xs text-muted-foreground">
@@ -255,27 +360,13 @@ export function ReleaseTestCases({
                             "Inherited from a work item"
                           )}
                     </p>
-                    {c.steps && (
-                      <div className="mt-1.5">
-                        <p className="text-xs font-medium">Steps</p>
-                        <pre className="mt-0.5 font-sans text-xs whitespace-pre-wrap text-muted-foreground">
-                          {c.steps}
-                        </pre>
-                      </div>
-                    )}
-                    {c.expected_result && (
-                      <div className="mt-1.5">
-                        <p className="text-xs font-medium">Expected</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {c.expected_result}
-                        </p>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
             );
-          })
+              })}
+            </section>
+          ))
         )}
         {error && (
           <p className="text-sm font-medium text-destructive">{error}</p>

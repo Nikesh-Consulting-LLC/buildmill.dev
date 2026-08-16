@@ -1446,6 +1446,14 @@ def attach_release_test_cases(
 
     The agent only ever ADDS. It cannot edit or remove a case, because a case
     it could delete is coverage an approved test plan promised.
+
+    us-101.2 gives the case its place in the run — `section`, `sort` and
+    `critical` — and lets it name the work item it tests. `issue_id` has been
+    on the row since 031 and the page has always rendered it; it was simply
+    never inserted here, so every agent-authored case was permanently
+    unattributable. The caller resolves the display id and is responsible for
+    refusing one outside the release (`release_prep.submit`); by the time a
+    case arrives here it is trusted.
     """
     if not _valid_uuid(release_id) or not cases:
         return 0
@@ -1454,15 +1462,22 @@ def attach_release_test_cases(
         title = str(c.get("title") or "").strip()
         if not title:
             continue
+        issue_id = str(c.get("issue_id") or "").strip()
+        section = str(c.get("section") or "").strip()
+        sort = c.get("sort")
         rows.append(
             (
                 org_id,
                 project_id,
                 release_id,
+                issue_id if _valid_uuid(issue_id) else None,
                 title[:500],
                 str(c.get("steps") or "").strip(),
                 str(c.get("expected_result") or "").strip(),
                 "agent",
+                section[:80] or None,
+                int(sort) if isinstance(sort, int) else None,
+                bool(c.get("critical")),
             )
         )
     if not rows:
@@ -1472,9 +1487,9 @@ def attach_release_test_cases(
             conn.execute(
                 """
                 insert into public.test_cases
-                  (org_id, project_id, release_id, title, steps,
-                   expected_result, source)
-                values (%s, %s, %s, %s, %s, %s, %s)
+                  (org_id, project_id, release_id, issue_id, title, steps,
+                   expected_result, source, section, sort, critical)
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 row,
             )
@@ -5650,13 +5665,144 @@ def release_versions_for_prep(settings: Settings, prep_id: str) -> list[str]:
         return []
     with _connect(settings) as conn:
         rows = conn.execute(
-            "select r2.version from public.release_preps p "
+            # us-101.6: the table is `release_prep_runs`. It was written as
+            # `release_preps`, which exists nowhere — so every proposal that
+            # reached the collision check raised UndefinedTable. Nothing
+            # caught it because no prompt ever told an agent the parameter
+            # existed, so the query had never once run.
+            "select r2.version from public.release_prep_runs p "
             "join public.releases r on r.id = p.release_id "
             "join public.releases r2 on r2.project_id = r.project_id "
             "where p.id = %s and r2.version is not null",
             (prep_id,),
         ).fetchall()
     return [r["version"] for r in rows]
+
+
+"""us-101.1: caps on the per-item source material a release agent is handed.
+
+The payload has to carry enough to write `do this / Expect: that` for every
+included story, and not so much that reading the range costs more than the
+notes are worth. Every cap is REPORTED alongside the value it trimmed — a
+requirement silently cut in half is worse than one visibly cut in half,
+because only the second one tells the agent to go and read the rest."""
+RELEASE_ITEM_BODY_CHARS = 1500
+RELEASE_ITEM_CRITERIA = 12
+RELEASE_ITEM_CASE_TITLES = 25
+
+
+def release_source_material(
+    settings: Settings,
+    org_id: str,
+    project_id: str,
+    issue_ids: list[str],
+) -> dict[str, Any]:
+    """us-101.1: what a release's included work items actually promised.
+
+    The cut snapshots four fields per item — id, title, type, display id —
+    which is enough to list a release and not enough to test one. This reads
+    the requirement back: the description, the acceptance criteria, and the
+    titles of the test cases the item already carries, which is the set
+    `attach_release_inherited_cases` copies onto the release at submit time.
+    Without that last one the agent authors its regression cases blind to
+    twenty cases that land beside them seconds later.
+
+    Also returns the project's `always_on_uat` case titles, because that
+    function pulls those in regardless of which work items are included."""
+    out: dict[str, Any] = {"items": {}, "always_on_uat": [], "caps": {
+        "body_chars": RELEASE_ITEM_BODY_CHARS,
+        "acceptance_criteria": RELEASE_ITEM_CRITERIA,
+        "case_titles": RELEASE_ITEM_CASE_TITLES,
+    }}
+    ids = [i for i in (issue_ids or []) if _valid_uuid(str(i))]
+    if not _valid_uuid(org_id) or not _valid_uuid(project_id):
+        return out
+    with _connect(settings) as conn:
+        if ids:
+            rows = conn.execute(
+                """
+                select id, body, acceptance_criteria
+                from public.issues
+                where org_id = %s and id = any(%s)
+                """,
+                (org_id, ids),
+            ).fetchall()
+            cases = conn.execute(
+                """
+                select issue_id, title
+                from public.test_cases
+                where org_id = %s and project_id = %s
+                  and status = 'active' and release_id is null
+                  and issue_id = any(%s)
+                order by title
+                """,
+                (org_id, project_id, ids),
+            ).fetchall()
+        else:
+            rows, cases = [], []
+        always = conn.execute(
+            """
+            select title from public.test_cases
+            where org_id = %s and project_id = %s
+              and status = 'active' and release_id is null
+              and always_on_uat
+            order by title
+            """,
+            (org_id, project_id),
+        ).fetchall()
+
+    by_issue: dict[str, list[str]] = {}
+    for c in cases:
+        by_issue.setdefault(str(c["issue_id"]), []).append(c["title"])
+
+    for r in rows:
+        key = str(r["id"])
+        body = (r["body"] or "").strip()
+        criteria = coerce_acceptance_criteria(r["acceptance_criteria"])
+        titles = by_issue.get(key, [])
+        out["items"][key] = {
+            "body": body[:RELEASE_ITEM_BODY_CHARS],
+            "body_truncated": len(body) > RELEASE_ITEM_BODY_CHARS,
+            "acceptance_criteria": criteria[:RELEASE_ITEM_CRITERIA],
+            "acceptance_criteria_truncated": len(criteria) > RELEASE_ITEM_CRITERIA,
+            "existing_case_titles": titles[:RELEASE_ITEM_CASE_TITLES],
+            "existing_case_titles_truncated": len(titles) > RELEASE_ITEM_CASE_TITLES,
+        }
+    out["always_on_uat"] = [a["title"] for a in always][:RELEASE_ITEM_CASE_TITLES]
+    return out
+
+
+def release_inheritable_display_ids(
+    settings: Settings,
+    org_id: str,
+    project_id: str,
+    included_items: list[dict[str, Any]],
+) -> set[str]:
+    """us-101.3: which included work items already carry a check.
+
+    `attach_release_inherited_cases` copies those onto the release at submit,
+    so an item covered by one is accounted for and the agent is not asked to
+    write a second check saying the same thing. Read BEFORE anything is
+    attached, or every item looks covered by the copies just made."""
+    ids = {
+        str(i.get("issue_id")): str(i.get("display_id") or "").strip().upper()
+        for i in included_items
+        if i.get("issue_id") and _valid_uuid(str(i.get("issue_id")))
+    }
+    if not ids or not _valid_uuid(org_id) or not _valid_uuid(project_id):
+        return set()
+    with _connect(settings) as conn:
+        rows = conn.execute(
+            """
+            select distinct issue_id
+            from public.test_cases
+            where org_id = %s and project_id = %s
+              and status = 'active' and release_id is null
+              and issue_id = any(%s)
+            """,
+            (org_id, project_id, list(ids)),
+        ).fetchall()
+    return {ids[str(r["issue_id"])] for r in rows if str(r["issue_id"]) in ids}
 
 
 def get_approved_plans(
