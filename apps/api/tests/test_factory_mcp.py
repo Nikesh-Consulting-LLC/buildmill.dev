@@ -315,6 +315,7 @@ def test_list_factory_queue_marks_held_paused_running(mcp_client, monkeypatch):
             "epic_number": 1,
             "epic_title": "Epic",
             "parent_id": None,
+            "project_id": PROJECT_ID,
             "project_name": "Webshop",
             "worker_name": "worker-x",
             "hold_reason": None,
@@ -335,6 +336,7 @@ def test_list_factory_queue_marks_held_paused_running(mcp_client, monkeypatch):
             "epic_number": 1,
             "epic_title": "Epic",
             "parent_id": None,
+            "project_id": PROJECT_ID,
             "project_name": "Webshop",
             "worker_name": None,
             "hold_reason": None,
@@ -355,6 +357,7 @@ def test_list_factory_queue_marks_held_paused_running(mcp_client, monkeypatch):
             "epic_number": 1,
             "epic_title": "Epic",
             "parent_id": "feature-1",
+            "project_id": PROJECT_ID,
             "project_name": "Webshop",
             "worker_name": None,
             "hold_reason": "waiting on sibling stories to be approved",
@@ -424,7 +427,6 @@ def test_list_my_work_shows_claims_and_submissions(mcp_client, monkeypatch):
     )
     assert resp.status_code == 200
     assert captured["worker_id"] == WORKER["id"]
-    assert captured["project_id"] is None
     assert "Add CSV export" in resp.text
     assert "run-c" in resp.text
     assert "get_work_context" in resp.text  # resume nudge
@@ -2033,13 +2035,14 @@ def test_list_available_work_flags_retries(mcp_client, monkeypatch):
     prior = str(uuid.uuid4())
     monkeypatch.setattr(
         "app.factory_mcp.db.list_worker_pool",
-        lambda s, w, project_id=None: [
+        lambda s, w: [
             {
                 "id": "run-2",
                 "kind": "code",
                 "issue_id": "issue-1",
                 "issue_title": "Add CSV export",
                 "issue_type": "story",
+                "project_id": PROJECT_ID,
                 "project_name": "Webshop",
                 "repo_full_name": "acme/webshop",
                 "retry_of_run_id": prior,
