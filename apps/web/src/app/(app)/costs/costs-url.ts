@@ -37,7 +37,12 @@ export const ITEM_TYPES = [
 ];
 
 const DEFAULT_GROUP = "project";
-const DEFAULT_DAYS = 30;
+// us-102.1: seven days, not thirty. The question this page is opened to answer
+// is "what has this week cost me" — a month flattens that week into a bar four
+// pixels wide and compares it against a month already stopped being thought
+// about. This constant is the only place the default lives, so the parse, the
+// URL round-trip and the view cannot drift apart.
+const DEFAULT_DAYS = 7;
 
 /** Landing on a URL restores the exact view (us-95.4 AC4); junk params fall
  * back to defaults rather than erroring or leaking into requests. */

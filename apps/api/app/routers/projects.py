@@ -19,6 +19,7 @@ from .. import (
     db,
     github,
     github_tokens,
+    release_notes,
     releases,
     repo_docs,
     storage,
@@ -599,7 +600,7 @@ async def create_release(
             "project_modules",
             {"select": "name,path_globs", "project_id": f"eq.{project_id}"},
         )
-        if mods and prev and gh_token and "/" in repo_full:
+        if prev and gh_token and "/" in repo_full:
             import pathspec
 
             compare = await github.compare_commits(
@@ -610,8 +611,25 @@ async def create_release(
                 for f in compare.get("files") or []
                 if f.get("filename")
             ]
+            # us-101.5: the migrations in the range, recorded here because
+            # this is the only moment the changed-file list exists. The
+            # release page's masthead reads them back — "which migrations
+            # ran" is the first thing a reviewer asks, and nothing persisted
+            # the answer.
+            migrations = release_notes.migration_paths(
+                [{"filename": p} for p in changed]
+            )
+            if migrations:
+                await postgrest_patch(
+                    settings,
+                    user.token,
+                    "releases",
+                    {"id": f"eq.{release['id']}"},
+                    {"migrations": migrations},
+                )
+                release["migrations"] = migrations
             touched = []
-            for m in mods:
+            for m in mods or []:
                 globs = [str(g) for g in (m.get("path_globs") or []) if str(g).strip()]
                 if not globs:
                     continue

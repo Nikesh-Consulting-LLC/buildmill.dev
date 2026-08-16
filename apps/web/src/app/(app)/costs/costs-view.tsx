@@ -22,6 +22,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { compactTokens, formatWorkSeconds } from "@/lib/work-seconds";
 import {
   COST_DIMENSIONS,
   COST_WINDOWS,
@@ -64,6 +65,17 @@ type Trend = {
   previous_calls: number;
   calls: number;
   unparsed_calls: number;
+};
+
+/** us-102.2: what the window's money bought, over the same slice. */
+type WorkSummary = {
+  days: number;
+  work_seconds: number;
+  runs: number;
+  items_landed: number;
+  bugs_landed: number;
+  lines_added: number;
+  lines_removed: number;
 };
 
 /** us-95.3 AC3: why a row can't be pinned on a work item — named, not dropped. */
@@ -110,6 +122,7 @@ export default function CostsView({
   const [itemType, setItemType] = useState<string | null>(initial.itemType);
   const [data, setData] = useState<Breakdown | null>(null);
   const [trend, setTrend] = useState<Trend | null>(null);
+  const [summary, setSummary] = useState<WorkSummary | null>(null);
   const [projects, setProjects] = useState<Option[]>([]);
   const [agents, setAgents] = useState<Option[]>([]);
   // US-52.4: runs billed to a Claude subscription bypass the gateway, so they
@@ -160,9 +173,10 @@ export default function CostsView({
     setSubscriptionRuns(subCount ?? 0);
 
     try {
-      // us-95.4 AC3: one set of controls governs both — the same filter
-      // params ride both requests, so the curve and the table can't diverge.
-      const [breakdown, trendData] = await Promise.all([
+      // us-95.4 AC3 / us-102.2 AC2: one set of controls governs all three —
+      // the same filter params ride every request, so the band, the curve and
+      // the table can't diverge.
+      const [breakdown, trendData, summaryData] = await Promise.all([
         apiCall(
           `/api/v1/llm/orgs/${orgId}/spend?group_by=${groupBy}&${filterParams}`,
         ) as Promise<Breakdown>,
@@ -171,9 +185,13 @@ export default function CostsView({
               `/api/v1/llm/orgs/${orgId}/spend-trend?${filterParams}`,
             ) as Promise<Trend>)
           : Promise.resolve(null),
+        apiCall(
+          `/api/v1/llm/orgs/${orgId}/work-summary?${filterParams}`,
+        ) as Promise<WorkSummary>,
       ]);
       setData(breakdown);
       setTrend(trendData);
+      setSummary(summaryData);
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -224,19 +242,13 @@ export default function CostsView({
 
   return (
     <div className="flex w-full flex-col gap-6">
-      <div>
-        <h2 className="text-lg font-semibold">Costs</h2>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          Every model call the factory makes passes through its own gateway,
-          which meters it. These figures are queries over those records, not
-          counters — and cost uses the rate that was in force when each call
-          was made, so repricing a model changes what future runs cost and
-          never rewrites what past ones did. Rates live in Settings → LLM
-          Providers.
-        </p>
-      </div>
+      {/* us-102.1: the heading, and nothing else. The five lines that stood
+          here explained gateway metering and rate-at-time-of-call pricing —
+          true, read once, and pushing the numbers off a phone screen every
+          time after that. They live in the help topic now. */}
+      <h2 className="text-lg font-semibold">Costs</h2>
 
-      {/* Window + filters: one set of controls governing curve and table. */}
+      {/* Window + filters: one set of controls governing band, curve, table. */}
       <div className="flex flex-wrap items-center gap-2">
         {COST_WINDOWS.map((w) => (
           <Button
@@ -320,6 +332,9 @@ export default function CostsView({
       )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
+
+      {/* us-102.2: the six numbers, governed by the controls above them. */}
+      <KpiBand summary={summary} totals={data?.totals ?? null} days={days} />
 
       {/* us-95.2: the window as a curve, and against the window before it.
           One day is not a curve, so the Today window hides it. */}
@@ -471,6 +486,105 @@ export default function CostsView({
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+/** us-102.2: the six numbers a manager brings to this page — four about the
+ * work, two about the money — under the same window and filters as everything
+ * below them. That is the whole point of the band: narrowing to one project
+ * re-answers all six, which is what turns "$40" into "$40 fixing four bugs in
+ * Alpha".
+ *
+ * Tokens and cost are READ from the breakdown's own totals rather than fetched
+ * again. One source of dollars (us-91.11 AC4): a second query could round
+ * differently from the Total row six inches below it, and two figures that
+ * disagree on one screen destroy trust in both. */
+function KpiBand({
+  summary,
+  totals,
+  days,
+}: {
+  summary: WorkSummary | null;
+  totals: Breakdown["totals"] | null;
+  days: number;
+}) {
+  const window = days === 1 ? "today" : `last ${days} days`;
+  const pending = "…";
+  const tiles = [
+    {
+      label: "Hours agents worked",
+      value: summary ? formatWorkSeconds(summary.work_seconds) : pending,
+      note: summary
+        ? `over ${summary.runs} run${summary.runs === 1 ? "" : "s"} · ${window}`
+        : window,
+      // Honest about what the number is: time the agent HELD the run. Paused
+      // spans are not subtracted — migration 252's known gap, and claiming
+      // otherwise would overstate attention.
+      hint:
+        "Time each agent held a run, from the moment it claimed the work to " +
+        "the moment the run ended. Paused spans are not subtracted.",
+    },
+    {
+      label: "Work items fixed",
+      value: summary ? String(summary.items_landed) : pending,
+      note: `merged · ${window}`,
+      hint:
+        "Distinct work items whose code reached the default branch in this " +
+        "window. Four attempts on one story count once; a plan run that " +
+        "never merged counts none.",
+    },
+    {
+      label: "Bugs fixed",
+      value: summary ? String(summary.bugs_landed) : pending,
+      note: `merged · ${window}`,
+      hint: "The same count, restricted to work items of type Bug.",
+    },
+    {
+      label: "Lines written",
+      value: summary ? compactTokens(summary.lines_added) : pending,
+      note: summary
+        ? `−${compactTokens(summary.lines_removed)} removed · ${window}`
+        : window,
+      hint:
+        "Lines added across the runs in this window, as parsed from each " +
+        "run's diff. Removed lines are counted separately, never netted off.",
+    },
+    {
+      label: "Tokens spent",
+      value: totals
+        ? compactTokens(totals.tokens_in + totals.tokens_out)
+        : pending,
+      note: totals
+        ? `${compactTokens(totals.tokens_in)} in · ${compactTokens(
+            totals.tokens_out,
+          )} out`
+        : window,
+      hint:
+        "In and out summed for the headline only — they carry different " +
+        "prices, which is why every table below keeps them apart.",
+    },
+    {
+      label: "Total cost",
+      value: totals ? money(totals.cost_usd) : pending,
+      note: `${totals?.calls ?? 0} call${totals?.calls === 1 ? "" : "s"} · ${window}`,
+      hint:
+        "Each call priced at the rate in force when it was made, so " +
+        "repricing a model never rewrites what past runs cost. Rates live in " +
+        "Settings → LLM Providers.",
+    },
+  ];
+  return (
+    // us-102.2 AC7: two across at 375px. Six stacked cards would push the
+    // curve off the screen, which is the defect this band was meant to fix.
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      {tiles.map((t) => (
+        <div key={t.label} className="rounded-lg border p-3" title={t.hint}>
+          <p className="text-xs font-medium text-muted-foreground">{t.label}</p>
+          <p className="mt-0.5 text-2xl font-semibold tabular-nums">{t.value}</p>
+          <p className="text-[11px] text-muted-foreground">{t.note}</p>
+        </div>
+      ))}
     </div>
   );
 }

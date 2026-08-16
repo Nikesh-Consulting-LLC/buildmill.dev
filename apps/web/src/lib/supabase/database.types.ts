@@ -4180,7 +4180,9 @@ export type Database = {
           git_tag: string | null
           id: string
           included_items: Json
+          migrations: Json
           notes_detail: string | null
+          notes_doc: Json
           notes_summary: string | null
           notes_written_at: string | null
           org_id: string
@@ -4215,7 +4217,9 @@ export type Database = {
           git_tag?: string | null
           id?: string
           included_items?: Json
+          migrations?: Json
           notes_detail?: string | null
+          notes_doc?: Json
           notes_summary?: string | null
           notes_written_at?: string | null
           org_id: string
@@ -4250,7 +4254,9 @@ export type Database = {
           git_tag?: string | null
           id?: string
           included_items?: Json
+          migrations?: Json
           notes_detail?: string | null
+          notes_doc?: Json
           notes_summary?: string | null
           notes_written_at?: string | null
           org_id?: string
@@ -5306,6 +5312,7 @@ export type Database = {
         Row: {
           always_on_uat: boolean
           created_at: string
+          critical: boolean
           environments: Json
           execution: string
           expected_result: string
@@ -5315,6 +5322,8 @@ export type Database = {
           org_id: string
           project_id: string
           release_id: string | null
+          section: string | null
+          sort: number | null
           source: string
           spec_ref: string | null
           status: string
@@ -5327,6 +5336,7 @@ export type Database = {
         Insert: {
           always_on_uat?: boolean
           created_at?: string
+          critical?: boolean
           environments?: Json
           execution?: string
           expected_result?: string
@@ -5336,6 +5346,8 @@ export type Database = {
           org_id: string
           project_id: string
           release_id?: string | null
+          section?: string | null
+          sort?: number | null
           source?: string
           spec_ref?: string | null
           status?: string
@@ -5348,6 +5360,7 @@ export type Database = {
         Update: {
           always_on_uat?: boolean
           created_at?: string
+          critical?: boolean
           environments?: Json
           execution?: string
           expected_result?: string
@@ -5357,6 +5370,8 @@ export type Database = {
           org_id?: string
           project_id?: string
           release_id?: string | null
+          section?: string | null
+          sort?: number | null
           source?: string
           spec_ref?: string | null
           status?: string

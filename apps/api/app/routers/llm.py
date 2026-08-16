@@ -756,3 +756,36 @@ async def org_spend_trend(
         worker_id=worker_id,
         item_type=item_type,
     )
+
+
+@router.get("/orgs/{org_id}/work-summary")
+async def org_work_summary(
+    org_id: str,
+    days: int = 7,
+    project_id: str | None = None,
+    worker_id: str | None = None,
+    item_type: str | None = None,
+    user: AuthUser = Depends(verify_token),
+    settings: Settings = Depends(get_settings),
+):
+    """us-102.2: what the window's money bought — hours held, work items
+    landed, bugs landed, lines written.
+
+    The same four parameters as /spend and /spend-trend, so the KPI band above
+    the table can never be governed by different controls than the table. Money
+    is not in this answer by design: the Costs page reads tokens and cost off
+    the breakdown's totals, keeping one source of dollars.
+
+    Gated like the section's own endpoints (us-95.1): `view_costs`, verified
+    server-side, 403 to a member without it.
+    """
+    await _require_view_costs(org_id, user, settings)
+    return await asyncio.to_thread(
+        db.work_summary,
+        settings,
+        org_id,
+        days=days,
+        project_id=project_id,
+        worker_id=worker_id,
+        item_type=item_type,
+    )

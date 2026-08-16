@@ -1446,6 +1446,14 @@ def attach_release_test_cases(
 
     The agent only ever ADDS. It cannot edit or remove a case, because a case
     it could delete is coverage an approved test plan promised.
+
+    us-101.2 gives the case its place in the run — `section`, `sort` and
+    `critical` — and lets it name the work item it tests. `issue_id` has been
+    on the row since 031 and the page has always rendered it; it was simply
+    never inserted here, so every agent-authored case was permanently
+    unattributable. The caller resolves the display id and is responsible for
+    refusing one outside the release (`release_prep.submit`); by the time a
+    case arrives here it is trusted.
     """
     if not _valid_uuid(release_id) or not cases:
         return 0
@@ -1454,15 +1462,22 @@ def attach_release_test_cases(
         title = str(c.get("title") or "").strip()
         if not title:
             continue
+        issue_id = str(c.get("issue_id") or "").strip()
+        section = str(c.get("section") or "").strip()
+        sort = c.get("sort")
         rows.append(
             (
                 org_id,
                 project_id,
                 release_id,
+                issue_id if _valid_uuid(issue_id) else None,
                 title[:500],
                 str(c.get("steps") or "").strip(),
                 str(c.get("expected_result") or "").strip(),
                 "agent",
+                section[:80] or None,
+                int(sort) if isinstance(sort, int) else None,
+                bool(c.get("critical")),
             )
         )
     if not rows:
@@ -1472,9 +1487,9 @@ def attach_release_test_cases(
             conn.execute(
                 """
                 insert into public.test_cases
-                  (org_id, project_id, release_id, title, steps,
-                   expected_result, source)
-                values (%s, %s, %s, %s, %s, %s, %s)
+                  (org_id, project_id, release_id, issue_id, title, steps,
+                   expected_result, source, section, sort, critical)
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 row,
             )
@@ -3539,6 +3554,110 @@ def spend_trend(
     }
 
 
+# The statuses a run has stopped at. `work_seconds` is written exactly once, on
+# arrival at one of these (migration 252), so summing over them counts every
+# measured second and no unfinished one.
+_TERMINAL_RUN_STATUSES = "('succeeded', 'failed', 'cancelled', 'abandoned', 'stopped')"
+
+
+def work_summary(
+    settings: Settings,
+    org_id: str,
+    *,
+    days: int = 7,
+    project_id: str | None = None,
+    worker_id: str | None = None,
+    item_type: str | None = None,
+) -> dict[str, Any]:
+    """us-102.2: what the money bought, over the same slice the spend queries
+    answer for.
+
+    Four figures — hours held, work items landed, bugs landed, lines written —
+    computed from `runs` at read time and joined to `issues` the same way
+    `spend_breakdown` walks run -> issue for its work-shaped dimensions. Tokens
+    and cost are deliberately NOT here: the Costs page reads those off the
+    breakdown's own totals, so the card and the table's Total row cannot
+    disagree by a rounding (us-91.11 AC4, one source of dollars).
+
+    Why not `agent_effort_daily`, which already holds three of these: that
+    rollup is keyed (org, worker, day) and carries neither a project nor a work
+    item type, so a card fed from it would ignore two of the three filters
+    while sitting beside a table that honours them.
+
+    Two edges, named because they are real:
+
+    * Time is `runs.work_seconds` exactly as migration 252 wrote it — never
+      recomputed from timestamps, so no surface can disagree with another about
+      one run. Paused spans are NOT subtracted (252's known gap); this is time
+      the agent HELD the run, not attention it demonstrably spent.
+    * The window is anchored on when the run ENDED. A run that finished before
+      the window and whose pull request merged inside it therefore belongs to
+      the earlier window — which is where it can differ by one item, at a
+      boundary, from `agent_effort_daily.issues_completed` (anchored on the
+      merge transition).
+    """
+    try:
+        window = max(1, min(int(days), 366))
+    except (TypeError, ValueError):
+        window = 7
+    if item_type not in ISSUE_TYPES:
+        item_type = None
+    # The issue join is unconditional here: `bugs_landed` needs `i.type` on
+    # every call, not only when the filter is set.
+    clauses = [
+        f"coalesce(r.finished_at, r.last_heartbeat_at, r.claimed_at)"
+        f" > now() - interval '{window} days'",
+        f"r.status in {_TERMINAL_RUN_STATUSES}",
+    ]
+    params: list[Any] = []
+    if org_id and _valid_uuid(org_id):
+        clauses.append("r.org_id = %s")
+        params.append(org_id)
+    if project_id and _valid_uuid(project_id):
+        clauses.append("r.project_id = %s")
+        params.append(project_id)
+    if worker_id and _valid_uuid(worker_id):
+        clauses.append("r.worker_id = %s")
+        params.append(worker_id)
+    if item_type:
+        clauses.append("i.type = %s")
+        params.append(item_type)
+    where = " and ".join(clauses)
+    with _connect(settings) as conn:
+        row = conn.execute(
+            f"""
+            select coalesce(sum(r.work_seconds), 0) as work_seconds,
+                   count(*) as runs,
+                   -- Landed = the run carries the commit that reached the
+                   -- default branch. DISTINCT because four attempts on one
+                   -- story are one work item delivered, not four.
+                   count(distinct r.issue_id)
+                     filter (where r.merge_commit_sha is not null)
+                     as items_landed,
+                   count(distinct r.issue_id)
+                     filter (where r.merge_commit_sha is not null
+                             and i.type = 'bug')
+                     as bugs_landed,
+                   coalesce(sum(r.lines_added), 0)   as lines_added,
+                   coalesce(sum(r.lines_removed), 0) as lines_removed
+            from public.runs r
+            left join public.issues i on i.id = r.issue_id
+            where {where}
+            """,
+            tuple(params),
+        ).fetchone()
+    row = row or {}
+    return {
+        "days": window,
+        "work_seconds": int(row.get("work_seconds") or 0),
+        "runs": int(row.get("runs") or 0),
+        "items_landed": int(row.get("items_landed") or 0),
+        "bugs_landed": int(row.get("bugs_landed") or 0),
+        "lines_added": int(row.get("lines_added") or 0),
+        "lines_removed": int(row.get("lines_removed") or 0),
+    }
+
+
 def preset_outcomes(
     settings: Settings, org_id: str, days: int = 90
 ) -> list[dict[str, Any]]:
@@ -5546,13 +5665,144 @@ def release_versions_for_prep(settings: Settings, prep_id: str) -> list[str]:
         return []
     with _connect(settings) as conn:
         rows = conn.execute(
-            "select r2.version from public.release_preps p "
+            # us-101.6: the table is `release_prep_runs`. It was written as
+            # `release_preps`, which exists nowhere — so every proposal that
+            # reached the collision check raised UndefinedTable. Nothing
+            # caught it because no prompt ever told an agent the parameter
+            # existed, so the query had never once run.
+            "select r2.version from public.release_prep_runs p "
             "join public.releases r on r.id = p.release_id "
             "join public.releases r2 on r2.project_id = r.project_id "
             "where p.id = %s and r2.version is not null",
             (prep_id,),
         ).fetchall()
     return [r["version"] for r in rows]
+
+
+"""us-101.1: caps on the per-item source material a release agent is handed.
+
+The payload has to carry enough to write `do this / Expect: that` for every
+included story, and not so much that reading the range costs more than the
+notes are worth. Every cap is REPORTED alongside the value it trimmed — a
+requirement silently cut in half is worse than one visibly cut in half,
+because only the second one tells the agent to go and read the rest."""
+RELEASE_ITEM_BODY_CHARS = 1500
+RELEASE_ITEM_CRITERIA = 12
+RELEASE_ITEM_CASE_TITLES = 25
+
+
+def release_source_material(
+    settings: Settings,
+    org_id: str,
+    project_id: str,
+    issue_ids: list[str],
+) -> dict[str, Any]:
+    """us-101.1: what a release's included work items actually promised.
+
+    The cut snapshots four fields per item — id, title, type, display id —
+    which is enough to list a release and not enough to test one. This reads
+    the requirement back: the description, the acceptance criteria, and the
+    titles of the test cases the item already carries, which is the set
+    `attach_release_inherited_cases` copies onto the release at submit time.
+    Without that last one the agent authors its regression cases blind to
+    twenty cases that land beside them seconds later.
+
+    Also returns the project's `always_on_uat` case titles, because that
+    function pulls those in regardless of which work items are included."""
+    out: dict[str, Any] = {"items": {}, "always_on_uat": [], "caps": {
+        "body_chars": RELEASE_ITEM_BODY_CHARS,
+        "acceptance_criteria": RELEASE_ITEM_CRITERIA,
+        "case_titles": RELEASE_ITEM_CASE_TITLES,
+    }}
+    ids = [i for i in (issue_ids or []) if _valid_uuid(str(i))]
+    if not _valid_uuid(org_id) or not _valid_uuid(project_id):
+        return out
+    with _connect(settings) as conn:
+        if ids:
+            rows = conn.execute(
+                """
+                select id, body, acceptance_criteria
+                from public.issues
+                where org_id = %s and id = any(%s)
+                """,
+                (org_id, ids),
+            ).fetchall()
+            cases = conn.execute(
+                """
+                select issue_id, title
+                from public.test_cases
+                where org_id = %s and project_id = %s
+                  and status = 'active' and release_id is null
+                  and issue_id = any(%s)
+                order by title
+                """,
+                (org_id, project_id, ids),
+            ).fetchall()
+        else:
+            rows, cases = [], []
+        always = conn.execute(
+            """
+            select title from public.test_cases
+            where org_id = %s and project_id = %s
+              and status = 'active' and release_id is null
+              and always_on_uat
+            order by title
+            """,
+            (org_id, project_id),
+        ).fetchall()
+
+    by_issue: dict[str, list[str]] = {}
+    for c in cases:
+        by_issue.setdefault(str(c["issue_id"]), []).append(c["title"])
+
+    for r in rows:
+        key = str(r["id"])
+        body = (r["body"] or "").strip()
+        criteria = coerce_acceptance_criteria(r["acceptance_criteria"])
+        titles = by_issue.get(key, [])
+        out["items"][key] = {
+            "body": body[:RELEASE_ITEM_BODY_CHARS],
+            "body_truncated": len(body) > RELEASE_ITEM_BODY_CHARS,
+            "acceptance_criteria": criteria[:RELEASE_ITEM_CRITERIA],
+            "acceptance_criteria_truncated": len(criteria) > RELEASE_ITEM_CRITERIA,
+            "existing_case_titles": titles[:RELEASE_ITEM_CASE_TITLES],
+            "existing_case_titles_truncated": len(titles) > RELEASE_ITEM_CASE_TITLES,
+        }
+    out["always_on_uat"] = [a["title"] for a in always][:RELEASE_ITEM_CASE_TITLES]
+    return out
+
+
+def release_inheritable_display_ids(
+    settings: Settings,
+    org_id: str,
+    project_id: str,
+    included_items: list[dict[str, Any]],
+) -> set[str]:
+    """us-101.3: which included work items already carry a check.
+
+    `attach_release_inherited_cases` copies those onto the release at submit,
+    so an item covered by one is accounted for and the agent is not asked to
+    write a second check saying the same thing. Read BEFORE anything is
+    attached, or every item looks covered by the copies just made."""
+    ids = {
+        str(i.get("issue_id")): str(i.get("display_id") or "").strip().upper()
+        for i in included_items
+        if i.get("issue_id") and _valid_uuid(str(i.get("issue_id")))
+    }
+    if not ids or not _valid_uuid(org_id) or not _valid_uuid(project_id):
+        return set()
+    with _connect(settings) as conn:
+        rows = conn.execute(
+            """
+            select distinct issue_id
+            from public.test_cases
+            where org_id = %s and project_id = %s
+              and status = 'active' and release_id is null
+              and issue_id = any(%s)
+            """,
+            (org_id, project_id, list(ids)),
+        ).fetchall()
+    return {ids[str(r["issue_id"])] for r in rows if str(r["issue_id"]) in ids}
 
 
 def get_approved_plans(
