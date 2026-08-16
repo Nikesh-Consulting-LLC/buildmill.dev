@@ -412,3 +412,154 @@ def test_spend_still_refuses_non_members(client, make_token, monkeypatch):
         headers={"Authorization": f"Bearer {make_token()}"},
     )
     assert resp.status_code == 403
+
+
+# ------------------------------------------- us-102.2: what the money bought
+
+
+def _summary_row(**over):
+    row = {
+        "work_seconds": 7200,
+        "runs": 4,
+        "items_landed": 2,
+        "bugs_landed": 1,
+        "lines_added": 300,
+        "lines_removed": 40,
+    }
+    row.update(over)
+    return [row]
+
+
+def _wire_runs(monkeypatch, rows):
+    def script(q, p):
+        return rows if "from public.runs r" in q else []
+
+    conn = FakeConn(script)
+    monkeypatch.setattr(db, "_connect", lambda s: conn)
+    return conn
+
+
+def _runs_query(conn):
+    return [x for x in conn.queries if "from public.runs r" in x[0]][0]
+
+
+def test_work_summary_counts_landed_items_distinctly(monkeypatch):
+    """Four attempts on one story are one work item delivered. The DISTINCT is
+    the whole difference between "items landed" and "runs that merged"."""
+    conn = _wire_runs(monkeypatch, _summary_row())
+    out = db.work_summary(object(), ORG, days=7)
+    q, _ = _runs_query(conn)
+    assert "count(distinct r.issue_id) filter (where r.merge_commit_sha is not null)" in q
+    assert out["items_landed"] == 2
+    assert out["bugs_landed"] == 1
+    assert out["work_seconds"] == 7200
+
+
+def test_work_summary_counts_only_terminal_runs(monkeypatch):
+    """`work_seconds` is written once, on arrival at a terminal state
+    (migration 252). Summing over a running run would add a null, and counting
+    it would claim work that has not happened yet."""
+    conn = _wire_runs(monkeypatch, _summary_row())
+    db.work_summary(object(), ORG)
+    q, _ = _runs_query(conn)
+    assert "r.status in ('succeeded', 'failed', 'cancelled', 'abandoned', 'stopped')" in q
+
+
+def test_work_summary_windows_on_when_the_run_ended(monkeypatch):
+    """The seam named in us-102.2 AC4: a run is in the window it ENDED in, not
+    the one its pull request merged in."""
+    conn = _wire_runs(monkeypatch, _summary_row())
+    db.work_summary(object(), ORG, days=30)
+    q, _ = _runs_query(conn)
+    assert (
+        "coalesce(r.finished_at, r.last_heartbeat_at, r.claimed_at)"
+        " > now() - interval '30 days'" in q
+    )
+
+
+def test_work_summary_joins_issues_even_unfiltered(monkeypatch):
+    """`bugs_landed` needs i.type on every call, not only when the type filter
+    is set — and the join stays LEFT so a run with no work item behind it still
+    contributes its hours and its lines."""
+    conn = _wire_runs(monkeypatch, _summary_row())
+    db.work_summary(object(), ORG)
+    q, _ = _runs_query(conn)
+    assert "left join public.issues i on i.id = r.issue_id" in q
+    assert " inner join" not in q
+
+
+def test_work_summary_filters_are_parameterised(monkeypatch):
+    P1 = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+    W1 = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+    conn = _wire_runs(monkeypatch, _summary_row())
+    db.work_summary(object(), ORG, days=7, project_id=P1, worker_id=W1, item_type="bug")
+    q, p = _runs_query(conn)
+    assert "r.project_id = %s" in q
+    assert "r.worker_id = %s" in q
+    assert "i.type = %s" in q
+    assert p == (ORG, P1, W1, "bug")
+
+
+def test_work_summary_drops_junk_rather_than_interpolating_it(monkeypatch):
+    conn = _wire_runs(monkeypatch, _summary_row())
+    db.work_summary(
+        object(), ORG, project_id="'; drop table runs; --", item_type="banana"
+    )
+    q, p = _runs_query(conn)
+    assert "drop table" not in q
+    assert "i.type = %s" not in q
+    assert p == (ORG,)
+
+
+def test_work_summary_window_is_clamped_like_the_spend_queries(monkeypatch):
+    _wire_runs(monkeypatch, _summary_row())
+    assert db.work_summary(object(), ORG, days=9999)["days"] == 366
+    assert db.work_summary(object(), ORG, days="x")["days"] == 7
+
+
+def test_work_summary_zero_is_a_number(monkeypatch):
+    """A slice filtered down to nothing answers zeroes — nulls from an empty
+    aggregate would render as blanks and read as a broken page."""
+    _wire_runs(monkeypatch, [{
+        "work_seconds": None, "runs": 0, "items_landed": 0,
+        "bugs_landed": 0, "lines_added": None, "lines_removed": None,
+    }])
+    out = db.work_summary(object(), ORG)
+    assert out["work_seconds"] == 0
+    assert out["lines_added"] == 0
+    assert out["items_landed"] == 0
+
+
+def test_work_summary_refuses_without_the_capability(client, make_token, monkeypatch):
+    monkeypatch.setattr("app.routers.llm.rpc", _fake_rpc(view_costs=False))
+    resp = client.get(
+        f"/api/v1/llm/orgs/{ORG}/work-summary",
+        headers={"Authorization": f"Bearer {make_token()}"},
+    )
+    assert resp.status_code == 403
+    assert "owners and admins" in resp.json()["detail"]
+
+
+def test_work_summary_passes_the_same_filters_as_spend(client, make_token, monkeypatch):
+    monkeypatch.setattr("app.routers.llm.rpc", _fake_rpc(view_costs=True))
+    captured = {}
+
+    def fake_summary(settings, org_id, **kw):
+        captured["org_id"] = org_id
+        captured.update(kw)
+        return {"days": kw.get("days"), "work_seconds": 0, "runs": 0,
+                "items_landed": 0, "bugs_landed": 0, "lines_added": 0,
+                "lines_removed": 0}
+
+    monkeypatch.setattr("app.db.work_summary", fake_summary)
+    P1 = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+    resp = client.get(
+        f"/api/v1/llm/orgs/{ORG}/work-summary",
+        params={"days": 7, "project_id": P1, "item_type": "bug"},
+        headers={"Authorization": f"Bearer {make_token()}"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert captured["org_id"] == ORG
+    assert captured["days"] == 7
+    assert captured["project_id"] == P1
+    assert captured["item_type"] == "bug"

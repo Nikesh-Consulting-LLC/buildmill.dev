@@ -3539,6 +3539,110 @@ def spend_trend(
     }
 
 
+# The statuses a run has stopped at. `work_seconds` is written exactly once, on
+# arrival at one of these (migration 252), so summing over them counts every
+# measured second and no unfinished one.
+_TERMINAL_RUN_STATUSES = "('succeeded', 'failed', 'cancelled', 'abandoned', 'stopped')"
+
+
+def work_summary(
+    settings: Settings,
+    org_id: str,
+    *,
+    days: int = 7,
+    project_id: str | None = None,
+    worker_id: str | None = None,
+    item_type: str | None = None,
+) -> dict[str, Any]:
+    """us-102.2: what the money bought, over the same slice the spend queries
+    answer for.
+
+    Four figures — hours held, work items landed, bugs landed, lines written —
+    computed from `runs` at read time and joined to `issues` the same way
+    `spend_breakdown` walks run -> issue for its work-shaped dimensions. Tokens
+    and cost are deliberately NOT here: the Costs page reads those off the
+    breakdown's own totals, so the card and the table's Total row cannot
+    disagree by a rounding (us-91.11 AC4, one source of dollars).
+
+    Why not `agent_effort_daily`, which already holds three of these: that
+    rollup is keyed (org, worker, day) and carries neither a project nor a work
+    item type, so a card fed from it would ignore two of the three filters
+    while sitting beside a table that honours them.
+
+    Two edges, named because they are real:
+
+    * Time is `runs.work_seconds` exactly as migration 252 wrote it — never
+      recomputed from timestamps, so no surface can disagree with another about
+      one run. Paused spans are NOT subtracted (252's known gap); this is time
+      the agent HELD the run, not attention it demonstrably spent.
+    * The window is anchored on when the run ENDED. A run that finished before
+      the window and whose pull request merged inside it therefore belongs to
+      the earlier window — which is where it can differ by one item, at a
+      boundary, from `agent_effort_daily.issues_completed` (anchored on the
+      merge transition).
+    """
+    try:
+        window = max(1, min(int(days), 366))
+    except (TypeError, ValueError):
+        window = 7
+    if item_type not in ISSUE_TYPES:
+        item_type = None
+    # The issue join is unconditional here: `bugs_landed` needs `i.type` on
+    # every call, not only when the filter is set.
+    clauses = [
+        f"coalesce(r.finished_at, r.last_heartbeat_at, r.claimed_at)"
+        f" > now() - interval '{window} days'",
+        f"r.status in {_TERMINAL_RUN_STATUSES}",
+    ]
+    params: list[Any] = []
+    if org_id and _valid_uuid(org_id):
+        clauses.append("r.org_id = %s")
+        params.append(org_id)
+    if project_id and _valid_uuid(project_id):
+        clauses.append("r.project_id = %s")
+        params.append(project_id)
+    if worker_id and _valid_uuid(worker_id):
+        clauses.append("r.worker_id = %s")
+        params.append(worker_id)
+    if item_type:
+        clauses.append("i.type = %s")
+        params.append(item_type)
+    where = " and ".join(clauses)
+    with _connect(settings) as conn:
+        row = conn.execute(
+            f"""
+            select coalesce(sum(r.work_seconds), 0) as work_seconds,
+                   count(*) as runs,
+                   -- Landed = the run carries the commit that reached the
+                   -- default branch. DISTINCT because four attempts on one
+                   -- story are one work item delivered, not four.
+                   count(distinct r.issue_id)
+                     filter (where r.merge_commit_sha is not null)
+                     as items_landed,
+                   count(distinct r.issue_id)
+                     filter (where r.merge_commit_sha is not null
+                             and i.type = 'bug')
+                     as bugs_landed,
+                   coalesce(sum(r.lines_added), 0)   as lines_added,
+                   coalesce(sum(r.lines_removed), 0) as lines_removed
+            from public.runs r
+            left join public.issues i on i.id = r.issue_id
+            where {where}
+            """,
+            tuple(params),
+        ).fetchone()
+    row = row or {}
+    return {
+        "days": window,
+        "work_seconds": int(row.get("work_seconds") or 0),
+        "runs": int(row.get("runs") or 0),
+        "items_landed": int(row.get("items_landed") or 0),
+        "bugs_landed": int(row.get("bugs_landed") or 0),
+        "lines_added": int(row.get("lines_added") or 0),
+        "lines_removed": int(row.get("lines_removed") or 0),
+    }
+
+
 def preset_outcomes(
     settings: Settings, org_id: str, days: int = 90
 ) -> list[dict[str, Any]]:

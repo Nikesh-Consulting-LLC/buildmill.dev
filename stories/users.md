@@ -21,12 +21,13 @@ manager actions each left open (96.10's routing table, 96.11's worker-token
 rotation), the Phase 78 known gaps, and the retired-unbuilt-do-not-re-propose list —
 is in [APPLICATION.md → Delivery history](../APPLICATION.md#delivery-history).
 
-Thirty-one stories are open. Phases 98, 99 and 100 (requested 2026-08-15) are
+Thirty-three stories are open. Phases 98, 99 and 100 (requested 2026-08-15) are
 built and on production; their stories are `Completed` except the five that record
 an unbuilt acceptance criterion and stay `Testing` with the gap named
 (us-98.6, us-99.4, us-99.6, us-99.7, us-100.1). Then Phase 97's GitHub linkage
 repair (requested 2026-08-15), Phase 101's rebuild of what a release hands the
-manager (requested 2026-08-15), and the residue carried out of Phases 85–89:
+manager (requested 2026-08-15), Phase 102's rework of the Costs page
+(requested 2026-08-15), and the residue carried out of Phases 85–89:
 
 | Order | Story | Title | Status |
 |---|---|---|---|
@@ -61,6 +62,8 @@ manager (requested 2026-08-15), and the residue carried out of Phases 85–89:
 | 29 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
 | 30 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
 | 31 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+| 32 | [us-102.1](us-102.1-the-costs-page-opens-on-the-week.md) | The Costs page opens on the week, and stops explaining itself | Testing |
+| 33 | [us-102.2](us-102.2-six-numbers-on-top-that-obey-the-filters.md) | Six numbers on top, and the filters govern them | Testing |
 
 **Phase 97 — GitHub linkage stays true** (drafted 2026-08-15, from the
 run-`ff9ef2be` incident). A repository rename/transfer on GitHub answers
@@ -246,6 +249,23 @@ mechanical kind that compounds quietly as the workspace grows.
   (US-62.8) and `client_perf_events` — and nothing reads it as a gate. This seeds a
   100-project / 5,000-item fixture and puts a budget on each surface. It depends on
   87.1–87.9 because it measures what they fix.
+
+**Phase 102 — Costs leads with the numbers** (drafted 2026-08-15, the
+manager's request). `/costs` opens on thirty days and on a five-line paragraph
+about gateway metering, and it answers "where did the money go" without ever
+answering "what did it buy". us-102.1 makes the default window seven days —
+the grain the work happens at — and takes the essay off the page, keeping its
+two actionable facts in the help topic. us-102.2 puts six KPI cards on top:
+hours agents held work, work items landed, bugs landed, lines written, tokens,
+dollars. The point is that **the filters govern them** — project, agent, type
+and window re-answer all six, which is what turns "$40" into "$40 fixing four
+bugs in Alpha". Tokens and cost read the breakdown's own totals rather than a
+second query (one source of dollars); the effort figures come from a new
+`work-summary` endpoint over `runs`, joined to `issues` the way
+`spend_breakdown` already walks run → issue. They deliberately do **not** come
+from `agent_effort_daily`, which is keyed `(org, worker, day)` and would
+ignore two of the three filters while sitting beside a table that honours
+them.
 
 **Phase 89 residue — us-89.3** (drafted 2026-08-13) finishes the zero-secret workspace
 at the config layer: the factory configures the interactive agent's CLI the way its
