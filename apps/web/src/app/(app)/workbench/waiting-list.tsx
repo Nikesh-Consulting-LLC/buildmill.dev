@@ -99,6 +99,12 @@ async function dispatchOne(id: string) {
   await apiFetch(`/api/v1/issues/${id}/dispatch`, { method: "POST" });
 }
 
+/** us-106.1: a draft feature's first run. `dispatch_issue` refuses a feature
+ * outright, so the row calls what the item page's Draft PRD button calls. */
+async function draftPrd(id: string) {
+  await apiFetch(`/api/v1/issues/${id}/prd/draft`, { method: "POST" });
+}
+
 /** US-68.4: the icon+label a primary action button shows, shared between the
  * desktop table's action cell and the mobile card's full-width button so the
  * two surfaces can never drift into saying different things for the same
@@ -122,6 +128,8 @@ function ActionGlyph({
     );
   if (item.mode === "redispatch") return <RotateCcw className="size-3.5" />;
   if (item.mode === "approve") return <Check className="size-3.5" />;
+  // us-106.1: a PRD draft is authoring work, not a launch.
+  if (item.mode === "draft-prd") return <FileText className="size-3.5" />;
   return <Rocket className="size-3.5" />;
 }
 
@@ -227,17 +235,26 @@ export function WaitingList({
   async function runInline(item: TodoItem) {
     if (item.mode === "approve") return approveOne(item);
     if (heldReason(item)) return;
+    const isDraftPrd = item.mode === "draft-prd";
     setBusy((b) => ({ ...b, [item.id]: true }));
     try {
-      await dispatchOne(item.id);
+      if (isDraftPrd) await draftPrd(item.id);
+      else await dispatchOne(item.id);
       toastSuccess(
-        item.mode === "redispatch" ? "Re-dispatched" : "Dispatched",
+        isDraftPrd
+          ? "Drafting the PRD"
+          : item.mode === "redispatch"
+            ? "Re-dispatched"
+            : "Dispatched",
         item.title
       );
       // Leave the row disabled; it drops out of the list on the refresh.
       router.refresh();
     } catch (e) {
-      toastError("Couldn't dispatch", (e as Error).message);
+      toastError(
+        isDraftPrd ? "Couldn't draft the PRD" : "Couldn't dispatch",
+        (e as Error).message
+      );
       setBusy((b) => ({ ...b, [item.id]: false }));
     }
   }
@@ -485,7 +502,7 @@ export function WaitingList({
                             className="h-8 flex-1"
                             render={<Link href={item.inspectHref} />}
                           >
-                            Inspect
+                            {item.inspectLabel ?? "Inspect"}
                           </Button>
                         )}
                       </div>
@@ -727,7 +744,7 @@ export function WaitingList({
                               size="sm"
                               render={<Link href={item.inspectHref} />}
                             >
-                              Inspect
+                              {item.inspectLabel ?? "Inspect"}
                             </Button>
                           )}
                           {item.mode === "navigate" ? (
