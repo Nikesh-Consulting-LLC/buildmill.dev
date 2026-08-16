@@ -90,7 +90,7 @@ Phases 85–89:
 | 54 | [us-99.5](us-99.5-the-agent-reads-the-file-and-mcp-fills-the-gap.md) | The agent reads the file, and MCP fills the gap | Testing |
 | 55 | [us-99.6](us-99.6-a-template-carries-the-whole-file-set.md) | A template carries the whole file set | Testing |
 | 56 | [us-99.7](us-99.7-a-template-edit-offers-itself.md) | A template edit offers itself to the projects using it | Testing |
-| 57 | [us-100.1](us-100.1-agent-instructions-is-one-document.md) | Agent Instructions is one document | New |
+| 57 | [us-100.1](us-100.1-agent-instructions-is-one-document.md) | Agent Instructions is one document | Testing |
 | 58 | [us-100.2](us-100.2-agents-md-is-the-agent-instructions.md) | AGENTS.md is the Agent Instructions | Testing |
 | 59 | [us-100.3](us-100.3-the-tabs-say-what-they-hold.md) | The tabs say what they hold | Testing |
 | 60 | [us-100.4](us-100.4-a-template-defines-the-agent-instructions.md) | A template defines the Agent Instructions | Testing |

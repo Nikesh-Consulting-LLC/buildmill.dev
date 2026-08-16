@@ -24,10 +24,13 @@ export function AgentInstructionsEditor({
   projectId,
   initial,
   canEdit,
+  onSaved,
 }: {
   projectId: string;
   initial: string;
   canEdit: boolean;
+  /** Called after a successful save, so the publish badge can re-check. */
+  onSaved?: () => void;
 }) {
   const [value, setValue] = useState(initial);
   const [saved, setSaved] = useState(initial);
@@ -50,6 +53,7 @@ export function AgentInstructionsEditor({
       return;
     }
     setSaved(value);
+    onSaved?.();
   }
 
   return (

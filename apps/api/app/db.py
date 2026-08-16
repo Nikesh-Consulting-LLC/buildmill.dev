@@ -8060,39 +8060,6 @@ def record_learning_submission(
     return str(row["id"])
 
 
-def get_guideline_section(
-    settings: Settings, project_id: str, section_key: str
-) -> dict[str, Any] | None:
-    """US-5.32: the project's guideline section by catalog key — the
-    target a recommendation proposes to change."""
-    with _connect(settings) as conn:
-        row = conn.execute(
-            """
-            select id, section_key, title, content
-            from public.project_guidelines
-            where project_id = %s and section_key = %s
-            limit 1
-            """,
-            (project_id, section_key),
-        ).fetchone()
-    return dict(row) if row else None
-
-
-def list_guideline_section_keys(
-    settings: Settings, project_id: str
-) -> list[str]:
-    with _connect(settings) as conn:
-        rows = conn.execute(
-            """
-            select distinct section_key from public.project_guidelines
-            where project_id = %s and section_key <> 'custom'
-            order by section_key
-            """,
-            (project_id,),
-        ).fetchall()
-    return [r["section_key"] for r in rows]
-
-
 def record_guideline_recommendation(
     settings: Settings,
     worker: dict[str, Any],
@@ -8950,23 +8917,57 @@ def list_run_documents(
         ).fetchall()
 
 
+def extract_markdown_section(markdown: str, title: str) -> str | None:
+    """us-100.1: the body under a heading of the given title (case- and
+    level-insensitive), up to the next heading of the same or higher level.
+    None when the heading is absent or its body is blank. The one-document
+    world's replacement for reading a catalog section by key."""
+    import re
+
+    lines = (markdown or "").splitlines()
+    want = title.strip().lower()
+    start = None
+    level = 0
+    for idx, line in enumerate(lines):
+        m = re.match(r"^(#{1,6})\s+(.*?)\s*#*\s*$", line)
+        if not m:
+            continue
+        if start is None:
+            if m.group(2).strip().lower() == want:
+                start = idx + 1
+                level = len(m.group(1))
+        elif len(m.group(1)) <= level:
+            body = "\n".join(lines[start:idx]).strip()
+            return body or None
+    if start is None:
+        return None
+    body = "\n".join(lines[start:]).strip()
+    return body or None
+
+
 def get_run_commands_section(
     settings: Settings, project_id: str
 ) -> str | None:
-    """US-5.9: the project's 'Run commands' guideline section, read live at
+    """US-5.9: the project's 'Run commands' section, read live at
     context-serve time — surfaced prominently in the work context so an
     agent can verify its own work before submitting. None when the section
-    is absent or blank."""
+    is absent or blank.
+
+    us-100.1: read from the Agent Instructions document (the `## Run
+    commands` heading migration 263 wrote for every project that had the
+    section), never from `project_guidelines` — that table is a frozen
+    rollback snapshot and would serve text the manager has since edited."""
     if not _valid_uuid(project_id):
         return None
     with _connect(settings) as conn:
         row = conn.execute(
-            "select nullif(trim(content), '') as content "
-            "from public.project_guidelines "
-            "where project_id = %s and section_key = 'run-commands'",
+            "select coalesce(agent_instructions, '') as doc "
+            "from public.projects where id = %s",
             (project_id,),
         ).fetchone()
-    return row["content"] if row else None
+    if not row:
+        return None
+    return extract_markdown_section(row["doc"], "Run commands")
 
 
 def get_project_environment(

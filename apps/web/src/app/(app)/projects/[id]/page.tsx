@@ -38,7 +38,6 @@ import { ProjectDialog } from "../project-dialog";
 import { ProjectActions } from "../project-actions";
 import { StartNewEpicButton } from "./start-new-epic-button";
 import { ProjectSummaryCard } from "./project-summary-card";
-import { RefreshGuidelinesDialog } from "./refresh-guidelines-dialog";
 import { ProjectSetupReadinessCard } from "./project-setup-readiness-card";
 import { epicLabel, workItemDisplayId } from "@/lib/work-items";
 import { LearningsTab } from "./learnings-tab";
@@ -51,7 +50,7 @@ import {
 } from "./deployments-tab";
 import { SuitesTab, type SuiteRow } from "./suites-tab";
 import { EnvironmentTab } from "./environment-tab";
-import { AgentInstructionsEditor } from "./agent-instructions-editor";
+import { AgentInstructionsTab } from "./agent-instructions-tab";
 
 export default async function ProjectDetailPage({
   params,
@@ -197,6 +196,21 @@ export default async function ProjectDetailPage({
     project.guidelines_ready_by,
     project.worker_instructions_ready_by,
   ]);
+  // us-100.1 AC3 / migration 270: the document's edits are audited under
+  // surface `guidelines`, so "edited since marked ready" reads the newest
+  // audit row rather than a per-section timestamp that no longer exists.
+  const { data: lastGuidelinesEdit } = await supabase
+    .from("content_audit")
+    .select("created_at")
+    .eq("project_id", project.id)
+    .eq("surface", "guidelines")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const guidelinesEditedSinceReady =
+    !!project.guidelines_ready_at &&
+    !!lastGuidelinesEdit?.created_at &&
+    lastGuidelinesEdit.created_at > project.guidelines_ready_at;
 
   const { data: deployments } = await supabase
     .from("deployments")
@@ -437,17 +451,9 @@ export default async function ProjectDetailPage({
         </TabsList>
 
         <TabsContent value="overview" className="flex flex-col gap-6">
-          {/* US-43.2: a whole-document decision, so it sits with the
-              project's other whole-project actions rather than on the
-              Guidelines tab, where sections are edited one at a time. */}
-          {caps.can("manage_project") ? (
-            <div className="flex justify-end">
-              <RefreshGuidelinesDialog
-                projectId={project.id}
-                hasRepo={!!project.repo_full_name}
-              />
-            </div>
-          ) : null}
+          {/* US-43.2 put the refresh here because the Guidelines tab
+              edited sections one at a time; the tab is one document now
+              (us-100.1), so the refresh lives beside it. */}
           {projectTemplate?.name && (
             <p className="text-xs text-muted-foreground">
               Created from template: {projectTemplate.name}
@@ -549,10 +555,18 @@ export default async function ProjectDetailPage({
             to a table nothing reads — an edit that appears to save and
             changes nothing an agent sees. Replaced rather than left up. */}
         <TabsContent value="guidelines">
-          <AgentInstructionsEditor
+          <AgentInstructionsTab
             projectId={project.id}
             initial={project.agent_instructions ?? ""}
             canEdit={caps.can("manage_project")}
+            repoFullName={project.repo_full_name ?? null}
+            readyAt={project.guidelines_ready_at}
+            readyByName={
+              project.guidelines_ready_by
+                ? readyActorNames[project.guidelines_ready_by] ?? null
+                : null
+            }
+            editedSince={guidelinesEditedSinceReady}
           />
         </TabsContent>
 
