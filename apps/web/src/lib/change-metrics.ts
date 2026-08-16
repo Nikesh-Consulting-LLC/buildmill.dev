@@ -6,7 +6,11 @@ export type ChangeBreakdownEntry = {
   path: string;
   added: number;
   removed: number;
-  area: "frontend" | "backend" | "other";
+  /** us-109.3: `vendored` is a dependency tree, build output, lockfile or
+   *  minified bundle the changeset carried. It stays in the breakdown — it
+   *  really was in the changeset — but `lines_added`/`files_changed` already
+   *  exclude it, so the totals here are authored work only. */
+  area: "frontend" | "backend" | "other" | "vendored";
 };
 
 export type RunMetrics = {
@@ -26,9 +30,18 @@ export function hasMetrics(run: RunMetrics): boolean {
 
 function areaSplit(run: RunMetrics): string {
   const breakdown = (run.change_breakdown as ChangeBreakdownEntry[] | null) ?? [];
-  const counts: Record<string, number> = { frontend: 0, backend: 0, other: 0 };
+  const counts: Record<string, number> = {
+    frontend: 0,
+    backend: 0,
+    other: 0,
+    vendored: 0,
+  };
   for (const f of breakdown) counts[f.area] = (counts[f.area] ?? 0) + 1;
-  return (["frontend", "backend", "other"] as const)
+  // us-109.3: vendored is listed LAST and named, rather than omitted. A run
+  // that swept in 7,999 dependency files is a fact about that run worth
+  // seeing — silently dropping it is how one came to be counted as 1.8M
+  // lines of somebody's work for a week.
+  return (["frontend", "backend", "other", "vendored"] as const)
     .filter((a) => counts[a] > 0)
     .map((a) => `${counts[a]} ${a}`)
     .join(", ");

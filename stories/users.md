@@ -25,7 +25,8 @@ seed-publishes-files and section preview, 99.7's accept/decline, 100.1's
 retired-unbuilt-do-not-re-propose list — is in
 [APPLICATION.md → Delivery history](../APPLICATION.md#delivery-history).
 
-Twenty-two stories are open: Phase 109's Team page cleanup (requested
+Twenty-three stories are open: Phase 109's Team page cleanup and the metrics
+bug it uncovered (requested
 2026-08-16), Phase 108's production crash inbox (drafted
 2026-08-16, two of its six defects breaking live paths today), Phase 107's
 fixed-outcome and queue guard (requested
@@ -40,26 +41,27 @@ today), and the residue carried out of Phases 85–89:
 |---|---|---|---|
 | 1 | [us-109.1](us-109.1-the-team-row-says-who-not-how-much.md) | The Team row says who, not how much | Testing |
 | 2 | [us-109.2](us-109.2-the-team-kpis-price-the-work.md) | The team's KPI row prices the work | Testing |
-| 3 | [us-108.1](us-108.1-the-crash-inbox-goes-to-zero.md) | The crash inbox goes to zero | New |
-| 4 | [us-107.1](us-107.1-a-work-item-can-be-marked-fixed.md) | A work item can be marked fixed | Testing |
-| 5 | [us-107.2](us-107.2-nothing-sits-queued-forever.md) | Nothing sits queued forever | Testing |
-| 6 | [us-107.3](us-107.3-an-agent-capability-has-an-icon.md) | An agent capability has an icon | Testing |
-| 7 | [us-106.1](us-106.1-a-draft-dispatches-from-the-workbench.md) | A draft dispatches from the Workbench | Testing |
-| 8 | [us-105.1](us-105.1-a-report-can-be-marked-fixed.md) | A report can be marked fixed | Testing |
-| 9 | [us-105.2](us-105.2-a-report-is-promoted-in-one-click.md) | A report is promoted in one click | Testing |
-| 10 | [us-103.1](us-103.1-an-abandoned-release-prep-is-reaped.md) | An abandoned release prep is reaped | Testing |
-| 11 | [us-103.3](us-103.3-the-manager-can-stop-an-in-flight-release.md) | The manager can stop an in-flight release | Testing |
-| 12 | [us-103.2](us-103.2-a-restarted-runner-re-adopts-its-prep.md) | A restarted runner re-adopts the prep it was holding | Testing |
-| 13 | [us-103.4](us-103.4-the-workbench-shows-the-release-in-flight.md) | The Workbench shows the release in flight | Testing |
-| 14 | [us-103.5](us-103.5-a-release-in-flight-freezes-dispatch.md) | A release in flight freezes dispatch, and says so | Testing |
-| 15 | [us-104.1](us-104.1-every-migration-number-is-unique.md) | Every migration number is unique | Testing |
-| 16 | [us-104.2](us-104.2-the-api-test-suite-lives-in-the-repo.md) | The API test suite lives in the repo | Testing |
-| 17 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
-| 18 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
-| 19 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
-| 20 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
-| 21 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
-| 22 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+| 3 | [us-109.3](us-109.3-nobody-wrote-node-modules.md) | Nobody wrote node_modules | Testing |
+| 4 | [us-108.1](us-108.1-the-crash-inbox-goes-to-zero.md) | The crash inbox goes to zero | New |
+| 5 | [us-107.1](us-107.1-a-work-item-can-be-marked-fixed.md) | A work item can be marked fixed | Testing |
+| 6 | [us-107.2](us-107.2-nothing-sits-queued-forever.md) | Nothing sits queued forever | Testing |
+| 7 | [us-107.3](us-107.3-an-agent-capability-has-an-icon.md) | An agent capability has an icon | Testing |
+| 8 | [us-106.1](us-106.1-a-draft-dispatches-from-the-workbench.md) | A draft dispatches from the Workbench | Testing |
+| 9 | [us-105.1](us-105.1-a-report-can-be-marked-fixed.md) | A report can be marked fixed | Testing |
+| 10 | [us-105.2](us-105.2-a-report-is-promoted-in-one-click.md) | A report is promoted in one click | Testing |
+| 11 | [us-103.1](us-103.1-an-abandoned-release-prep-is-reaped.md) | An abandoned release prep is reaped | Testing |
+| 12 | [us-103.3](us-103.3-the-manager-can-stop-an-in-flight-release.md) | The manager can stop an in-flight release | Testing |
+| 13 | [us-103.2](us-103.2-a-restarted-runner-re-adopts-its-prep.md) | A restarted runner re-adopts the prep it was holding | Testing |
+| 14 | [us-103.4](us-103.4-the-workbench-shows-the-release-in-flight.md) | The Workbench shows the release in flight | Testing |
+| 15 | [us-103.5](us-103.5-a-release-in-flight-freezes-dispatch.md) | A release in flight freezes dispatch, and says so | Testing |
+| 16 | [us-104.1](us-104.1-every-migration-number-is-unique.md) | Every migration number is unique | Testing |
+| 17 | [us-104.2](us-104.2-the-api-test-suite-lives-in-the-repo.md) | The API test suite lives in the repo | Testing |
+| 18 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
+| 19 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
+| 20 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
+| 21 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
+| 22 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
+| 23 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
 
 **Phase 109 — The Team page answers at a glance** (requested 2026-08-16). The
 roster row had accreted every fact anyone ever wanted about a member: a module
@@ -78,6 +80,23 @@ added and removed, and a **human-equivalent** estimate in hours derived from
 lines changed at a named, unit-tested rate, labelled a rough estimate on its
 face so a confident-looking number is not read as a measurement. Both are web
 only: no migration, no API change, and no query that was not already running.
+
+That tile then read **72,841 hours — 35 person-years** over a window in which
+35 items merged, and **us-109.3** is what it found. One run had landed 1,788,138
+lines across 7,999 files (224 lines a file, the signature of a vendored tree);
+every other run in the window changed under 200 files. That single run was
+98.3% of the workspace's reported output, and it came from a revoked worker no
+longer in the org, so it inflated the total while no roster row could show it.
+Authored output was **+31k, not +1.8M**; the honest estimate is ~1,315 hours.
+The fix is at the ingest — `compute_diff_metrics` now excludes dependency
+trees, build output, lockfiles and minified bundles from `lines_added`,
+`lines_removed` and `files_changed`, matched on whole path segments so
+`redistribute/` and `buildings.py` are never discounted — which corrects the
+Team KPIs, the Costs page, the issue and review pages and `agent_effort_daily`
+at once. Vendored files stay in `change_breakdown` marked as such: they really
+were in the changeset, and hiding them would conceal what went wrong.
+**The backfill has not been run** — `recompute_run_metrics` needs a database
+credential this checkout does not have, so production still reports 1.8M.
 
 **Phase 108 — The crash inbox goes to zero** (drafted 2026-08-16, from an
 audit of production `app_issues`). The hub held 23 reports; eight had been
