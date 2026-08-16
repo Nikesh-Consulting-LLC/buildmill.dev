@@ -645,6 +645,17 @@ def test_commit_files_emits_null_shas_for_deletes(monkeypatch):
     async def update_ref(*a, **k):
         return None
 
+    async def get_tree(tok, owner, repo, ref):
+        # The base tree holds `gone.md` but NOT `never-existed.md`.
+        return {
+            "truncated": False,
+            "tree": [
+                {"path": "docs/factory/gone.md", "type": "blob"},
+                {"path": "docs/factory/INDEX.md", "type": "blob"},
+                {"path": "docs", "type": "tree"},
+            ],
+        }
+
     for name, fn in [
         ("get_ref", get_ref),
         ("get_commit", get_commit),
@@ -652,6 +663,7 @@ def test_commit_files_emits_null_shas_for_deletes(monkeypatch):
         ("create_tree", create_tree),
         ("create_commit", create_commit),
         ("update_ref", update_ref),
+        ("get_tree", get_tree),
     ]:
         monkeypatch.setattr(f"app.repo_docs.github.{name}", fn)
 
@@ -662,11 +674,61 @@ def test_commit_files_emits_null_shas_for_deletes(monkeypatch):
             "main",
             "msg",
             {"docs/factory/INDEX.md": "x"},
-            {"docs/factory/gone.md"},
+            {"docs/factory/gone.md", ".buildmill/never-existed.md"},
         )
     )
     deletes = [e for e in captured["entries"] if e["sha"] is None]
+    # Only the path the base tree holds is deleted: a null-sha entry for a
+    # path GitHub does not have fails the whole tree (GitRPC::BadObjectState,
+    # seen on live when the first instruction publish tried to delete every
+    # blank kind's file).
     assert [e["path"] for e in deletes] == ["docs/factory/gone.md"]
+
+
+def test_commit_files_keeps_every_delete_when_the_listing_is_truncated(monkeypatch):
+    """A truncated listing cannot prove a path is absent, so dropping the
+    delete would silently leave a stale file forever — the us-22.1 bug."""
+    captured = {}
+
+    async def get_ref(*a, **k):
+        return {"object": {"sha": "head"}}
+
+    async def get_commit(*a, **k):
+        return {"commit": {"tree": {"sha": "base"}}}
+
+    async def create_blob(*a, **k):
+        return "blob"
+
+    async def create_tree(tok, owner, repo, base_tree, entries):
+        captured["entries"] = entries
+        return "newtree"
+
+    async def create_commit(*a, **k):
+        return "newcommit"
+
+    async def update_ref(*a, **k):
+        return None
+
+    async def get_tree(*a, **k):
+        return {"truncated": True, "tree": []}
+
+    for name, fn in [
+        ("get_ref", get_ref),
+        ("get_commit", get_commit),
+        ("create_blob", create_blob),
+        ("create_tree", create_tree),
+        ("create_commit", create_commit),
+        ("update_ref", update_ref),
+        ("get_tree", get_tree),
+    ]:
+        monkeypatch.setattr(f"app.repo_docs.github.{name}", fn)
+
+    asyncio.run(
+        repo_docs.commit_files(
+            "t", "acme/webshop", "main", "msg", {"a.md": "x"}, {"gone.md"}
+        )
+    )
+    assert [e["path"] for e in captured["entries"] if e["sha"] is None] == ["gone.md"]
 
 
 # --- unchanged contracts ---------------------------------------------------
