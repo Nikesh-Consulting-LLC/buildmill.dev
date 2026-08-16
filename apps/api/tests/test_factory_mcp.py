@@ -4558,6 +4558,16 @@ def release_claim(monkeypatch):
     monkeypatch.setattr(
         "app.factory_mcp.db.get_release", lambda s, rid: releases.get(rid)
     )
+    # us-101.1: the requirement behind each included item. Stubbed here so
+    # these stay tests of the RANGE; the enrichment has its own coverage.
+    monkeypatch.setattr(
+        "app.factory_mcp.db.release_source_material",
+        lambda s, org, proj, ids: {
+            "items": {},
+            "always_on_uat": [],
+            "caps": {"body_chars": 1500, "acceptance_criteria": 12, "case_titles": 25},
+        },
+    )
 
     async def fake_token(settings, org_id, repo_full_name=None):
         return "ghs_test"
@@ -4629,6 +4639,10 @@ def test_release_changes_returns_the_range(mcp_client, release_claim, monkeypatc
     assert body["file_count"] == 2
     assert body["work_items"][0]["display_id"] == "US-1.2.3"
     assert body["truncated"] is False
+    # us-101.1: a subject line is a string, and the migrations in the range
+    # are worked out here rather than left to the agent to go looking for.
+    assert body["commits"][0]["message"] == "msg c1"
+    assert body["migrations"] == ["infra/supabase/migrations/131_x.sql"]
 
 
 def test_release_changes_filters_by_path_prefix(

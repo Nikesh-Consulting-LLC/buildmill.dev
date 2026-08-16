@@ -21,6 +21,7 @@ import asyncio
 import contextvars
 import json
 import logging
+import re
 from typing import Any
 
 from fastapi import HTTPException
@@ -38,6 +39,7 @@ from . import (
     github_tokens,
     llm,
     project_env,
+    release_notes,
     release_prep,
     repo_browse,
     validation,
@@ -2407,18 +2409,86 @@ reported rather than applied silently, because a range that claims to be
 complete and isn't is exactly the failure the tool exists to prevent."""
 RELEASE_FILES_PAGE = 300
 
+# us-101.1: the rule lives in release_notes, so the cut (which records the
+# migrations onto the release) and this tool cannot disagree about what one is.
+_migration_paths = release_notes.migration_paths
+
+
+def _subject_line(message: Any) -> str:
+    """The commit's first line, as a string. Empty message yields ""."""
+    lines = str(message or "").strip().splitlines()
+    return lines[0] if lines else ""
+
+
+def _release_range_note(
+    *,
+    first_release: bool,
+    range_truncated: bool,
+    commits_truncated: bool,
+    next_cursor: int | None,
+    prefix: str,
+) -> str:
+    """What the agent must say in the notes rather than write around.
+
+    us-101.1 adds the prefix case. GitHub caps a compare's file list at 300
+    upstream, so narrowing an already-capped list cannot be complete — and an
+    empty answer to `path_prefix='…/migrations/'` reads exactly like "this
+    release ran no migrations". The two have to be told apart here, because
+    downstream they are the same empty list."""
+    parts: list[str] = []
+    if first_release:
+        parts.append(
+            "This is the project's FIRST release — there is no previous "
+            "release to compare against, so the file list is unavailable and "
+            "the commit history is capped. `migrations` is empty because the "
+            "range is unknown, NOT because none ran. Say so in the notes."
+        )
+    if commits_truncated:
+        parts.append(
+            "`commit_count` is the true size of the range; `commits` carries "
+            "only the ones GitHub returned. Say that you read a sample."
+        )
+    if range_truncated:
+        parts.append(
+            "GitHub capped the changed-file list at 300 for this range, so "
+            "`files`, `file_count` and `migrations` are all partial."
+        )
+        if prefix:
+            parts.append(
+                f"You narrowed that already-partial list with "
+                f"path_prefix='{prefix}'. An empty or short result here does "
+                "NOT mean there are no such files — it means they may have "
+                "fallen off the end upstream. Do not report absence from it."
+            )
+    if next_cursor:
+        parts.append(
+            "The change range is larger than one page. Follow `cursor`, and "
+            "if you stop early, say so in the notes."
+        )
+    return " ".join(parts)
+
 
 @mcp.tool(**_read("Get release changes"))
 async def get_release_changes(
     prep_id: str, path_prefix: str = "", cursor: int = 0
 ) -> dict[str, Any]:
     """What actually changed in the release your claimed prep job is
-    describing — the commits and the changed file paths between the previous
-    release and this one, plus the work items it includes. Read this BEFORE
-    writing the notes: it is the only way to know which migrations ran and
-    which modules moved. path_prefix narrows the file list (e.g.
-    'infra/supabase/migrations/'); follow `cursor` when `truncated` is true,
-    and if you cannot read the whole range, SAY SO in the notes."""
+    describing, and what it was meant to change. Read this BEFORE writing
+    anything — it is the whole of your source material.
+
+    Commits and changed file paths between the previous release and this one;
+    `migrations` and `touched_modules` already worked out for you. Every
+    included work item carries its `body` and `acceptance_criteria` — what the
+    story PROMISED, which is what a check must verify — and
+    `existing_case_titles`, the cases that item already owns. Those are copied
+    onto this release automatically when you submit, along with
+    `always_on_uat_case_titles`, so write regression cases that cover the gaps
+    between them rather than saying the same thing again.
+
+    `commit_count` is the true size of the range; `commits` may carry fewer.
+    path_prefix narrows the file list; follow `cursor` when `truncated` is
+    true. Read `note` every time and repeat what it says in the notes — it is
+    where a partial range admits to being partial."""
     settings = get_settings()
     worker = _worker()
     prep = db.get_release_prep(settings, prep_id, str(worker["org_id"]))
@@ -2462,6 +2532,16 @@ async def get_release_changes(
             files = compare.get("files") or []
             # GitHub's compare caps `files` at 300 and says so on the payload.
             range_truncated = len(files) >= 300
+            # us-101.1: GitHub caps the commits it returns at 250 but reports
+            # the real size on the payload. `len(commits)` therefore
+            # UNDERSTATES a large release, and an agent reading "62 commits"
+            # off a 400-commit range writes notes claiming a coverage it does
+            # not have.
+            total_commits = compare.get("total_commits")
+            commit_count = (
+                int(total_commits) if isinstance(total_commits, int) else len(commits)
+            )
+            commits_truncated = commit_count > len(commits)
         else:
             # No previous release: the range is the branch's own history, and
             # GitHub's compare API has nothing to compare against. The files
@@ -2472,8 +2552,16 @@ async def get_release_changes(
             )
             files = []
             range_truncated = len(commits) >= 250
+            commit_count = len(commits)
+            commits_truncated = range_truncated
     except github.GitHubError as e:
         return _github_err(e)
+
+    # us-101.1: derived from the FULL file list, before the prefix narrows it.
+    # Which migrations ran is the first thing a reviewer asks, and making the
+    # agent find them by guessing this project's migration folder is how it
+    # comes back with none.
+    migrations = _migration_paths(files)
 
     prefix = (path_prefix or "").strip().lstrip("/")
     if prefix:
@@ -2482,6 +2570,15 @@ async def get_release_changes(
     start = max(0, int(cursor or 0))
     page = files[start : start + RELEASE_FILES_PAGE]
     next_cursor = start + RELEASE_FILES_PAGE if start + RELEASE_FILES_PAGE < len(files) else None
+
+    items = list(release.get("included_items") or [])
+    material = db.release_source_material(
+        settings,
+        str(worker["org_id"]),
+        str(prep["project_id"]),
+        [str(i.get("issue_id")) for i in items if i.get("issue_id")],
+    )
+    work_items = [{**i, **(material["items"].get(str(i.get("issue_id"))) or {})} for i in items]
 
     return {
         "version": release["version"],
@@ -2492,15 +2589,16 @@ async def get_release_changes(
         "commits": [
             {
                 "sha": c.get("sha"),
-                "message": ((c.get("commit") or {}).get("message") or "")
-                .strip()
-                .splitlines()[:1],
+                # us-101.1: `[:1]` here was a LIST slice, so every message
+                # arrived as ["subject"] under a key typed as a string.
+                "message": _subject_line((c.get("commit") or {}).get("message")),
                 "author": ((c.get("commit") or {}).get("author") or {}).get("name"),
                 "date": ((c.get("commit") or {}).get("author") or {}).get("date"),
             }
             for c in commits
         ],
-        "commit_count": len(commits),
+        "commit_count": commit_count,
+        "commits_returned": len(commits),
         "files": [
             {
                 "path": f.get("filename"),
@@ -2511,22 +2609,24 @@ async def get_release_changes(
             for f in page
         ],
         "file_count": len(files),
-        "work_items": release.get("included_items") or [],
+        "work_items": work_items,
+        "always_on_uat_case_titles": material["always_on_uat"],
+        "source_material_caps": material["caps"],
+        # us-101.1: computed at the cut from `project_modules.path_globs` and,
+        # until now, never shown to the agent that has to say which areas of
+        # the product moved.
+        "touched_modules": release.get("touched_modules") or [],
+        "migrations": migrations,
         # Loud on purpose: an agent that receives a partial range and believes
         # it complete writes notes that claim coverage they do not have.
         "truncated": bool(next_cursor) or range_truncated,
         "cursor": next_cursor,
-        "note": (
-            "This is the project's FIRST release — there is no previous "
-            "release to compare against, so the file list is unavailable and "
-            "the commit history is capped. Say so in the notes."
-            if first_release
-            else (
-                "The change range is larger than one page. Follow `cursor`, "
-                "and if you stop early, say so in the notes."
-                if (next_cursor or range_truncated)
-                else ""
-            )
+        "note": _release_range_note(
+            first_release=first_release,
+            range_truncated=range_truncated,
+            commits_truncated=commits_truncated,
+            next_cursor=next_cursor,
+            prefix=prefix,
         ),
     }
 
@@ -5543,19 +5643,30 @@ async def submit_release_notes(
     prep_id: str,
     notes_summary: str,
     notes_detail: str,
-    test_cases: list[dict[str, str]] | None = None,
+    test_cases: list[dict[str, Any]] | None = None,
     proposed_version: str = "",
     version_rationale: str = "",
+    notes_doc: dict[str, Any] | None = None,
+    uncovered: list[str] | None = None,
 ) -> dict[str, Any]:
     """Complete a claimed release-prep job (US-63.1).
 
-    Hand back BOTH sets of notes — `notes_summary` is a few lines a manager
-    reads at a glance, `notes_detail` explains what actually changed: schema
-    changes, migrations applied, modules affected, read from
-    get_release_changes rather than inferred. The version is read from the
-    release, never chosen by you. `test_cases` are the regression cases you
-    authored for this release as a whole (title, steps, expected_result) and
-    are attached alongside the ones the included work items already carry.
+    `notes_summary` is a few lines a manager reads at a glance, and its first
+    line must carry the version. `notes_detail` is what a reviewer needs:
+    schema changes, migrations, modules — read from get_release_changes, never
+    inferred. `notes_doc` is the page itself: `{standfirst, sections, blocks}`
+    in the vocabulary your instruction quotes. Its shape is coerced, never
+    refused.
+
+    `test_cases` is the checklist the manager will work through, and us-101.3
+    means it is no longer optional. Each case needs a `title`, `steps` (what
+    to DO) and an `expected_result` (what to SEE) — a title with nothing
+    behind it is refused — plus a `section` for where it belongs in the run,
+    an optional `sort`, `critical: true` for a check the test suite cannot
+    make, and `story` naming the work item it tests. Every included work item
+    must be accounted for: a case you wrote, a case it already carries, or its
+    display id in `uncovered`. All of that is checked at once, so one reply
+    tells you everything to fix.
 
     That is the whole job. Deploying to UAT, verifying its health, and
     everything after is the system's own pipeline — it fires the moment this
@@ -5575,7 +5686,9 @@ async def submit_release_notes(
     result = await release_prep.submit(
         settings, prep_id, worker, notes_summary, notes_detail, test_cases,
         proposed_version=(proposed_version or "").strip() or None,
-        version_rationale=(version_rationale or "").strip() or None
+        version_rationale=(version_rationale or "").strip() or None,
+        notes_doc=notes_doc,
+        uncovered=uncovered,
     )
     if "error" in result:
         return _err(result["error"])
@@ -5591,6 +5704,15 @@ async def submit_release_notes(
         md += (
             f" {result['test_cases_inherited']} inherited and "
             f"{result['test_cases_attached']} regression test cases attached."
+        )
+    # us-101.4: shape advice, not a rejection — the submit already succeeded.
+    for finding in result.get("notes_doc_findings") or []:
+        md += f"\n- note: {finding}"
+    if result.get("document_error"):
+        md += (
+            f"\n- the release-notes document could not be written "
+            f"({result['document_error']}). The notes are on the release; the "
+            "exported file is missing."
         )
     return _next(
         {"markdown": md, **result},

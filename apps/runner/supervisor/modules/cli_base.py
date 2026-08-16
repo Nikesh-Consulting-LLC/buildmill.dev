@@ -264,10 +264,21 @@ def _breakdown_prompt(ctx: RunContext) -> str:
 
 
 def _release_prep_prompt(ctx: RunContext) -> str:
+    """The mechanics of a release-prep job, and nothing else.
+
+    us-101.6: what a release's notes should SAY is the project's Release
+    instruction, which arrives on the claim and is inlined below. This
+    function is the runner's, deployed with the runner and identical for
+    every project — so it must not be the place release-note quality is
+    decided, which is what it had become.
+    """
     c = ctx.context or {}
     prep_id = c.get("prep_id", "")
     version = c.get("version", "")
-    return (
+    instruction = (c.get("instruction") or "").strip()
+    agent_instructions = (c.get("agent_instructions") or "").strip()
+
+    parts = [
         "You already hold a claimed release-prep job — the factory claimed "
         "it on your behalf before this session started, the moment it "
         "assigned you the work. Do NOT call claim_release_prep_work or "
@@ -281,18 +292,25 @@ def _release_prep_prompt(ctx: RunContext) -> str:
         f"Prep id: `{prep_id}`  Release: {version}\n\n"
         "## Your tools\n"
         f"- `get_release_changes(\"{prep_id}\", path_prefix=\"\", cursor=0)` — "
-        "the commits and changed files since the previous release, and the "
-        "work items this release includes. Read this BEFORE writing anything; "
-        "page through it with `cursor` when `truncated` is true. If you "
-        "cannot read the whole range, say so in the notes rather than "
-        "guessing.\n"
+        "the commits and changed files since the previous release, the work "
+        "items this release includes WITH their acceptance criteria and the "
+        "test cases they already carry, plus the migrations and modules in "
+        "the range. Read this BEFORE writing anything; page through it with "
+        "`cursor` when `truncated` is true, and repeat what `note` says "
+        "rather than writing around it.\n"
         f"- `submit_release_notes(\"{prep_id}\", notes_summary, notes_detail, "
-        "test_cases)` — hands the job back. The FIRST LINE of notes_summary "
-        f"must contain the version `{version}` verbatim. notes_summary is a "
-        "few lines a manager reads at a glance; notes_detail explains what "
-        "actually changed (schema, migrations, modules) from what you read "
-        "in get_release_changes. test_cases is optional: regression cases "
-        "(title, steps, expected_result) for the release as a whole.\n\n"
+        "test_cases, proposed_version, version_rationale, notes_doc, "
+        "uncovered)` — hands the job back. The FIRST LINE of notes_summary "
+        f"must contain the version `{version}` verbatim. Every test case "
+        "needs a title, `steps` (what to DO) and an `expected_result` (what "
+        "to SEE); a title with nothing behind it is refused, and every "
+        "included work item must be accounted for. The tool's own "
+        "description has the full contract — read it.\n\n"
+        "## The deploy has NOT happened\n"
+        "Do not describe a deployment, its duration, or any test-suite "
+        "result. None of them exist while you are writing: the UAT deploy is "
+        "fired BY your hand-back, after it succeeds. The release page fills "
+        "those in itself once they are real.\n\n"
         "## Handing back\n"
         "That is the whole job — call submit_release_notes and stop. "
         "Deploying to UAT and everything after is the system's own pipeline, "
@@ -300,7 +318,23 @@ def _release_prep_prompt(ctx: RunContext) -> str:
         "trigger or verify. A refused call is NOT a finished job: read why, "
         "fix it, and try again — never report done without a successful "
         "submit_release_notes."
-    )
+    ]
+    vocabulary = (c.get("notes_vocabulary") or "").strip()
+    if vocabulary:
+        parts.append("\n\n" + vocabulary)
+    if instruction:
+        parts.append(
+            "\n\n## How this project wants its releases written\n"
+            "The project's Release instruction, which the manager edits and "
+            "which governs everything above about CONTENT.\n\n" + instruction
+        )
+    if agent_instructions:
+        parts.append(
+            "\n\n## Agent Instructions for this project\n"
+            "The project's conventions — read the versioning rules here "
+            "before proposing a version.\n\n" + agent_instructions
+        )
+    return "".join(parts)
 
 
 def parse_stories(text: str) -> list:
