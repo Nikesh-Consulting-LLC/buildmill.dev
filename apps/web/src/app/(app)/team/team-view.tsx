@@ -19,6 +19,7 @@ import {
   Users,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { RoleCapabilities } from "@/components/role-icon";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { money } from "@/lib/budget";
@@ -253,6 +254,7 @@ export function TeamView({
   hostByPrincipal,
   machines,
   assignedByPrincipal,
+  kindsByPrincipal,
   maxAgents,
   claudeBillingByPrincipal,
   moduleByPrincipal,
@@ -279,6 +281,10 @@ export function TeamView({
   machines: MachineOption[];
   /** US-35.3: open items assigned to each principal, people and agents alike. */
   assignedByPrincipal: Record<string, number>;
+  /** us-107.3: `runner_config.enabled_kinds` per agent principal, so the row
+   *  shows what it can do without opening it. Absent for people and headless
+   *  MCP workers, which have no runner config at all. */
+  kindsByPrincipal: Record<string, string[] | null>;
   /** US-57.2: the org's agent quota — the roster derives "used" from `members` itself. */
   maxAgents: number;
   /** US-55.6: 'subscription' | 'api' | 'platform' | null per principal — the
@@ -417,6 +423,7 @@ export function TeamView({
         runnerStatus={runnerStatus}
         hostByPrincipal={hostByPrincipal}
         assignedByPrincipal={assignedByPrincipal}
+        kindsByPrincipal={kindsByPrincipal}
         moduleByPrincipal={moduleByPrincipal}
         runningRunByPrincipal={runningRunByPrincipal}
         effortByPrincipal={effortByPrincipal}
@@ -458,6 +465,7 @@ function MemberList({
   runnerStatus,
   hostByPrincipal,
   assignedByPrincipal,
+  kindsByPrincipal,
   moduleByPrincipal,
   runningRunByPrincipal,
   effortByPrincipal,
@@ -478,6 +486,10 @@ function MemberList({
   runnerStatus: RunnerStatus;
   hostByPrincipal: Record<string, AgentSeat>;
   assignedByPrincipal: Record<string, number>;
+  /** us-107.3: `runner_config.enabled_kinds` per agent principal, so the row
+   *  shows what it can do without opening it. Absent for people and headless
+   *  MCP workers, which have no runner config at all. */
+  kindsByPrincipal: Record<string, string[] | null>;
   moduleByPrincipal: Record<string, string[]>;
   /** US-78.11: principal -> the run it is holding right now, or absent.
    *  Drives the CLI button's glow. */
@@ -663,6 +675,16 @@ function MemberList({
                         <span className="rounded-full border px-1.5 py-0.5 text-[10px] font-medium uppercase text-muted-foreground">
                           agent
                         </span>
+                      )}
+                      {/* us-107.3: all four capabilities, greyed where the
+                          agent lacks one. Always four — "what can it not do"
+                          is usually the thing being looked for, and a filtered
+                          list silently answers only half the question. */}
+                      {isAgent && (
+                        <RoleCapabilities
+                          kinds={kindsByPrincipal[m.principal_id]}
+                          iconClassName="size-3.5"
+                        />
                       )}
                       {isAgent && moduleLabel && (
                         <span className="rounded-full border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">

@@ -22,6 +22,8 @@ import {
   type AgentRoleKey,
 } from "@/lib/agent-roles";
 import { AgentRename } from "@/components/agent-rename";
+import { RoleIcon } from "@/components/role-icon";
+import { cn } from "@/lib/utils";
 
 import { BillingReadiness } from "../../billing-readiness";
 import { AgentTabs } from "../agent-tabs";
@@ -383,6 +385,18 @@ function ConfigEditor({
                       : roles.filter((r) => r !== role.key)
                   )
                 }
+              />
+              {/* us-107.3: the same glyph the routing buttons and the team
+                  page use, so the checkbox here and the icon on a Dispatch
+                  button are visibly the same capability. */}
+              <RoleIcon
+                role={role.key}
+                className={cn(
+                  "mt-0.5 shrink-0",
+                  roles.includes(role.key)
+                    ? "text-foreground"
+                    : "text-muted-foreground/40",
+                )}
               />
               <span className="min-w-0">
                 <span className="block text-xs font-medium">{role.label}</span>

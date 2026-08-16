@@ -18,28 +18,35 @@ export function triageAction(type: string): {
   reason: string;
   action: string;
   mode: TodoActionMode;
+  /** us-107.3: the run kind this click creates, so the button can wear the
+   *  capability icon of the agent it needs rather than a generic rocket. */
+  kind: string;
 } {
   if (type === "feature")
     return {
       reason: "Draft — no PRD yet; draft one to define the requirement",
       action: "Draft PRD",
       mode: "draft-prd",
+      kind: "prd",
     };
   if (type === "bug")
     return {
       reason: "Draft — dispatch the root cause analysis",
       action: "Dispatch RCA",
       mode: "dispatch",
+      kind: "plan",
     };
   if (type === "chore")
     return {
       reason: "Draft — no planning phase; dispatch builds it",
       action: "Dispatch build",
       mode: "dispatch",
+      kind: "code",
     };
   return {
     reason: "Draft — send it for planning",
     action: "Dispatch planning",
     mode: "dispatch",
+    kind: "plan",
   };
 }

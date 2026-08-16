@@ -26,6 +26,7 @@ import {
   type AgentRoleKey,
 } from "@/lib/agent-roles";
 import { cn } from "@/lib/utils";
+import { RoleIcon } from "@/components/role-icon";
 import {
   poolAvailability,
   selectablePools,
@@ -949,6 +950,18 @@ export function AddAgentWizard({
                                 : roles.filter((r) => r !== role.key),
                             )
                           }
+                        />
+                        {/* us-107.3: the same glyph the roster and the
+                            routing buttons use, so a capability is picked
+                            here wearing the icon it will wear everywhere. */}
+                        <RoleIcon
+                          role={role.key}
+                          className={cn(
+                            "mt-0.5 shrink-0",
+                            roles.includes(role.key)
+                              ? "text-foreground"
+                              : "text-muted-foreground/40",
+                          )}
                         />
                         <span className="min-w-0">
                           <span className="block text-xs font-medium">

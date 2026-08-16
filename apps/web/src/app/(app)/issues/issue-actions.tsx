@@ -4,19 +4,24 @@ import { useState } from "react";
 import { useRouter } from "@/lib/router-with-progress";
 import { Archive, ArchiveRestore, Loader2, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { canMarkFixed } from "@/lib/mark-fixed";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { MarkFixedButton } from "@/components/mark-fixed-button";
 
 const RUNNING_STATUSES = ["queued", "running"];
 
 export function IssueActions({
   issueId,
   title,
+  type,
   status,
   abandonedAt,
 }: {
   issueId: string;
   title: string;
+  /** us-107.1: a feature is never marked fixed by hand. */
+  type: string;
   status: string;
   abandonedAt: string | null;
 }) {
@@ -75,6 +80,11 @@ export function IssueActions({
           A run is queued or running — abandoning is blocked; deleting will
           force-delete.
         </p>
+      )}
+      {/* us-107.1: sits before Abandon deliberately — it is the outcome the
+          manager wants more often, and the two read as the pair they are. */}
+      {canMarkFixed(type, status, abandonedAt) && (
+        <MarkFixedButton issueId={issueId} />
       )}
       <Button
         variant="outline"
