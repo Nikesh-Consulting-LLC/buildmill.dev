@@ -892,6 +892,7 @@ export default async function IssueDetailPage({
           <IssueActions
             issueId={issue.id}
             title={issue.title}
+            type={issue.type}
             status={issue.status}
             abandonedAt={issue.abandoned_at}
           />

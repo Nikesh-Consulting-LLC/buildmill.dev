@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { heldReason } from "@/lib/dispatch-block";
 import { toastError, toastSuccess } from "@/components/ui/toast";
 import { FeatureBatchAction } from "@/components/feature-batch-action";
+import { MarkFixedButton } from "@/components/mark-fixed-button";
 import { ReviewPeek } from "./review-peek";
 import {
   GuidelineRecommendationsGroup,
@@ -476,7 +477,7 @@ export function WaitingList({
                         {item.age}
                       </span>
                     </div>
-                    {(item.peekKind || item.inspectHref) && (
+                    {(item.peekKind || item.inspectHref || item.markFixable) && (
                       <div className="flex items-center gap-2">
                         {item.peekKind && (
                           <Button
@@ -504,6 +505,13 @@ export function WaitingList({
                           >
                             {item.inspectLabel ?? "Inspect"}
                           </Button>
+                        )}
+                        {item.markFixable && (
+                          <MarkFixedButton
+                            issueId={item.id}
+                            variant="ghost"
+                            className="h-8 flex-1"
+                          />
                         )}
                       </div>
                     )}
@@ -746,6 +754,13 @@ export function WaitingList({
                             >
                               {item.inspectLabel ?? "Inspect"}
                             </Button>
+                          )}
+                          {/* us-107.1: a secondary slot, never the primary one
+                              — the row still exists to say what the factory
+                              would do next. This is the way out when the
+                              answer is "nothing, I already fixed it". */}
+                          {item.markFixable && (
+                            <MarkFixedButton issueId={item.id} variant="ghost" />
                           )}
                           {item.mode === "navigate" ? (
                             <Button

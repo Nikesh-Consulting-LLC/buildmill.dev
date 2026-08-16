@@ -6239,6 +6239,7 @@ export type Database = {
           worker_type: string
         }[]
       }
+      mark_issue_fixed: { Args: { p_issue: string }; Returns: Json }
       next_org_shortname: { Args: { p_name: string }; Returns: string }
       next_project_slug: {
         Args: { p_name: string; p_org: string }

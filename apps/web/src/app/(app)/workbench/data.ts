@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { computeTestGateState, type TestRunResultRow } from "@/lib/test-state";
 import { deriveBatchGate, type BatchGate } from "@/lib/batch-gate";
 import { workItemDisplayId } from "@/lib/work-items";
+import { canMarkFixed } from "@/lib/mark-fixed";
 import { budgetState } from "@/lib/budget";
 import { getServerClient } from "@/lib/request-cache";
 import {
@@ -109,6 +110,11 @@ export type TodoItem = {
    * word for a run log and the wrong one for a description still being
    * written, now that a Triage row's primary slot dispatches. */
   inspectLabel?: string;
+  /** us-107.1: this item can be completed without a run — a bug fixed in a
+   * change already in flight, a chore done by hand. False for features, for
+   * anything already complete, and for anything with a run in flight, so the
+   * row never offers a button migration 278 would refuse. */
+  markFixable?: boolean;
   /** Review rows can expand into a peek (US-6.5). */
   peekKind?: PeekKind;
   /** US-24.1: the feature this story belongs to, for nesting. */
@@ -524,6 +530,10 @@ function toItem(
     href,
     mode,
     inspectHref,
+    // us-107.1: computed here, once, from the row's own type and status —
+    // every group builds its items through `toItem`, so no group can forget
+    // it and none can disagree with migration 278 about who qualifies.
+    markFixable: canMarkFixed(i.type, i.status),
     blocked: blocked ?? null,
   };
 }
