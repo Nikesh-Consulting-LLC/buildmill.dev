@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  ArrowUpRight,
   Bug,
+  Check,
   ChevronRight,
   ClipboardCopy,
   Inbox,
@@ -221,7 +223,11 @@ export function ReportsHub({
                       >
                         Open the work item this became
                       </Button>
-                    ) : (
+                    ) : canPromote(report) ? (
+                      // The dialog stays for the case it was built for —
+                      // picking an epic. A decided report is not offered it
+                      // at all: `promote_app_issue` refuses one, and an
+                      // action that always fails is worse than no action.
                       <PromoteDialog
                         report={report}
                         epics={epics}
@@ -239,7 +245,7 @@ export function ReportsHub({
                           )
                         }
                       />
-                    )}
+                    ) : null}
                     <Button
                       variant="outline"
                       size="sm"
@@ -261,28 +267,54 @@ export function ReportsHub({
                     >
                       <ClipboardCopy className="mr-1 size-4" /> Copy context
                     </Button>
-                    {report.status === "ignored" ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={busy === report.id}
-                        onClick={() => setStatus(report, "new")}
-                      >
-                        <RotateCcw className="mr-1 size-4" /> Reopen
-                      </Button>
-                    ) : (
-                      !decided && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={busy === report.id}
-                          onClick={() => setStatus(report, "ignored")}
-                        >
-                          Ignore
-                        </Button>
-                      )
-                    )}
+                    {decided
+                      ? // A promoted report is not reopened here — it now
+                        // lives as a work item, and that is where it closes.
+                        report.status !== "promoted" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={busy === report.id}
+                            onClick={() => setStatus(report, "new")}
+                          >
+                            <RotateCcw className="mr-1 size-4" /> Reopen
+                          </Button>
+                        )
+                      : [
+                          // US-105.1: the outcome the hub was missing. Not
+                          // every report becomes a work item — plenty are
+                          // fixed on the way past — and without this the
+                          // only way to close one honestly was to Ignore it,
+                          // which says the opposite of what happened.
+                          <Button
+                            key="fixed"
+                            variant="outline"
+                            size="sm"
+                            disabled={busy === report.id}
+                            onClick={() => setStatus(report, "fixed")}
+                          >
+                            <Check className="mr-1 size-4 text-green-600" />{" "}
+                            Mark fixed
+                          </Button>,
+                          <Button
+                            key="ignored"
+                            variant="outline"
+                            size="sm"
+                            disabled={busy === report.id}
+                            onClick={() => setStatus(report, "ignored")}
+                          >
+                            Ignore
+                          </Button>,
+                        ]}
                   </div>
+
+                  {!decided && (
+                    <p className="text-xs text-muted-foreground">
+                      Marking it fixed closes it. If the same error is reported
+                      again it opens a new report and counts from one — a
+                      regression is a new bug, not a reopened old one.
+                    </p>
+                  )}
                 </div>
     );
   };
@@ -320,13 +352,71 @@ export function ReportsHub({
       .eq("id", report.id);
     setBusy(null);
     if (error) {
-      toastError(error.message);
+      // Reopening a closed report can collide with the fresh row its own
+      // regression already opened: only one row per (deployment, fingerprint)
+      // may be open at a time. That is the dedup rule working, so say what
+      // happened rather than surfacing a constraint name.
+      toastError(
+        error.code === "23505"
+          ? "This error is already open again as a newer report"
+          : error.message,
+      );
       return;
     }
     setReports((current) =>
       current.map((r) => (r.id === report.id ? { ...r, status } : r)),
     );
-    toastSuccess(status === "new" ? "Reopened" : `Moved to ${status}`);
+    toastSuccess(
+      status === "new"
+        ? "Reopened"
+        : status === "fixed"
+          ? "Marked fixed"
+          : `Moved to ${status}`,
+    );
+  }
+
+  /**
+   * US-105.2: promote straight from the list, with no epic.
+   *
+   * The dialog exists to ask the one thing a report cannot answer — which
+   * epic — and for a bug the honest answer is usually "none". Asking every
+   * time turned the common case into a detour, so the list takes the default
+   * and the dialog stays for when the epic matters. The epic is an ordinary
+   * field on the work item afterwards either way.
+   */
+  async function promote(report: ReportRow) {
+    setBusy(report.id);
+    const { data, error } = await createClient().rpc("promote_app_issue", {
+      p_app_issue: report.id,
+    });
+    setBusy(null);
+    if (error) {
+      toastError(error.message);
+      return;
+    }
+    const issueId = typeof data === "string" ? data : null;
+    setReports((current) =>
+      current.map((r) =>
+        r.id === report.id
+          ? { ...r, status: "promoted", promoted_issue_id: issueId }
+          : r,
+      ),
+    );
+    toastSuccess(
+      "Promoted to a work item",
+      "Open the report to jump to it, or find it in the backlog.",
+    );
+  }
+
+  /** Promotion is offered only while a report is still open and is not the
+   *  self-monitoring wiring check — the same two conditions the dialog
+   *  already applies inside the expanded detail. */
+  function canPromote(report: ReportRow) {
+    return (
+      OPEN_STATUSES.includes(report.status) &&
+      !report.promoted_issue_id &&
+      !isWiringCheck(report)
+    );
   }
 
   if (!reports.length) {
@@ -460,26 +550,46 @@ export function ReportsHub({
                   <ClipboardCopy className="size-4" />
                   Copy
                 </Button>
-                {report.status === "ignored" ? (
+                {canPromote(report) && (
                   <Button
                     variant="outline"
                     disabled={busy === report.id}
-                    onClick={() => setStatus(report, "new")}
+                    onClick={() => promote(report)}
                   >
-                    <RotateCcw className="size-4" />
-                    Reopen
+                    <ArrowUpRight className="size-4" />
+                    Promote
                   </Button>
-                ) : (
-                  !decided && (
-                    <Button
-                      variant="outline"
-                      disabled={busy === report.id}
-                      onClick={() => setStatus(report, "ignored")}
-                    >
-                      Ignore
-                    </Button>
-                  )
                 )}
+                {decided
+                  ? report.status !== "promoted" && (
+                      <Button
+                        variant="outline"
+                        disabled={busy === report.id}
+                        onClick={() => setStatus(report, "new")}
+                      >
+                        <RotateCcw className="size-4" />
+                        Reopen
+                      </Button>
+                    )
+                  : [
+                      <Button
+                        key="fixed"
+                        variant="outline"
+                        disabled={busy === report.id}
+                        onClick={() => setStatus(report, "fixed")}
+                      >
+                        <Check className="size-4 text-green-600" />
+                        Fixed
+                      </Button>,
+                      <Button
+                        key="ignored"
+                        variant="outline"
+                        disabled={busy === report.id}
+                        onClick={() => setStatus(report, "ignored")}
+                      >
+                        Ignore
+                      </Button>,
+                    ]}
               </div>
 
               {isOpen && (
@@ -500,7 +610,8 @@ export function ReportsHub({
               <TableHead>Report</TableHead>
               <TableHead className="w-16 whitespace-nowrap text-right">Count</TableHead>
               <TableHead className="w-24">Status</TableHead>
-              <TableHead className="w-20 text-right">Actions</TableHead>
+              {/* Wider since US-105.1/105.2: four actions live here now. */}
+              <TableHead className="w-40 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -591,31 +702,55 @@ export function ReportsHub({
                       >
                         <ClipboardCopy className="size-4" />
                       </Button>
-                      {report.status === "ignored" ? (
+                      {canPromote(report) && (
                         <Button
                           variant="ghost"
                           size="sm"
-                          title="Reopen"
-                          aria-label="Reopen"
+                          title="Promote to a work item"
+                          aria-label="Promote to a work item"
                           disabled={busy === report.id}
-                          onClick={() => setStatus(report, "new")}
+                          onClick={() => promote(report)}
                         >
-                          <RotateCcw className="size-4" />
+                          <ArrowUpRight className="size-4" />
                         </Button>
-                      ) : (
-                        !decided && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            title="Ignore"
-                            aria-label="Ignore"
-                            disabled={busy === report.id}
-                            onClick={() => setStatus(report, "ignored")}
-                          >
-                            ✕
-                          </Button>
-                        )
                       )}
+                      {decided
+                        ? report.status !== "promoted" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              title="Reopen"
+                              aria-label="Reopen"
+                              disabled={busy === report.id}
+                              onClick={() => setStatus(report, "new")}
+                            >
+                              <RotateCcw className="size-4" />
+                            </Button>
+                          )
+                        : [
+                            <Button
+                              key="fixed"
+                              variant="ghost"
+                              size="sm"
+                              title="Mark fixed"
+                              aria-label="Mark fixed"
+                              disabled={busy === report.id}
+                              onClick={() => setStatus(report, "fixed")}
+                            >
+                              <Check className="size-4 text-green-600" />
+                            </Button>,
+                            <Button
+                              key="ignored"
+                              variant="ghost"
+                              size="sm"
+                              title="Ignore"
+                              aria-label="Ignore"
+                              disabled={busy === report.id}
+                              onClick={() => setStatus(report, "ignored")}
+                            >
+                              ✕
+                            </Button>,
+                          ]}
                     </div>
                   </TableCell>
                 </TableRow>,

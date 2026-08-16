@@ -25,26 +25,29 @@ seed-publishes-files and section preview, 99.7's accept/decline, 100.1's
 retired-unbuilt-do-not-re-propose list — is in
 [APPLICATION.md → Delivery history](../APPLICATION.md#delivery-history).
 
-Thirteen stories are open: Phase 103's release deadlock (built and released
+Fifteen stories are open: Phase 103's release deadlock (built and released
 2026-08-16), Phase 104's two pieces of work that existed nowhere safe,
+Phase 105's two missing outcomes on the Reports hub (requested 2026-08-16),
 Phase 97's GitHub linkage repair (requested 2026-08-15, costing live runs
 today), and the residue carried out of Phases 85–89:
 
 | Order | Story | Title | Status |
 |---|---|---|---|
-| 1 | [us-103.1](us-103.1-an-abandoned-release-prep-is-reaped.md) | An abandoned release prep is reaped | Testing |
-| 2 | [us-103.3](us-103.3-the-manager-can-stop-an-in-flight-release.md) | The manager can stop an in-flight release | Testing |
-| 3 | [us-103.2](us-103.2-a-restarted-runner-re-adopts-its-prep.md) | A restarted runner re-adopts the prep it was holding | Testing |
-| 4 | [us-103.4](us-103.4-the-workbench-shows-the-release-in-flight.md) | The Workbench shows the release in flight | Testing |
-| 5 | [us-103.5](us-103.5-a-release-in-flight-freezes-dispatch.md) | A release in flight freezes dispatch, and says so | Testing |
-| 6 | [us-104.1](us-104.1-every-migration-number-is-unique.md) | Every migration number is unique | Testing |
-| 7 | [us-104.2](us-104.2-the-api-test-suite-lives-in-the-repo.md) | The API test suite lives in the repo | Testing |
-| 8 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
-| 9 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
-| 10 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
-| 11 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
-| 12 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
-| 13 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+| 1 | [us-105.1](us-105.1-a-report-can-be-marked-fixed.md) | A report can be marked fixed | Testing |
+| 2 | [us-105.2](us-105.2-a-report-is-promoted-in-one-click.md) | A report is promoted in one click | Testing |
+| 3 | [us-103.1](us-103.1-an-abandoned-release-prep-is-reaped.md) | An abandoned release prep is reaped | Testing |
+| 4 | [us-103.3](us-103.3-the-manager-can-stop-an-in-flight-release.md) | The manager can stop an in-flight release | Testing |
+| 5 | [us-103.2](us-103.2-a-restarted-runner-re-adopts-its-prep.md) | A restarted runner re-adopts the prep it was holding | Testing |
+| 6 | [us-103.4](us-103.4-the-workbench-shows-the-release-in-flight.md) | The Workbench shows the release in flight | Testing |
+| 7 | [us-103.5](us-103.5-a-release-in-flight-freezes-dispatch.md) | A release in flight freezes dispatch, and says so | Testing |
+| 8 | [us-104.1](us-104.1-every-migration-number-is-unique.md) | Every migration number is unique | Testing |
+| 9 | [us-104.2](us-104.2-the-api-test-suite-lives-in-the-repo.md) | The API test suite lives in the repo | Testing |
+| 10 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
+| 11 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
+| 12 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
+| 13 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
+| 14 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
+| 15 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
 
 **Phase 103 — A release cannot get stuck** (drafted 2026-08-16, from the
 2026.08.16.3 incident). The runner restarted ten minutes into preparing a
@@ -91,6 +94,25 @@ is refused, not merely that a missing one is — had been untracked since
 2026-08-15 with its own `.gitignore` already written for the commit that never
 came. Both stories exist because a guard that lives on one laptop is not a
 guard.
+
+**Phase 105 — The Reports hub can close a report honestly** (drafted
+2026-08-16, from the manager's own use). Reporting works and Build Mill files
+its own crashes, but the hub could only ever *promote* a report or *ignore*
+it — and plenty of bugs are simply fixed on the way past. Ignoring one records
+"not worth acting on" about something that was acted on. **us-105.1** adds
+**Mark fixed**, an outcome the database has had since migration 184 and the
+superadmin console has had a button for since US-16.9; the org-facing hub never
+grew one. The recurrence behaviour the manager asked for — fixed, and if it
+comes back it counts from one — turned out to need no code at all:
+`app_issues_open_fingerprint_key` is partial over `status in ('new','triaged')`,
+so a `fixed` row cannot be the `on conflict` target and the next occurrence
+inserts a fresh row. The story adds the button that reaches that, and the
+sentence that explains it. **us-105.2** moves promotion onto the list itself:
+`PromoteDialog` asks the one question a report cannot answer — which epic — and
+for a bug the answer is usually "none", so the common path was open-a-dialog-
+and-change-nothing. The dialog stays for when the epic matters. Both stories are
+UI only; no migration, and the `fixed` status was verified live on both projects
+before either was written.
 
 **Phase 97 — GitHub linkage stays true** (drafted 2026-08-15, from the
 run-`ff9ef2be` incident). A repository rename/transfer on GitHub answers
