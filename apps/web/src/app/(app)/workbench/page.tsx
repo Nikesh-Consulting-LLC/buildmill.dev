@@ -11,6 +11,7 @@ import {
 } from "@/lib/global-project-selection";
 import { GlobalProjectFilter } from "@/components/global-project-filter";
 import { PageHeader } from "@/components/page-header";
+import { NoCapableWorkerIcon } from "@/components/no-capable-worker";
 import { IssueDialog, type EpicOption } from "../issues/issue-dialog";
 import { ClarificationsCard } from "./clarifications-card";
 import { ParkedRunsCard } from "./parked-runs-card";
@@ -41,6 +42,7 @@ export default async function ThingsToDoPage() {
     interactiveByPrincipal,
     releaseSuggestions,
     stalledQueue,
+    agingQueue,
     incidents,
     exhaustedBudgets,
   } = await loadThingsToDo(supabase, orgId);
@@ -143,6 +145,7 @@ export default async function ThingsToDoPage() {
           { label: "stalled queue", n: stalledQueue ? 1 : 0 },
           { label: "project over budget", n: fBudgets.length },
           { label: "incident", n: fIncidents.length },
+          { label: "forgotten run", n: agingQueue ? agingQueue.count : 0 },
           { label: "open question", n: fClarifications.length },
           { label: "parked run", n: fParkedRuns.length },
         ]}
@@ -158,6 +161,34 @@ export default async function ThingsToDoPage() {
               {stalledQueue.count} item
               {stalledQueue.count > 1 ? "s have" : " has"} been queued for up to{" "}
               {stalledQueue.oldestMinutes}m, but no capable worker is online.
+            </span>
+            <span className="shrink-0 font-medium underline underline-offset-4">
+              Open Workers
+            </span>
+          </Link>
+        )}
+
+        {/* us-107.2: the run nothing ever claimed. Distinct from the stall
+            warning above, which asks "can anyone take this right now" and
+            skips any run an online agent is eligible for — which is exactly
+            how a run sat queued for six days while capable workers came and
+            went. This one asks only "has anyone", and nothing in the factory
+            reaps it: a lease can only expire if it was ever taken. */}
+        {agingQueue && (
+          <Link
+            href="/workers"
+            className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 transition-colors hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950/70 dark:text-amber-200 dark:hover:bg-amber-900/50"
+          >
+            <NoCapableWorkerIcon className="size-4 shrink-0" />
+            <span className="min-w-0 flex-1">
+              <span className="font-semibold">Forgotten in the queue:</span>{" "}
+              {agingQueue.count} run
+              {agingQueue.count > 1 ? "s have" : " has"} been queued for up to{" "}
+              {agingQueue.oldestHours}h and never claimed
+              {agingQueue.kinds.length
+                ? ` (${agingQueue.kinds.join(", ")})`
+                : ""}
+              . Nothing reclaims an unclaimed run — it will wait indefinitely.
             </span>
             <span className="shrink-0 font-medium underline underline-offset-4">
               Open Workers

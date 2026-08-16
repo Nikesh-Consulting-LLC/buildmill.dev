@@ -4,6 +4,7 @@ import { computeTestGateState, type TestRunResultRow } from "@/lib/test-state";
 import { deriveBatchGate, type BatchGate } from "@/lib/batch-gate";
 import { workItemDisplayId } from "@/lib/work-items";
 import { canMarkFixed } from "@/lib/mark-fixed";
+import { capabilityGapText, type CapabilityGap } from "@/lib/capability-gap";
 import { budgetState } from "@/lib/budget";
 import { getServerClient } from "@/lib/request-cache";
 import {
@@ -34,6 +35,20 @@ import type { GuidelineRefresh } from "./guideline-refresh-group";
 // online, capable worker to claim it. "Online" means a worker was seen within
 // the freshness window — every worker call bumps last_seen_at.
 export const QUEUE_STALL_MINUTES = 10;
+
+/** us-107.2: how long a never-claimed run may sit before the Workbench says so
+ * out loud, *regardless of whether a capable worker is online*.
+ *
+ * A full day, deliberately: this is an alarm, not a status. It has to survive
+ * a runner being off overnight without crying wolf, and still catch the case
+ * that produced it — run `f483ee01`, queued six days.
+ *
+ * The existing `QUEUE_STALL_MINUTES` warning is a different question. It asks
+ * "can anyone take this right now", and skips any run some online agent is
+ * eligible for (`if (agents.length) continue`). That is exactly how a run can
+ * be ignored for days while capable workers come and go: eligible is not the
+ * same as claimed, and nothing was measuring the difference. */
+export const QUEUE_AGING_HOURS = 24;
 export const WORKER_ONLINE_MINUTES = 5;
 
 export const AGENT_STATUSES = ["queued", "planning", "running"];
@@ -281,6 +296,21 @@ export type StalledQueue = {
   oldestMinutes: number;
 };
 
+/** us-107.2: runs nothing has ever claimed, past `QUEUE_AGING_HOURS`.
+ *
+ * Distinct from `StalledQueue` on purpose — that one means "nobody can take
+ * this", this one means "nobody has, and no part of the factory is going to
+ * notice". `requeue_expired_claims` only reclaims `running` runs whose lease
+ * expired, and a lease can only expire if it was ever taken, so an unclaimed
+ * run has no reaper anywhere. */
+export type AgingQueue = {
+  count: number;
+  oldestHours: number;
+  /** What is sitting there — "plan", "guidelines", … — so the banner can name
+   *  it rather than making the manager go and look. */
+  kinds: string[];
+};
+
 export type DeployRow = {
   id: string;
   name: string;
@@ -388,6 +418,8 @@ export type ThingsToDoData = WaitingData & {
    * currently holding a claim. Absent means no CLI window to offer. */
   interactiveByPrincipal: Record<string, boolean>;
   stalledQueue: StalledQueue | null;
+  /** us-107.2: runs queued past a day that nothing has ever claimed. */
+  agingQueue: AgingQueue | null;
   /** US-13.6: runs that died holding their claim, most recent first. */
   incidents: IncidentRow[];
   /** Per-project waiting counts for the filter chips (unfiltered). */
@@ -1145,6 +1177,9 @@ export async function loadWaiting(
       id: r.id as string,
       runId: (r.run_id as string) ?? null,
       claimed: !!run?.claimed_at,
+      // Not knowable here — the pool probe runs alongside this one, so
+      // `loadThingsToDo` fills it in once both have resolved.
+      capabilityGap: null as CapabilityGap | null,
       hoursWaiting:
         (Date.now() - new Date(r.created_at as string).getTime()) / 3_600_000,
       project: (Array.isArray(p) ? p[0]?.name : p?.name) ?? "",
@@ -1294,6 +1329,9 @@ export type RunLiveness = {
  * when the set is empty, and says which condition failed. */
 export type Eligibility = {
   agents: { principalId: string | null; name: string }[];
+  /** us-107.2: the machine-readable form, so a surface can pick the shared
+   *  `NoCapableWorker` treatment rather than printing a sentence. */
+  gap: CapabilityGap | null;
   blockedReason: string | null;
 };
 
@@ -1304,7 +1342,11 @@ async function loadFactoryHealth(
   staleByIssue: Map<string, number>;
   livenessByIssue: Map<string, RunLiveness>;
   stalledQueue: StalledQueue | null;
+  agingQueue: AgingQueue | null;
   eligibilityByIssue: Map<string, Eligibility>;
+  /** us-107.2: ask the pool question for any run, including one with no
+   *  issue. Returns null when somebody could take it. */
+  capabilityGap: (kind: string, projectId: string) => CapabilityGap | null;
 }> {
   const now = Date.now();
   const onlineCutoff = new Date(
@@ -1452,6 +1494,20 @@ async function loadFactoryHealth(
     });
   };
 
+  /** us-107.2: the same question, answerable for a run that has no issue.
+   *
+   * `eligibilityByIssue` below is keyed by issue id, so a `guidelines` pass —
+   * which carries none — could not be asked "can anyone take this?" at all.
+   * That is the run that sat six days. Callers pass kind + project and get the
+   * gap, or null when somebody could take it. */
+  const capabilityGap = (kind: string, projectId: string): CapabilityGap | null => {
+    if (eligibleFor(kind, projectId).length) return null;
+    if (online.length === 0) return "no-agent-online";
+    return online.some((w) => accessByWorker.get(w.id)?.has(projectId))
+      ? "kind-disabled"
+      : "no-project-access";
+  };
+
   const eligibilityByIssue = new Map<string, Eligibility>();
   let count = 0;
   let oldestMinutes = 0;
@@ -1471,13 +1527,13 @@ async function loadFactoryHealth(
           principalId: w.principal_id,
           name: w.name,
         })),
+        // us-107.2: one source for these words. This used to build its own
+        // strings, which meant the same state could be worded two ways once a
+        // second surface started showing it.
+        gap: capabilityGap(kind, projectId),
         blockedReason: agents.length
           ? null
-          : online.length === 0
-            ? "no agent is online"
-            : online.some((w) => accessByWorker.get(w.id)?.has(projectId))
-              ? `every online agent with access to this project has '${kind}' unchecked in its settings`
-              : "no online agent has access to this project",
+          : capabilityGapText(capabilityGap(kind, projectId)!, kind),
       });
     }
     if (agents.length) continue;
@@ -1491,11 +1547,42 @@ async function loadFactoryHealth(
     if (mins > oldestMinutes) oldestMinutes = mins;
   }
 
+  // us-107.2: the run that has simply been forgotten. Its own query rather
+  // than a filter over `queuedRuns` above, for two reasons that both bit in
+  // the 2026-08-16 incident: that query INNER JOINs `issues`, so a run with no
+  // issue (a `guidelines` pass — exactly the stuck one) is not in it at all;
+  // and its loop skips anything an online agent is eligible for, which is the
+  // very case that went unnoticed for six days.
+  const agingCutoff = new Date(
+    now - QUEUE_AGING_HOURS * 3_600_000
+  ).toISOString();
+  const { data: agingRuns } = await supabase
+    .from("runs")
+    .select("id, kind, created_at")
+    .eq("org_id", orgId)
+    .eq("status", "queued")
+    .is("claimed_at", null)
+    .lt("created_at", agingCutoff);
+
+  const aging = (agingRuns ?? []) as { kind: string; created_at: string }[];
+  const agingOldest = aging.reduce((worst, r) => {
+    const hours = (now - new Date(r.created_at).getTime()) / 3_600_000;
+    return hours > worst ? hours : worst;
+  }, 0);
+
   return {
     staleByIssue,
     livenessByIssue,
     stalledQueue: count > 0 ? { count, oldestMinutes } : null,
+    agingQueue: aging.length
+      ? {
+          count: aging.length,
+          oldestHours: Math.floor(agingOldest),
+          kinds: [...new Set(aging.map((r) => r.kind))].sort(),
+        }
+      : null,
     eligibilityByIssue,
+    capabilityGap,
   };
 }
 
@@ -2008,11 +2095,20 @@ export async function loadThingsToDo(
 
   return {
     ...waiting,
+    // us-107.2: a refresh is dispatched as a `guidelines` run, so the pool
+    // question is answerable for it — it just never was, because eligibility
+    // was keyed by issue id and a refresh carries none. Attached here rather
+    // than in `loadWaiting`, which runs before the health probe.
+    refreshItems: waiting.refreshItems.map((r) => ({
+      ...r,
+      capabilityGap: health.capabilityGap("guidelines", r.projectId),
+    })),
     releaseSuggestions,
     agentItems,
     featureRuns,
     interactiveByPrincipal,
     stalledQueue: health.stalledQueue,
+    agingQueue: health.agingQueue,
     incidents,
     projects,
     exhaustedBudgets,

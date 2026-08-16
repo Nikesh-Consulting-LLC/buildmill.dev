@@ -3,6 +3,8 @@ import { AlertTriangle, FileStack, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AgentText } from "@/components/agent-text";
 import { cn } from "@/lib/utils";
+import { NoCapableWorker } from "@/components/no-capable-worker";
+import type { CapabilityGap } from "@/lib/capability-gap";
 import { CancelStalledRefresh } from "./cancel-stalled-refresh";
 import { refreshLabel, refreshState } from "./refresh-state";
 
@@ -26,6 +28,8 @@ export type GuidelineRefresh = {
    *  that it was dispatched. This is the distinction the card was missing. */
   claimed: boolean;
   hoursWaiting: number;
+  /** us-107.2: why the pool cannot take it, or null when somebody could. */
+  capabilityGap: CapabilityGap | null;
 };
 
 /** US-43.3: one card per open guidelines refresh — the whole pass, not one
@@ -120,13 +124,24 @@ export function GuidelineRefreshGroup({ items }: { items: GuidelineRefresh[] }) 
             // The way out. `requeue_expired_claims` cannot reap this — a lease
             // can only expire if it was ever taken — so the manager is the
             // only thing that can end it, and it has to be reachable here.
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs text-amber-800 dark:text-amber-200">
-                Dispatched {item.age} and still unclaimed. Nothing reaps an
-                unclaimed run, so it will wait indefinitely — check a capable
-                worker is online, or cancel it.
-              </p>
-              {item.runId && <CancelStalledRefresh runId={item.runId} />}
+            <div className="grid gap-2">
+              {/* Why, not just that. When the pool is the cause we now say so
+                  in the shared treatment rather than making the manager infer
+                  it from a run that simply never moves. */}
+              {item.capabilityGap && (
+                <div>
+                  <NoCapableWorker gap={item.capabilityGap} kind="guidelines" />
+                </div>
+              )}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-amber-800 dark:text-amber-200">
+                  Dispatched {item.age} and still unclaimed.{" "}
+                  {item.capabilityGap
+                    ? "Fix the pool and it will be picked up, or cancel it."
+                    : "A capable agent is online but has not taken it — nothing reaps an unclaimed run, so it will wait indefinitely."}
+                </p>
+                {item.runId && <CancelStalledRefresh runId={item.runId} />}
+              </div>
             </div>
           ) : (
             <p className="text-xs text-muted-foreground">
