@@ -51,12 +51,12 @@ manager (requested 2026-08-15), Phase 102's rework of the Costs page
 | 18 | [us-100.4](us-100.4-a-template-defines-the-agent-instructions.md) | A template defines the Agent Instructions | Completed |
 | 19 | [us-100.5](us-100.5-the-refresh-run-proposes-a-document.md) | The refresh run proposes a document, not sections | Completed |
 | 20 | [us-100.6](us-100.6-versioning-is-agent-work.md) | Versioning is agent work | Completed |
-| 21 | [us-101.1](us-101.1-the-release-agent-reads-the-whole-story.md) | The release agent reads the whole story, not just its title | New |
-| 22 | [us-101.2](us-101.2-a-release-case-knows-its-section-and-its-story.md) | A release case knows its section, its story, and whether it is critical | New |
-| 23 | [us-101.3](us-101.3-every-check-is-a-step-and-an-expectation.md) | Every check is a step and an expectation | New |
-| 24 | [us-101.4](us-101.4-the-notes-are-a-declaration.md) | The notes are a declaration, not a wall of markdown | New |
-| 25 | [us-101.5](us-101.5-the-release-page-is-the-plan-a-tester-follows.md) | The release page is the plan a tester follows | New |
-| 26 | [us-101.6](us-101.6-the-release-instruction-reaches-the-agent.md) | The instruction the release agent reads is the one the manager edits | New |
+| 21 | [us-101.1](us-101.1-the-release-agent-reads-the-whole-story.md) | The release agent reads the whole story, not just its title | Testing |
+| 22 | [us-101.2](us-101.2-a-release-case-knows-its-section-and-its-story.md) | A release case knows its section, its story, and whether it is critical | Testing |
+| 23 | [us-101.3](us-101.3-every-check-is-a-step-and-an-expectation.md) | Every check is a step and an expectation | Testing |
+| 24 | [us-101.4](us-101.4-the-notes-are-a-declaration.md) | The notes are a declaration, not a wall of markdown | Testing |
+| 25 | [us-101.5](us-101.5-the-release-page-is-the-plan-a-tester-follows.md) | The release page is the plan a tester follows | Testing |
+| 26 | [us-101.6](us-101.6-the-release-instruction-reaches-the-agent.md) | The instruction the release agent reads is the one the manager edits | Testing |
 | 27 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
 | 28 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
 | 29 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
