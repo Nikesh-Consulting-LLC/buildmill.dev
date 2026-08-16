@@ -15,7 +15,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { CancelReleaseButton } from "../cancel-release-button";
+import { StopReleaseButton, STOPPABLE } from "../stop-release-button";
 import { RetryReleaseButton } from "../retry-release-button";
 
 /** US-21.5/21.6: the actions a release's state allows.
@@ -70,10 +70,15 @@ export function ReleaseActions({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        {/* US-23.1: only before an agent starts. Once the run is claimed the
-            API refuses and points at stop-the-run or reject-after-UAT. */}
-        {status === "queued" && (
-          <CancelReleaseButton releaseId={releaseId} version={version} />
+        {/* US-23.1, widened by us-103.3: every state a Stop can end. It used
+            to render for `queued` alone, so a release whose agent had died
+            offered the manager nothing at all. */}
+        {STOPPABLE.has(status) && (
+          <StopReleaseButton
+            releaseId={releaseId}
+            version={version}
+            status={status}
+          />
         )}
 
         {/* US-90.1: the attempt failed before anything shipped — retry the

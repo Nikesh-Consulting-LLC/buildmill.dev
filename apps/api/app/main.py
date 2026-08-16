@@ -108,6 +108,19 @@ async def lifespan(app: FastAPI):
             logger.warning("Reaped %d orphaned agent server job(s)", reaped)
     except Exception as e:
         logger.warning("Agent-server job reaper skipped: %s", e)
+    # US-103.1: a release prep whose supervisor died with the runner process
+    # holds the project's only in-flight release slot forever. The restart
+    # that orphaned it is very often this one.
+    try:
+        for r in db.reap_expired_release_preps(get_settings()):
+            logger.warning(
+                "Reaped abandoned release prep for %s (held by %s for %s min)",
+                r["version"],
+                r["worker"],
+                r["held_minutes"],
+            )
+    except Exception as e:
+        logger.warning("Release-prep reaper skipped: %s", e)
     # US-3.4: expired claims WITH pushed work auto-submit instead of
     # recycling — a pushed-and-forgotten item lands in review.
     try:
@@ -129,6 +142,20 @@ async def lifespan(app: FastAPI):
                         "Requeued %d expired claim(s) from the sweep", swept
                     )
                 await reconcile.reconcile_pushed_expired_claims(get_settings())
+                # US-103.1: release prep's own lease sweep, same loop, same
+                # cadence discipline. Its lease is two hours, so this fires
+                # long after the agent died — us-103.3's Stop is what covers
+                # the window, not a faster tick here.
+                for r in await asyncio.to_thread(
+                    db.reap_expired_release_preps, get_settings()
+                ):
+                    logger.warning(
+                        "Reaped abandoned release prep for %s (held by %s "
+                        "for %s min)",
+                        r["version"],
+                        r["worker"],
+                        r["held_minutes"],
+                    )
                 # US-26.7: agent-server health rides this loop rather than
                 # bringing its own scheduler — each host is probed roughly
                 # every five minutes, a few at a time.

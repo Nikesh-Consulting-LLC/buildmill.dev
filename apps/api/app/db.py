@@ -5375,6 +5375,17 @@ def get_release_uat_deployment_id(settings: Settings, project_id: str) -> str | 
 
 
 def list_release_prep_pool(settings: Settings, org_id: str) -> list[dict[str, Any]]:
+    # US-103.1: the lazy sweep, mirroring requeue_expired_claims running
+    # before a run-pool listing. A runner asking for work also clears the
+    # corpse that is blocking the project from cutting anything new.
+    try:
+        reap_expired_release_preps(settings)
+    except Exception:  # noqa: BLE001 — a listing must not fail over the sweep
+        logger.warning("Release-prep reaper skipped during pool listing", exc_info=True)
+    return _list_release_prep_pool(settings, org_id)
+
+
+def _list_release_prep_pool(settings: Settings, org_id: str) -> list[dict[str, Any]]:
     """US-63.3: queued release-prep jobs for this org — deliberately not the
     Work Items pool (list_available_work); release prep has no issue and no
     business showing up next to story work."""
@@ -5391,6 +5402,34 @@ def list_release_prep_pool(settings: Settings, org_id: str) -> list[dict[str, An
             order by p.created_at
             """,
             (org_id,),
+        ).fetchall()
+
+
+def list_held_release_preps(
+    settings: Settings, worker_id: str, org_id: str
+) -> list[dict[str, Any]]:
+    """US-103.2: what this worker is already holding.
+
+    The pool query asks for `queued`, so after a restart the runner polls,
+    sees an empty queue, and idles — while the job it claimed sits `running`
+    with nobody supervising it. It is invisible to the runner precisely
+    because the runner holds it. This is the question it could not ask.
+    """
+    if not _valid_uuid(worker_id) or not _valid_uuid(org_id):
+        return []
+    with _connect(settings) as conn:
+        return conn.execute(
+            """
+            select p.id, p.project_id, p.release_id, p.claimed_at,
+                   p.claim_expires_at, r.version, r.commit_sha,
+                   pr.name as project_name, pr.repo_full_name
+            from public.release_prep_runs p
+            join public.releases r on r.id = p.release_id
+            join public.projects pr on pr.id = p.project_id
+            where p.worker_id = %s and p.org_id = %s and p.status = 'running'
+            order by p.claimed_at
+            """,
+            (worker_id, org_id),
         ).fetchall()
 
 
@@ -5472,34 +5511,103 @@ def complete_release_prep(settings: Settings, prep_id: str, outcome: str) -> boo
     return bool(row)
 
 
+def _fail_release_prep(conn: Any, prep_id: str, error: str) -> dict[str, Any] | None:
+    """The failure landing itself, on a caller's transaction.
+
+    us-103.1 needs this inside a transaction that already holds row locks, so
+    the body lives here and `fail_release_prep` is the one-shot wrapper.
+    """
+    row = conn.execute(
+        """
+        update public.release_prep_runs
+        set status = 'failed', error = left(%s, 2000), finished_at = now()
+        where id = %s and status = 'running'
+        returning release_id
+        """,
+        (error, prep_id),
+    ).fetchone()
+    if row:
+        conn.execute(
+            """
+            update public.releases
+            set status = 'failed',
+                failure_reason = left(%s, 500),
+                updated_at = now()
+            where id = %s
+              and status in ('queued', 'running', 'notes-ready', 'deploying',
+                              'uat-deploy-failed', 'uat-signed-off', 'promoting')
+            """,
+            (error, row["release_id"]),
+        )
+    return row
+
+
 def fail_release_prep(settings: Settings, prep_id: str, error: str) -> dict[str, Any] | None:
     """Symmetric to complete_run's failure-side release update (2026-08-01
     fix): a failed prep must not leave the release stuck in-flight forever."""
     with _connect(settings) as conn:
-        row = conn.execute(
-            """
-            update public.release_prep_runs
-            set status = 'failed', error = left(%s, 2000), finished_at = now()
-            where id = %s and status = 'running'
-            returning release_id
-            """,
-            (error, prep_id),
-        ).fetchone()
-        if row:
-            conn.execute(
-                """
-                update public.releases
-                set status = 'failed',
-                    failure_reason = left(%s, 500),
-                    updated_at = now()
-                where id = %s
-                  and status in ('queued', 'running', 'notes-ready', 'deploying',
-                                  'uat-deploy-failed', 'uat-signed-off', 'promoting')
-                """,
-                (error, row["release_id"]),
-            )
+        row = _fail_release_prep(conn, prep_id, error)
         conn.commit()
     return row
+
+
+def reap_expired_release_preps(settings: Settings) -> list[dict[str, Any]]:
+    """US-103.1: an abandoned release prep fails itself.
+
+    Release prep was the one claimed job in the factory with no lease reaper.
+    `requeue_expired_claims` sweeps `runs`; nothing read
+    `release_prep_runs.claim_expires_at`, so a prep whose supervisor stopped
+    existing stayed `running` forever — and because migration 215's in-flight
+    index counts `running`, it blocked every future cut for the project.
+    Release 2026.08.16.3 sat that way for two and a half hours with a healthy
+    worker online, and was cleared by editing the production database.
+
+    Deliberately NOT a requeue. An expired `runs` claim goes back to the pool;
+    this goes to `failed` and waits for the manager, because a dead prep may
+    have burned a paid session and `dispatch_release_prep_for` refuses while
+    any prep for the release is live — an auto-requeue would loop where the
+    manager cannot see it. `failed` + notes never written is exactly what
+    `/releases/{id}/retry` accepts, so the way forward is one click.
+    """
+    reaped: list[dict[str, Any]] = []
+    with _connect(settings) as conn:
+        rows = conn.execute(
+            """
+            select p.id, p.release_id, r.version, r.project_id,
+                   coalesce(w.name, 'the agent') as worker_name,
+                   round(extract(epoch from (now() - p.claimed_at)) / 60)::int
+                     as held_minutes,
+                   round(extract(epoch from (now() - p.claim_expires_at)) / 60)::int
+                     as lapsed_minutes
+            from public.release_prep_runs p
+            join public.releases r on r.id = p.release_id
+            left join public.workers w on w.id = p.worker_id
+            where p.status = 'running' and p.claim_expires_at < now()
+            for update of p skip locked
+            """
+        ).fetchall()
+        for row in rows:
+            # US-103.1 AC3: the honest sentence. Not a fabricated agent
+            # failure — nobody reported anything, which is the whole problem.
+            reason = (
+                f"{row['worker_name']} stopped reporting: the claim on this "
+                f"release prep expired {row['lapsed_minutes']} minute(s) ago, "
+                f"after being held for {row['held_minutes']} minute(s). No "
+                "notes were written and the pinned commit is untouched — "
+                "Retry re-runs the notes leg against the same build."
+            )
+            if _fail_release_prep(conn, str(row["id"]), reason):
+                reaped.append(
+                    {
+                        "prep_id": str(row["id"]),
+                        "release_id": str(row["release_id"]),
+                        "version": row["version"],
+                        "worker": row["worker_name"],
+                        "held_minutes": row["held_minutes"],
+                    }
+                )
+        conn.commit()
+    return reaped
 
 
 def get_worker_run(

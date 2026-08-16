@@ -585,6 +585,102 @@ real repo, and no agent has authored an automated case or reported test evidence
 Each rides the next release that exercises it. This is recorded rather than smoothed
 over, per the same evidence-over-vocabulary rule Phase 78 established.
 
+**Phases 98–102** (27 stories, closed 2026-08-16 — built and released to production
+in two releases; the manager tests on live, so what each story recorded as *not
+proven* is listed rather than assumed) — landing many branches at once, moving the
+instructions into the repository, collapsing them to one document, rebuilding what a
+release hands the manager, and the Costs page.
+
+- **Many branches, one landing** (98) — `merge` becomes a run kind (migration 261),
+  dispatched on a chore, which keeps the chore's single-shot shape. A chore carries the
+  branch list that is the merge's whole subject (262), validated where it is written and
+  frozen into `input_context` with each head sha; the claim authorises reading several
+  refs, and `get_workspace(ref=…)` answers a **full tree** per branch, never a delta,
+  because a delta of a branch you have not seen is a silently wrong tree. The result
+  lands on a factory branch behind a pull request whose body **leads** with the
+  per-branch account, and approve merges it with a **merge commit** rather than a squash
+  — for the same reason release PRs are never squashed. A branch the agent cannot
+  resolve fails the whole merge (`report_merge_failure`), classed `work-fault` so a real
+  conflict never counts against runner health.
+- **The instructions live in the repo** (99) — one markdown file per instruction kind
+  under `.buildmill/`, from a map with exactly one home (`instruction_files.py`, mirrored
+  to TypeScript and pinned by a test in both directions, because an unchecked mirror is
+  how `run-kinds.ts` came to list seven kinds while the database allowed ten). Build Mill
+  owns `AGENTS.md` whole and `CLAUDE.md` is permanently the `@AGENTS.md` pointer;
+  hand-written `AGENTS.md` content is destroyed on first publish, an accepted consequence
+  stated rather than discovered. Dispatch stops writing to GitHub entirely — the sync
+  becomes the manager's own click, driven by migration 135's hash column. `get_work_context`
+  carries a **pointer** to the file with the prose as fallback, so the file is authoritative
+  and MCP is the door when it is missing.
+- **One document, not twenty-two sections** (100) — a project's conventions stop being
+  twenty-two catalog rows and become one markdown document, `projects.agent_instructions`
+  (263), which **is** `AGENTS.md`'s body; `.buildmill/Guidelines.md` retires hours after
+  us-99.3 shipped it. The naming collision the manager reported is fixed in one vocabulary
+  across project settings, both template editors and the audit trail. The refresh run
+  proposes whole files — the document and any per-task file — accepted or rejected whole.
+  And versioning becomes agent work (264): an agent reads the project's rules and proposes
+  a version with its reasoning, validated on what is true of a version in *any* scheme
+  (single token, tag-safe, free, reasoned) rather than against `YYYY.MM.DD.N` — which
+  would re-impose exactly the constraint the story removes. `releases.version` is
+  untouched; the proposal is an input to the manager's cut, never the cut.
+- **A release explains itself** (101) — the release agent had a version string, four
+  fields per work item, commit subject lines and changed paths; it now gets each item's
+  body and acceptance criteria, the titles of the cases it is about to inherit (which the
+  server copies onto the release seconds after the hand-back, so it had been authoring
+  regression cases blind), `touched_modules`, and the migrations in the range. A release
+  case gains `section`, `sort` and `critical` (271) and can finally name the work item it
+  tests — `issue_id` had been on the row since 031 and rendered by the page for as long,
+  but was never inserted, so every agent-authored case was permanently unattributable.
+  The hand-back now refuses a check that is a title with nothing behind it and a release
+  that leaves an included item unaccounted for, returning **every** failure at once,
+  because one rule per re-run is one agent session per rule. Notes become a declaration
+  the app renders (272) rather than the HTML page first asked for: the masthead facts do
+  not exist when the agent writes (the UAT deploy is fired **by** the hand-back), and a
+  sandboxed frame — the only safe one for agent-authored HTML — can never carry the
+  verdict buttons that gate sign-off. The page opens with those facts, every one of which
+  it already loaded and never showed, including the deploy result, which had rendered only
+  inside a card gated on failure; `releases.migrations` (274) supplies the one fact
+  nothing had persisted.
+- **Costs leads with the numbers** (102) — the page opens on the week, stops explaining
+  itself, and puts six numbers on top that obey the same filters as the table beneath
+  them, built from one parameter set so the band cannot answer a different slice.
+
+**What Phases 98–102 recorded as not proven, and what is left to the manager.** The
+five stories that closed carrying an unbuilt acceptance criterion, kept here because the
+index no longer names them: **98.6 AC1** shipped the per-branch account as markdown
+leading the PR body, not as the structured table above the diff the story asked for, and
+its AC2/AC4/AC6 ride machinery a merge run was never specifically exercised against;
+**99.4 AC7** (auditing each publish) is not built; **99.6 AC4** (a project created from a
+template publishes its files — it still seeds `worker_instructions` only, and `.buildmill/`
+appears on the first manual publish) and **AC5** (the editor previewing which file a
+section becomes) are not built; **99.7 AC3/AC5** (accept/decline per instruction, and a
+declined offer staying declined) are not built, so a template edit can be *seen* but not
+actioned, and AC1 computes the comparison on read, meaning nothing notifies a manager;
+**100.1** deliberately leaves the `project_guidelines` **drop migration unwritten** — the
+table is still referenced by `guideline_recommendations.section_id` and the legacy accept
+path, and it is the only rollback for 263's backfill, so dropping it is a separate later
+migration. Beyond those: **no merge run has ever been executed**, and **no release-prep
+run has been executed under Phase 101** — the chain from claim-carries-the-instruction to
+agent-writes-to-it is proved by tests and by reading, not by having run. Phase 101's and
+102's **entire visual layer has never been rendered in a browser**: the checkout they were
+built in had no `apps/web/.env.local`, so the dev server could not construct a Supabase
+client. Both phases were released to production at the manager's explicit direction
+without a UAT sitting. Migrations 271–274 are additive and were applied to both databases
+ahead of the deploy, so a rollback is a redeploy that leaves them harmlessly in place.
+
+**Fixed in passing, and worth remembering** (101): `db.release_versions_for_prep` queried
+`public.release_preps`, a table that exists nowhere — so us-100.6's version proposal would
+have raised `UndefinedTable` the first time an agent used it, and had not, only because no
+prompt ever told an agent the parameter existed. Migration 269 had rewritten the `release`
+instruction eight days earlier and left it naming `submit_release_run` (not a tool) and
+three deploy tools that resolve a `runs` row a release prep does not have, while asserting
+the Agent Instructions were in a context that carried nothing; 273 rewrites it and the
+claim now delivers the instruction, the document and the generated notes vocabulary.
+Commit messages had been reaching the agent as a one-element **list** under a
+string-typed key, and a `path_prefix` query over a file list GitHub had already capped at
+300 answered as though complete — so "this release ran no migrations" and "they fell off
+the end upstream" were the same empty list.
+
 **Retired unbuilt — do not re-propose without a fresh ask** (2026-08-09 sweep): the
 `mcp_tool_calls` stall detector (us-69.1) and the `git clean -fd` workspace hygiene fix
 (us-69.2 — a shared project workspace still carries untracked sibling-story files between

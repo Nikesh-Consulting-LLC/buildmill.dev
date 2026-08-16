@@ -9,6 +9,11 @@ import {
   rollupFeatureRows,
   type FeatureRollup,
 } from "./feature-rollup";
+import {
+  prepLiveness,
+  type PrepLiveness,
+  type PrepRow,
+} from "./release-liveness";
 import type { OpenClarification } from "./clarifications-card";
 import type { GuidelineRecommendation } from "./guideline-recommendations-group";
 import type { GuidelineRefresh } from "./guideline-refresh-group";
@@ -408,8 +413,16 @@ export type ReleaseSuggestion = {
     total: number;
     /** Merged items NOT carried by this release — the next cut's cargo. */
     extraMerged: number;
+    /** us-103.4: is an agent actually preparing it? Null in the states where
+     * no agent holds anything — a deploy pipeline or a human does — because
+     * a card that implied one would be lying in a new way. */
+    liveness: PrepLiveness | null;
   } | null;
 };
+
+/** us-103.4: the release states where an agent holds (or is owed) the job.
+ * Everything later is deploy.py's pipeline or a person. */
+const AGENT_HELD = new Set(["queued", "running"]);
 
 /** US-37.3: a project that cannot start work because its budget is spent.
  *
@@ -1763,17 +1776,27 @@ export async function loadThingsToDo(
   const releaseSuggestions: ReleaseSuggestion[] = [];
   {
     const MERGED_CAP = 500;
-    const [{ data: relRows }, { data: projRows }, { data: mergedRows }] =
-      await Promise.all([
+    const [
+      { data: relRows },
+      { data: projRows },
+      { data: mergedRows },
+      { data: prepRows },
+    ] = await Promise.all([
         supabase
           .from("releases")
-          .select("id, project_id, version, status, released_at, included_items")
+          .select("id, project_id, version, status, released_at, created_at, included_items")
           .eq("org_id", orgId)
+          // us-103.4: `notes-ready`, `deploying` and `uat-deploy-failed` were
+          // missing, so a release sitting in any of them showed no card at
+          // all — invisible in exactly the states that need a manager.
           .in("status", [
             "released",
             "queued",
             "running",
+            "notes-ready",
+            "deploying",
             "uat-deployed",
+            "uat-deploy-failed",
             "uat-signed-off",
             "promoting",
           ]),
@@ -1792,6 +1815,19 @@ export async function loadThingsToDo(
           .is("abandoned_at", null)
           .order("status_changed_at", { ascending: false })
           .limit(MERGED_CAP),
+        // us-103.4: the liveness the card never had. `release_prep_runs`
+        // carries worker_id, claimed_at and claim_expires_at — everything the
+        // run liveness pass reads, under different table cover. Org-scoped
+        // rather than trusting RLS alone: the US-9.7 lesson is that RLS
+        // permits every org the manager belongs to, not just the active one.
+        supabase
+          .from("release_prep_runs")
+          .select(
+            "id, release_id, status, claimed_at, claim_expires_at, " +
+              "workers!release_prep_runs_worker_id_fkey(name, principal_id)"
+          )
+          .eq("org_id", orgId)
+          .in("status", ["queued", "running"]),
       ]);
 
     type Rel = {
@@ -1800,9 +1836,34 @@ export async function loadThingsToDo(
       version: string;
       status: string;
       released_at: string | null;
+      created_at: string;
       included_items: unknown;
     };
     const rels = (relRows ?? []) as Rel[];
+
+    // us-103.4: the prep row per release, reshaped for `prepLiveness`. A
+    // `queued` row is a job nobody has taken; `running` is one an agent
+    // holds — and whether it is still breathing is what the card could not
+    // say for two and a half hours on 2026-08-16.
+    type PrepRowShape = {
+      release_id: string;
+      status: string;
+      claimed_at: string | null;
+      claim_expires_at: string | null;
+      workers: { name: string; principal_id: string | null }
+        | { name: string; principal_id: string | null }[]
+        | null;
+    };
+    const prepByRelease = new Map<string, PrepRow>();
+    for (const row of (prepRows ?? []) as unknown as PrepRowShape[]) {
+      const w = Array.isArray(row.workers) ? row.workers[0] : row.workers;
+      prepByRelease.set(row.release_id, {
+        workerName: w?.name ?? "",
+        workerPrincipalId: w?.principal_id ?? null,
+        claimedAt: row.status === "running" ? row.claimed_at : null,
+        claimExpiresAt: row.claim_expires_at,
+      });
+    }
     // The last release that actually shipped, per project.
     const shipped = new Map<string, Rel>();
     for (const r of rels) {
@@ -1833,19 +1894,27 @@ export async function loadThingsToDo(
           i.project_id === proj.id &&
           (!cutoff || (i.status_changed_at ?? "") > cutoff)
       );
-      if (!mine.length) continue;
-
       // AC5 (amended during UAT 2026-08-14): a release already in flight IS
       // the card — its version, live status, and its own included_items
       // snapshot — never a prompt to cut another. Other blockers keep the
       // chip-and-no-button shape.
       const flightRel = inFlight.get(proj.id);
+      // us-103.4: an in-flight release is shown even when nothing new has
+      // merged behind it. This `continue` used to fire first, and release
+      // 2026.08.16.3 carried zero items — so the Workbench showed no card at
+      // all for the very release that was stuck.
+      if (!mine.length && !flightRel) continue;
+
       let flight: ReleaseSuggestion["flight"] = null;
       if (flightRel) {
         const snapshot = (
           Array.isArray(flightRel.included_items) ? flightRel.included_items : []
         ) as { issue_id: string; title: string; type: string; display_id: string | null }[];
         const carried = new Set(snapshot.map((x) => x.issue_id));
+        // us-103.4: only the notes leg has an agent. `deploying`, `uat-deployed`,
+        // `uat-signed-off` and `promoting` are pipelines or people, and the
+        // card must not imply an agent is sitting on them.
+        const prep = prepByRelease.get(flightRel.id) ?? null;
         flight = {
           id: flightRel.id,
           version: flightRel.version,
@@ -1858,6 +1927,9 @@ export async function loadThingsToDo(
           })),
           total: snapshot.length,
           extraMerged: mine.filter((i) => !carried.has(i.id)).length,
+          liveness: AGENT_HELD.has(flightRel.status)
+            ? prepLiveness(prep, flightRel.created_at, Date.now())
+            : null,
         };
       }
       const blocker =

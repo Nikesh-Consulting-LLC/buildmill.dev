@@ -17,11 +17,22 @@
 // amber chip, which read as still being asked to cut after having just cut.
 
 import Link from "next/link";
-import { ExternalLink, Tag } from "lucide-react";
+import {
+  Activity,
+  CircleAlert,
+  ExternalLink,
+  OctagonAlert,
+  Tag,
+} from "lucide-react";
 
 import { StatusBadge, type IssueStatus } from "@/components/status-badge";
 import { TypeBadge, type IssueType } from "@/components/type-badge";
 import { CutReleaseDialog } from "../releases/cut-release-dialog";
+import {
+  STOPPABLE,
+  StopReleaseButton,
+} from "../releases/stop-release-button";
+import { duration } from "./release-liveness";
 import type { ReleaseSuggestion } from "./data";
 
 // The release lifecycle in plain words, for the line under the version.
@@ -32,6 +43,90 @@ const FLIGHT_WORDS: Record<string, string> = {
   "uat-signed-off": "signed off — ready to promote to production",
   promoting: "promoting to production",
 };
+
+/** us-103.4: the liveness line, and Stop when there is something to stop.
+ *
+ * The three readings are worded so that "abandoned" cannot be mistaken for
+ * slow. That distinction is the entire point: a spinner and a corpse looked
+ * identical here, and the manager only found out by reading the database. */
+function Liveness({ flight }: { flight: NonNullable<ReleaseSuggestion["flight"]> }) {
+  const l = flight.liveness;
+  const stoppable = STOPPABLE.has(flight.status);
+  if (!l) {
+    // A deploy pipeline or a person owns this phase; no agent to report on.
+    return stoppable ? (
+      <div className="mt-2">
+        <StopReleaseButton
+          releaseId={flight.id}
+          version={flight.version}
+          status={flight.status}
+        />
+      </div>
+    ) : null;
+  }
+
+  const agent = l.workerPrincipalId ? (
+    <Link
+      href={`/team/${l.workerPrincipalId}/console`}
+      className="font-medium underline-offset-2 hover:underline"
+    >
+      {l.workerName || "an agent"}
+    </Link>
+  ) : (
+    <span className="font-medium">{l.workerName || "an agent"}</span>
+  );
+
+  const body =
+    l.reading === "unclaimed" ? (
+      <>Waiting {duration(l.heldMinutes)} for an agent to pick it up.</>
+    ) : l.reading === "working" ? (
+      <>
+        Prepared by {agent} · {duration(l.heldMinutes)}
+      </>
+    ) : l.reading === "silent" ? (
+      <>
+        {agent} has not reported for {duration(l.silentMinutes)} — it may have
+        stopped.
+      </>
+    ) : (
+      <>
+        {agent} stopped reporting {duration(l.silentMinutes)} ago and its claim
+        has expired. Nothing is preparing this release; the sweep will fail it.
+      </>
+    );
+
+  const tone =
+    l.reading === "abandoned"
+      ? "border-destructive/40 bg-destructive/5 text-destructive"
+      : l.reading === "silent"
+        ? "border-amber-300 bg-amber-50/60 text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-400"
+        : "border-transparent text-muted-foreground";
+
+  return (
+    <div
+      className={`mt-2 flex flex-wrap items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-xs ${tone}`}
+    >
+      <span className="flex min-w-0 items-center gap-1.5">
+        {l.reading === "abandoned" ? (
+          <OctagonAlert className="size-3.5 shrink-0" />
+        ) : l.reading === "silent" ? (
+          <CircleAlert className="size-3.5 shrink-0" />
+        ) : (
+          <Activity className="size-3.5 shrink-0" />
+        )}
+        <span className="min-w-0">{body}</span>
+      </span>
+      {stoppable && (
+        <StopReleaseButton
+          releaseId={flight.id}
+          version={flight.version}
+          status={flight.status}
+          size="icon-sm"
+        />
+      )}
+    </div>
+  );
+}
 
 function ItemRows({
   items,
@@ -114,6 +209,22 @@ export function ReleaseSuggestions({
                 View release
               </Link>
             </div>
+
+            {/* us-103.4: who is actually doing it, and whether they are still
+                breathing. For two and a half hours on 2026-08-16 this card
+                said "being prepared" about a job whose supervisor had ceased
+                to exist — the sentence was true of the status and false of
+                the world. */}
+            <Liveness flight={s.flight} />
+
+            {/* us-103.5: the freeze, said where the manager is standing. The
+                per-item refusal already reaches every dispatch button through
+                org_issue_dispatch_blocks; this is the same fact stated once,
+                so it is legible even with no work item on screen. */}
+            <p className="mt-2 text-xs text-muted-foreground">
+              While this release is in flight, work on {s.project} can be
+              written but not dispatched.
+            </p>
 
             {/* The release's own snapshot — the authority on what it carries. */}
             <ItemRows items={s.flight.items} total={s.flight.total} />
