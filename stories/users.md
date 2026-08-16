@@ -36,7 +36,7 @@ today), and the residue carried out of Phases 85–89:
 | Order | Story | Title | Status |
 |---|---|---|---|
 | 1 | [us-107.1](us-107.1-a-work-item-can-be-marked-fixed.md) | A work item can be marked fixed | Testing |
-| 2 | [us-107.2](us-107.2-nothing-sits-queued-forever.md) | Nothing sits queued forever | New |
+| 2 | [us-107.2](us-107.2-nothing-sits-queued-forever.md) | Nothing sits queued forever | Testing |
 | 3 | [us-106.1](us-106.1-a-draft-dispatches-from-the-workbench.md) | A draft dispatches from the Workbench | Testing |
 | 4 | [us-105.1](us-105.1-a-report-can-be-marked-fixed.md) | A report can be marked fixed | Testing |
 | 5 | [us-105.2](us-105.2-a-report-is-promoted-in-one-click.md) | A report is promoted in one click | Testing |

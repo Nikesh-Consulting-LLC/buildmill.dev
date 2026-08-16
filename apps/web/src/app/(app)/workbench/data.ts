@@ -614,8 +614,12 @@ export async function loadWaiting(
     // US-43.3: one card per open guidelines refresh — the whole pass.
     supabase
       .from("guideline_refreshes")
+      // us-107.2: the run comes along so the card can tell "an agent is
+      // reading this" from "nothing has picked it up". The FK is named
+      // because `guideline_refreshes` holds FKs to both `runs` and `issues`
+      // — an un-hinted embed is how PGRST201 starts (BUG-1.1).
       .select(
-        "id, summary, created_at, project_id, scope, focus, workers(name), projects!inner(name, archived_at), guideline_recommendations(id, status)"
+        "id, summary, created_at, project_id, scope, focus, run_id, workers(name), projects!inner(name, archived_at), guideline_recommendations(id, status), runs!guideline_refreshes_run_id_fkey(status, claimed_at)"
       )
       .eq("org_id", orgId)
       .eq("status", "pending")
@@ -1129,8 +1133,20 @@ export async function loadWaiting(
       id: string;
       status: string;
     }[];
+    // us-107.2: claimed, not merely dispatched. `claimed_at` is the only
+    // honest test — a run sits `queued` with every claim column null from the
+    // moment it is created until a worker takes it, which may be never.
+    const runRow = r.runs as unknown as
+      | { status: string; claimed_at: string | null }
+      | { status: string; claimed_at: string | null }[]
+      | null;
+    const run = Array.isArray(runRow) ? runRow[0] : runRow;
     return {
       id: r.id as string,
+      runId: (r.run_id as string) ?? null,
+      claimed: !!run?.claimed_at,
+      hoursWaiting:
+        (Date.now() - new Date(r.created_at as string).getTime()) / 3_600_000,
       project: (Array.isArray(p) ? p[0]?.name : p?.name) ?? "",
       projectId: r.project_id as string,
       worker: (Array.isArray(w) ? w[0]?.name : w?.name) ?? "",
