@@ -9,7 +9,8 @@ import {
   resolveGlobalSelection,
 } from "@/lib/global-project-selection";
 import { CutReleaseDialog } from "./cut-release-dialog";
-import { StopReleaseButton, STOPPABLE } from "./stop-release-button";
+import { StopReleaseButton } from "./stop-release-button";
+import { STOPPABLE } from "./release-states";
 import { DeleteReleaseButton } from "./delete-release-button";
 import { RetryReleaseButton } from "./retry-release-button";
 import { EmptyState } from "@/components/empty-state";
