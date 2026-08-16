@@ -61,6 +61,15 @@ def targets(env: dict[str, str]) -> dict[str, str]:
     return out
 
 
+def strip_prefix(name: str) -> str:
+    """`276_project_env` -> `project_env`, `077b_fix_x` -> `fix_x`.
+
+    The one definition of a migration's identity, applied to file stems and to
+    ledger rows alike so the two can be compared. The `[a-z]?` covers the
+    hand-inserted `077b`/`115b` files."""
+    return re.sub(r"^\d+[a-z]?_", "", name)
+
+
 def normalize_sql(body: str) -> str:
     """Strip comments and collapse whitespace so prod/dev bodies compare fairly
     (Supabase's migration path strips SQL comments on apply)."""
@@ -73,19 +82,30 @@ def cmd_apply(args: argparse.Namespace) -> int:
     path = MIGRATIONS / args.file
     if not path.exists():
         sys.exit(f"error: {path} not found")
-    name = re.sub(r"^\d+_", "", path.stem)
+    name = strip_prefix(path.stem)
     sql = path.read_text(encoding="utf-8")
     version = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d%H%M%S")
 
     for label, url in targets(load_env()).items():
         with psycopg.connect(url) as conn:
             with conn.cursor() as cur:
+                # Compare prefix-stripped on BOTH sides. The ledger holds two
+                # naming styles — rows written here are stripped, rows written
+                # through Supabase's own migration path keep the file's number
+                # (`249_project_env`) — so matching the raw name missed the
+                # latter and offered to re-apply a migration that was already
+                # live. It also means renumbering a file (the 249 collision,
+                # 2026-08-13) does not orphan its ledger row.
                 cur.execute(
-                    "select version from supabase_migrations.schema_migrations where name = %s",
+                    "select version, name from supabase_migrations.schema_migrations "
+                    "where regexp_replace(name, '^\\d+[a-z]?_', '') = %s "
+                    "order by version desc limit 1",
                     (name,))
                 row = cur.fetchone()
                 if row and not args.force:
-                    print(f"{label}: already applied as {row[0]} — skipping (use --force to reapply)")
+                    recorded = f" as {row[1]!r}" if row[1] != name else ""
+                    print(f"{label}: already applied{recorded} at {row[0]} — skipping "
+                          f"(use --force to reapply)")
                     continue
                 cur.execute(sql)
                 cur.execute(
