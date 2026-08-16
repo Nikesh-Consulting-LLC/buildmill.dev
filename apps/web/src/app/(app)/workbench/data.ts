@@ -14,6 +14,7 @@ import {
   type PrepLiveness,
   type PrepRow,
 } from "./release-liveness";
+import { triageAction } from "./triage-action";
 import type { OpenClarification } from "./clarifications-card";
 import type { GuidelineRecommendation } from "./guideline-recommendations-group";
 import type { GuidelineRefresh } from "./guideline-refresh-group";
@@ -68,11 +69,19 @@ export type IssueRow = {
 };
 
 /** How a row's action behaves. `navigate` opens a full surface (reviews,
- * sign-offs, triage). `dispatch` / `redispatch` act inline against the same
+ * sign-offs). `dispatch` / `redispatch` act inline against the same
  * dispatch endpoint the work-item page uses (US-6.2). `approve` acts inline
  * against the same approve endpoint the full review page uses, for the gates
- * where a one-click approval needs no input the row can't supply (US-64.x). */
-export type TodoActionMode = "navigate" | "dispatch" | "redispatch" | "approve";
+ * where a one-click approval needs no input the row can't supply (US-64.x).
+ * `draft-prd` acts inline against /issues/{id}/prd/draft — a feature in
+ * `draft` is the one type `dispatch_issue` refuses outright, and drafting its
+ * PRD is the run it actually wants (us-106.1). */
+export type TodoActionMode =
+  | "navigate"
+  | "dispatch"
+  | "redispatch"
+  | "approve"
+  | "draft-prd";
 
 /** US-6.5: which peek a review row can expand into. */
 export type PeekKind = "prd" | "plan" | "code";
@@ -96,6 +105,10 @@ export type TodoItem = {
   mode: TodoActionMode;
   /** Failed runs keep a link to inspect the log alongside re-dispatch. */
   inspectHref?: string;
+  /** us-106.1: what that secondary link is called. "Inspect" is the honest
+   * word for a run log and the wrong one for a description still being
+   * written, now that a Triage row's primary slot dispatches. */
+  inspectLabel?: string;
   /** Review rows can expand into a peek (US-6.5). */
   peekKind?: PeekKind;
   /** US-24.1: the feature this story belongs to, for nesting. */
@@ -107,9 +120,10 @@ export type TodoItem = {
    * approve — the API already falls back to the feature's standing values. */
   approve?: { endpoint: string; thenDispatch?: string };
   /** US-64.x: a green "go" button — every `approve` row gets this from its
-   * mode automatically; sets it explicitly for a `navigate` row (currently
-   * only Triage's "Write PRD") that is still the one deliberate next step,
-   * not a plain "go look at this". */
+   * mode automatically; a `navigate` row can set it explicitly when it is
+   * still the one deliberate next step, not a plain "go look at this".
+   * (us-106.1 took Triage's, which was the last such row: it dispatches now,
+   * and green on this page means "approve".) */
   emphasis?: "success";
   /** US-74.5: why this item cannot be dispatched yet, straight from the SQL
    * the factory enforces (`org_issue_dispatch_blocks`). `hard` means
@@ -918,19 +932,29 @@ export async function loadWaiting(
       title: "Triage",
       items: waiting
         .filter((i) => i.status === "draft")
-        .map((i) => ({
-          // Only a feature's next step is a PRD; a story, bug or chore goes
-          // straight to planning and never has one.
-          ...toItem(
-            i,
-            i.type === "feature"
-              ? "Draft — describe it, then draft a PRD"
-              : "Draft — flesh it out or dispatch planning",
-            i.type === "feature" ? "Write PRD" : "Open draft",
-            `/issues/${i.id}`
-          ),
-          emphasis: "success" as const,
-        })),
+        .map((i) => {
+          // us-106.1: the row acts. Only a feature's next step is a PRD; a
+          // story, bug or chore goes straight to its own first run.
+          const next = triageAction(i.type);
+          return {
+            ...toItem(
+              i,
+              next.reason,
+              next.action,
+              `/issues/${i.id}`,
+              next.mode,
+              // The draft itself stays one click away, in the secondary slot.
+              `/issues/${i.id}`,
+              // A held draft wears the hourglass instead of a button that
+              // errors. Never set for a feature: `issue_dispatch_block`
+              // returns no row when `dispatch_kind_for` raises, which is
+              // exactly the feature case, and `heldReason` holds only
+              // dispatch/redispatch anyway.
+              blockByIssue.get(i.id)
+            ),
+            inspectLabel: "Open draft",
+          };
+        }),
     },
   ];
 
