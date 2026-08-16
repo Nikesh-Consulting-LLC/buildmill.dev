@@ -213,16 +213,22 @@ export default async function TeamPage({
     .map((w) => w.id as string);
   const claudeBillingByPrincipal: Record<string, string | null> = {};
   const moduleByPrincipal: Record<string, string[]> = {};
+  // us-107.3: what each agent is allowed to claim, so the roster can show it
+  // without the manager opening the agent. `null` is the us-53.4 rule — a
+  // never-saved agent is unrestricted, not benched — and must survive as null
+  // rather than collapsing to [], which would read as "does nothing".
+  const kindsByPrincipal: Record<string, string[] | null> = {};
   if (autonomousWorkerIds.length) {
     const { data: configs } = await supabase
       .from("runner_config")
-      .select("worker_id, claude_billing, enabled_modules")
+      .select("worker_id, claude_billing, enabled_modules, enabled_kinds")
       .in("worker_id", autonomousWorkerIds);
     for (const c of configs ?? []) {
       const pid = workerToPrincipal.get(c.worker_id as string);
       if (!pid) continue;
       claudeBillingByPrincipal[pid] = (c.claude_billing as string | null) ?? null;
       moduleByPrincipal[pid] = (c.enabled_modules as string[] | null) ?? [];
+      kindsByPrincipal[pid] = (c.enabled_kinds as string[] | null) ?? null;
     }
   }
 
@@ -350,6 +356,7 @@ export default async function TeamPage({
         hostByPrincipal={hostByPrincipal}
         machines={machines}
         assignedByPrincipal={assignedByPrincipal}
+        kindsByPrincipal={kindsByPrincipal}
         maxAgents={org?.max_agents ?? 3}
         claudeBillingByPrincipal={claudeBillingByPrincipal}
         moduleByPrincipal={moduleByPrincipal}

@@ -125,6 +125,11 @@ export type TodoItem = {
    * word for a run log and the wrong one for a description still being
    * written, now that a Triage row's primary slot dispatches. */
   inspectLabel?: string;
+  /** us-107.3: the run kind this row's action would create, so the button
+   * wears the capability icon of the agent it needs. Undefined where the kind
+   * genuinely is not knowable from the row — a `failed` re-dispatch replays
+   * whatever kind failed, and guessing would put the wrong glyph on it. */
+  runKind?: string;
   /** us-107.1: this item can be completed without a run — a bug fixed in a
    * change already in flight, a chore done by hand. False for features, for
    * anything already complete, and for anything with a run in flight, so the
@@ -954,24 +959,35 @@ export async function loadWaiting(
         )
         .map((i) =>
           i.status === "planned"
-            ? toItem(
-                i,
-                "Plan approved — ready to code",
-                "Dispatch coding",
-                `/issues/${i.id}`,
-                "dispatch",
-                undefined,
-                blockByIssue.get(i.id)
-              )
-            : toItem(
-                i,
-                "Ready — send it for planning",
-                "Dispatch planning",
-                `/issues/${i.id}`,
-                "dispatch",
-                undefined,
-                blockByIssue.get(i.id)
-              )
+            ? {
+                ...toItem(
+                  i,
+                  "Plan approved — ready to code",
+                  "Dispatch coding",
+                  `/issues/${i.id}`,
+                  "dispatch",
+                  undefined,
+                  blockByIssue.get(i.id)
+                ),
+                // An approved plan always codes next, whatever the type.
+                runKind: "code",
+              }
+            : {
+                ...toItem(
+                  i,
+                  "Ready — send it for planning",
+                  "Dispatch planning",
+                  `/issues/${i.id}`,
+                  "dispatch",
+                  undefined,
+                  blockByIssue.get(i.id)
+                ),
+                // us-107.3: NOT always `plan` — a chore has no planning phase
+                // (us-96.1) and dispatches straight to code. `triageAction`
+                // already encodes exactly what `dispatch_kind_for` picks, so
+                // reuse it rather than restating the rule and drifting.
+                runKind: triageAction(i.type).kind,
+              }
         ),
     },
     {
@@ -999,6 +1015,7 @@ export async function loadWaiting(
               blockByIssue.get(i.id)
             ),
             inspectLabel: "Open draft",
+            runKind: next.kind,
           };
         }),
     },

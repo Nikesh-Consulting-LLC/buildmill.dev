@@ -32,6 +32,7 @@ import { heldReason } from "@/lib/dispatch-block";
 import { toastError, toastSuccess } from "@/components/ui/toast";
 import { FeatureBatchAction } from "@/components/feature-batch-action";
 import { MarkFixedButton } from "@/components/mark-fixed-button";
+import { iconForKind } from "@/components/role-icon";
 import { ReviewPeek } from "./review-peek";
 import {
   GuidelineRecommendationsGroup,
@@ -127,9 +128,17 @@ function ActionGlyph({
     ) : (
       <ArrowRight className="size-3.5" />
     );
-  if (item.mode === "redispatch") return <RotateCcw className="size-3.5" />;
   if (item.mode === "approve") return <Check className="size-3.5" />;
-  // us-106.1: a PRD draft is authoring work, not a launch.
+  // us-107.3: a routing button says which CAPABILITY it needs. Every one of
+  // these used to be a rocket, so "send it for planning" and "ship it" looked
+  // like the same act — and the row gave no hint which kind of agent has to be
+  // in the pool for the click to go anywhere.
+  const RoleGlyph = item.runKind ? iconForKind(item.runKind) : null;
+  if (RoleGlyph) return <RoleGlyph className="size-3.5" />;
+  // Fallbacks, for the rows whose kind genuinely is not knowable: a `failed`
+  // re-dispatch replays whatever kind failed, and a wrong glyph is worse than
+  // a generic one.
+  if (item.mode === "redispatch") return <RotateCcw className="size-3.5" />;
   if (item.mode === "draft-prd") return <FileText className="size-3.5" />;
   return <Rocket className="size-3.5" />;
 }
