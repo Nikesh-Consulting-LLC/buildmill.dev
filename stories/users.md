@@ -35,67 +35,67 @@ Phases 85–89:
 | Order | Story | Title | Status |
 |---|---|---|---|
 | 1 | [us-91.1](us-91.1-the-tab-is-named-for-what-you-do-there.md) | The tab is named for what you do there | Completed |
-| 2 | [us-91.2](us-91.2-dispatch-opens-with-what-is-already-running.md) | Dispatch opens with what is already running | Testing |
+| 2 | [us-91.2](us-91.2-dispatch-opens-with-what-is-already-running.md) | Dispatch opens with what is already running | Completed |
 | 3 | [us-91.3](us-91.3-an-agent-at-work-has-a-door-to-its-cli.md) | An agent at work has a door to its CLI | Completed |
 | 4 | [us-91.4](us-91.4-things-to-do-groups-by-project.md) | Dispatch groups by project, and a project folds away | Completed |
-| 5 | [us-91.5](us-91.5-the-status-filter-is-a-set-not-a-choice.md) | The status filter is a set, not a single choice | Testing |
-| 6 | [us-91.6](us-91.6-the-test-library-is-a-table-you-can-page.md) | The test library is a table you can page through | Testing |
+| 5 | [us-91.5](us-91.5-the-status-filter-is-a-set-not-a-choice.md) | The status filter is a set, not a single choice | Completed |
+| 6 | [us-91.6](us-91.6-the-test-library-is-a-table-you-can-page.md) | The test library is a table you can page through | Completed |
 | 7 | [us-91.7](us-91.7-reports-are-bug-reports-and-live-under-activity.md) | Reports are Bug Reports, and they live under Activity | Completed |
 | 8 | [us-91.8](us-91.8-the-activity-feed-pages-ten-at-a-time.md) | The activity feed pages ten at a time | Completed |
-| 9 | [us-91.9](us-91.9-a-project-card-says-which-build-is-live.md) | A project card says which build is live | Testing |
+| 9 | [us-91.9](us-91.9-a-project-card-says-which-build-is-live.md) | A project card says which build is live | Completed |
 | 10 | [us-91.10](us-91.10-superadmin-is-four-menus-not-one-drawer.md) | SuperAdmin is four menus, not one drawer | Completed |
 | 11 | [us-91.11](us-91.11-an-agents-work-is-measured-in-seconds.md) | An agent's work is measured in seconds | Completed |
 | 12 | [us-91.12](us-91.12-the-team-page-opens-with-three-numbers.md) | The team page opens with three numbers | Completed |
 | 13 | [us-91.13](us-91.13-a-count-on-a-coloured-button-must-be-readable.md) | A count on a coloured button must be readable | Completed |
 | 14 | [us-91.14](us-91.14-every-item-shows-what-it-cost.md) | Every item shows what it cost | Completed |
 | 15 | [us-91.15](us-91.15-a-notification-says-what-happened-and-goes-there.md) | A notification says what happened, and goes there | Completed |
-| 16 | [us-91.16](us-91.16-the-build-stamp-names-the-build.md) | The build stamp names the build | Testing |
-| 17 | [us-91.17](us-91.17-the-workspace-picker-travels.md) | The workspace picker travels, and says when it's switching | Testing |
-| 18 | [us-91.18](us-91.18-merged-work-asks-to-be-released.md) | Merged work asks to be released | Testing |
-| 19 | [us-91.19](us-91.19-the-workdesk-is-one-page.md) | The workdesk is one page | Testing |
-| 20 | [us-92.1](us-92.1-the-tabs-fit-the-phone.md) | Things to Do fits in a hand | Testing |
-| 21 | [us-92.2](us-92.2-one-filter-button-not-eleven-pills.md) | One filter button, not eleven pills | Testing |
-| 22 | [us-92.3](us-92.3-a-release-is-a-card-with-its-buttons-showing.md) | A release is a card, with its buttons showing | Testing |
-| 23 | [us-92.4](us-92.4-a-test-case-says-what-it-is.md) | A test case row says what it is | Testing |
-| 24 | [us-92.5](us-92.5-the-report-is-the-row.md) | On Bug Reports, the report is the row | Testing |
-| 25 | [us-92.6](us-92.6-a-project-card-leads-with-its-state.md) | A project card leads with its state | Testing |
-| 26 | [us-93.1](us-93.1-the-front-door-tells-the-story.md) | The front door tells the story | Testing |
-| 27 | [us-94.1](us-94.1-a-new-account-waits-at-the-door.md) | A new account waits at the door | Testing |
-| 28 | [us-95.1](us-95.1-cost-gets-its-own-room.md) | Cost gets its own room, and managers hold the key | Testing |
-| 29 | [us-95.2](us-95.2-spend-is-a-curve-not-a-number.md) | Spend is a curve, not a number | Testing |
-| 30 | [us-95.3](us-95.3-every-dollar-names-the-work.md) | Every dollar names the work that bought it | Testing |
-| 31 | [us-95.4](us-95.4-a-slice-narrows-and-a-view-travels.md) | A slice narrows, and a view travels | Testing |
+| 16 | [us-91.16](us-91.16-the-build-stamp-names-the-build.md) | The build stamp names the build | Completed |
+| 17 | [us-91.17](us-91.17-the-workspace-picker-travels.md) | The workspace picker travels, and says when it's switching | Completed |
+| 18 | [us-91.18](us-91.18-merged-work-asks-to-be-released.md) | Merged work asks to be released | Completed |
+| 19 | [us-91.19](us-91.19-the-workdesk-is-one-page.md) | The workdesk is one page | Completed |
+| 20 | [us-92.1](us-92.1-the-tabs-fit-the-phone.md) | Things to Do fits in a hand | Completed |
+| 21 | [us-92.2](us-92.2-one-filter-button-not-eleven-pills.md) | One filter button, not eleven pills | Completed |
+| 22 | [us-92.3](us-92.3-a-release-is-a-card-with-its-buttons-showing.md) | A release is a card, with its buttons showing | Completed |
+| 23 | [us-92.4](us-92.4-a-test-case-says-what-it-is.md) | A test case row says what it is | Completed |
+| 24 | [us-92.5](us-92.5-the-report-is-the-row.md) | On Bug Reports, the report is the row | Completed |
+| 25 | [us-92.6](us-92.6-a-project-card-leads-with-its-state.md) | A project card leads with its state | Completed |
+| 26 | [us-93.1](us-93.1-the-front-door-tells-the-story.md) | The front door tells the story | Completed |
+| 27 | [us-94.1](us-94.1-a-new-account-waits-at-the-door.md) | A new account waits at the door | Completed |
+| 28 | [us-95.1](us-95.1-cost-gets-its-own-room.md) | Cost gets its own room, and managers hold the key | Completed |
+| 29 | [us-95.2](us-95.2-spend-is-a-curve-not-a-number.md) | Spend is a curve, not a number | Completed |
+| 30 | [us-95.3](us-95.3-every-dollar-names-the-work.md) | Every dollar names the work that bought it | Completed |
+| 31 | [us-95.4](us-95.4-a-slice-narrows-and-a-view-travels.md) | A slice narrows, and a view travels | Completed |
 | 32 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
-| 33 | [us-96.1](us-96.1-a-chore-is-one-shot.md) | A chore is one shot | Testing |
-| 34 | [us-96.2](us-96.2-a-bug-explains-itself-before-the-fix.md) | A bug explains itself before the fix | Testing |
-| 35 | [us-96.3](us-96.3-every-kind-of-work-gets-its-own-words.md) | Every kind of work gets its own words | Testing |
-| 36 | [us-96.4](us-96.4-the-feature-holds-the-steering-wheel.md) | The feature holds the steering wheel | Testing |
-| 37 | [us-96.7](us-96.7-the-workbench-triages-the-feature.md) | The workbench triages the feature, not its stories | Testing |
-| 38 | [us-96.5](us-96.5-the-buttons-match-the-work.md) | The buttons match the work | Testing |
-| 39 | [us-96.6](us-96.6-a-failed-breakdown-gets-another-try.md) | A failed breakdown gets another try | Testing |
-| 40 | [us-96.10](us-96.10-the-stage-shapes-the-model.md) | The stage shapes the model | Testing |
-| 41 | [us-96.8](us-96.8-the-hand-back-speaks-with-one-voice.md) | The hand-back speaks with one voice | Testing |
-| 42 | [us-96.9](us-96.9-a-stop-is-an-answer-not-a-breakdown.md) | A stop is an answer, not a breakdown | Testing |
-| 43 | [us-96.11](us-96.11-a-key-never-rides-the-trace.md) | A key never rides the trace | Testing |
-| 44 | [us-98.1](us-98.1-the-factory-learns-a-merge-run.md) | The factory learns a merge run | Testing |
-| 45 | [us-98.2](us-98.2-a-merge-names-the-branches-it-will-land.md) | A merge names the branches it will land | Testing |
-| 46 | [us-98.3](us-98.3-the-agent-reads-every-branch-it-must-merge.md) | The agent reads every branch it must merge | Testing |
-| 47 | [us-98.4](us-98.4-a-merge-hands-back-a-branch-and-a-pull-request.md) | A merge hands back a branch and a pull request | Testing |
-| 48 | [us-98.5](us-98.5-an-unresolved-branch-fails-the-whole-merge.md) | An unresolved branch fails the whole merge | Testing |
+| 33 | [us-96.1](us-96.1-a-chore-is-one-shot.md) | A chore is one shot | Completed |
+| 34 | [us-96.2](us-96.2-a-bug-explains-itself-before-the-fix.md) | A bug explains itself before the fix | Completed |
+| 35 | [us-96.3](us-96.3-every-kind-of-work-gets-its-own-words.md) | Every kind of work gets its own words | Completed |
+| 36 | [us-96.4](us-96.4-the-feature-holds-the-steering-wheel.md) | The feature holds the steering wheel | Completed |
+| 37 | [us-96.7](us-96.7-the-workbench-triages-the-feature.md) | The workbench triages the feature, not its stories | Completed |
+| 38 | [us-96.5](us-96.5-the-buttons-match-the-work.md) | The buttons match the work | Completed |
+| 39 | [us-96.6](us-96.6-a-failed-breakdown-gets-another-try.md) | A failed breakdown gets another try | Completed |
+| 40 | [us-96.10](us-96.10-the-stage-shapes-the-model.md) | The stage shapes the model | Completed |
+| 41 | [us-96.8](us-96.8-the-hand-back-speaks-with-one-voice.md) | The hand-back speaks with one voice | Completed |
+| 42 | [us-96.9](us-96.9-a-stop-is-an-answer-not-a-breakdown.md) | A stop is an answer, not a breakdown | Completed |
+| 43 | [us-96.11](us-96.11-a-key-never-rides-the-trace.md) | A key never rides the trace | Completed |
+| 44 | [us-98.1](us-98.1-the-factory-learns-a-merge-run.md) | The factory learns a merge run | Completed |
+| 45 | [us-98.2](us-98.2-a-merge-names-the-branches-it-will-land.md) | A merge names the branches it will land | Completed |
+| 46 | [us-98.3](us-98.3-the-agent-reads-every-branch-it-must-merge.md) | The agent reads every branch it must merge | Completed |
+| 47 | [us-98.4](us-98.4-a-merge-hands-back-a-branch-and-a-pull-request.md) | A merge hands back a branch and a pull request | Completed |
+| 48 | [us-98.5](us-98.5-an-unresolved-branch-fails-the-whole-merge.md) | An unresolved branch fails the whole merge | Completed |
 | 49 | [us-98.6](us-98.6-the-manager-reviews-the-merge-summary.md) | The manager reviews the merge summary | Testing |
-| 50 | [us-99.1](us-99.1-every-instruction-kind-has-a-file.md) | Every instruction kind has a file, and one map says which | Testing |
-| 51 | [us-99.2](us-99.2-agents-md-is-the-index.md) | AGENTS.md is the index, and Build Mill owns it whole | Testing |
-| 52 | [us-99.3](us-99.3-project-conventions-become-guidelines-md.md) | Project conventions become Guidelines.md | Testing |
+| 50 | [us-99.1](us-99.1-every-instruction-kind-has-a-file.md) | Every instruction kind has a file, and one map says which | Completed |
+| 51 | [us-99.2](us-99.2-agents-md-is-the-index.md) | AGENTS.md is the index, and Build Mill owns it whole | Completed |
+| 52 | [us-99.3](us-99.3-project-conventions-become-guidelines-md.md) | Project conventions become Guidelines.md | Completed |
 | 53 | [us-99.4](us-99.4-an-unpublished-edit-says-so.md) | An unpublished edit says so, and the manager pushes it | Testing |
-| 54 | [us-99.5](us-99.5-the-agent-reads-the-file-and-mcp-fills-the-gap.md) | The agent reads the file, and MCP fills the gap | Testing |
+| 54 | [us-99.5](us-99.5-the-agent-reads-the-file-and-mcp-fills-the-gap.md) | The agent reads the file, and MCP fills the gap | Completed |
 | 55 | [us-99.6](us-99.6-a-template-carries-the-whole-file-set.md) | A template carries the whole file set | Testing |
 | 56 | [us-99.7](us-99.7-a-template-edit-offers-itself.md) | A template edit offers itself to the projects using it | Testing |
 | 57 | [us-100.1](us-100.1-agent-instructions-is-one-document.md) | Agent Instructions is one document | Testing |
-| 58 | [us-100.2](us-100.2-agents-md-is-the-agent-instructions.md) | AGENTS.md is the Agent Instructions | Testing |
-| 59 | [us-100.3](us-100.3-the-tabs-say-what-they-hold.md) | The tabs say what they hold | Testing |
-| 60 | [us-100.4](us-100.4-a-template-defines-the-agent-instructions.md) | A template defines the Agent Instructions | Testing |
-| 61 | [us-100.5](us-100.5-the-refresh-run-proposes-a-document.md) | The refresh run proposes a document, not sections | Testing |
-| 62 | [us-100.6](us-100.6-versioning-is-agent-work.md) | Versioning is agent work | Testing |
+| 58 | [us-100.2](us-100.2-agents-md-is-the-agent-instructions.md) | AGENTS.md is the Agent Instructions | Completed |
+| 59 | [us-100.3](us-100.3-the-tabs-say-what-they-hold.md) | The tabs say what they hold | Completed |
+| 60 | [us-100.4](us-100.4-a-template-defines-the-agent-instructions.md) | A template defines the Agent Instructions | Completed |
+| 61 | [us-100.5](us-100.5-the-refresh-run-proposes-a-document.md) | The refresh run proposes a document, not sections | Completed |
+| 62 | [us-100.6](us-100.6-versioning-is-agent-work.md) | Versioning is agent work | Completed |
 | 63 | [us-101.1](us-101.1-the-release-agent-reads-the-whole-story.md) | The release agent reads the whole story, not just its title | New |
 | 64 | [us-101.2](us-101.2-a-release-case-knows-its-section-and-its-story.md) | A release case knows its section, its story, and whether it is critical | New |
 | 65 | [us-101.3](us-101.3-every-check-is-a-step-and-an-expectation.md) | Every check is a step and an expectation | New |
@@ -343,9 +343,12 @@ of each commit message, and changed paths with `+`/`-` counts — no acceptance
 criteria, no plan, and no sight of the per-story test cases the server copies
 onto the release seconds after it submits. So us-101.1 gives it the
 requirement, the cases it is about to inherit, the modules the cut already
-computed and never showed it, and the migrations in the range — and fixes
-three defects found in that payload, of which the loudest is that every commit
-message arrives as a one-element **list**. us-101.2 gives a case the section,
+computed and never showed it, and the migrations in the range — and fixes the
+defects found in that payload: every commit message arrives as a one-element
+**list**, the commit count reports the page rather than the range, and a
+`path_prefix` query over a range GitHub already truncated answers as if it
+were complete, so "no migrations" and "the migrations fell off the end" are
+the same answer. us-101.2 gives a case the section,
 position and criticality a running order needs, and lets an agent tag its own
 case with the story it tests — `issue_id` has always existed on the row and
 `attach_release_test_cases` has never set it, so an agent-authored case is
@@ -362,9 +365,15 @@ every masthead number already loaded by that page's own queries, making it a
 rendering story rather than a data one. us-101.6 closes the loop the others
 depend on: the project's **Release** worker instruction reaches nobody today,
 because instruction delivery is keyed on a `runs` row and a release prep has
-none — while the text sitting in that editable box still tells the agent to
-finish with `submit_release_run`, a tool that no longer exists, and to deploy
-to UAT itself, which the system does for it.
+none. Migration 269 *rewrote* that instruction on 2026-08-15 and backfilled it
+into every untouched project, and the new text still tells the agent to finish
+with `submit_release_run` — a name that now survives only inside prompt
+strings — still sends it to three deploy tools that resolve a `runs` row it
+does not have, and now also tells it to read the versioning rules the Agent
+Instructions carry, which this path does not deliver. That is why us-100.6's
+version proposal is unreachable in practice: the one prompt an agent actually
+reads still documents the four-argument hand-back and has never heard of
+`proposed_version`.
 
 **Phase 85 residue — us-85.3** (drafted 2026-08-12) closes the loop on the incident
 that motivated us-85.1's workspace verification. A run that fails on a broken bench —
