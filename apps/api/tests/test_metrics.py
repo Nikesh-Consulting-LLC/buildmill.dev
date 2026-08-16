@@ -1,6 +1,18 @@
 """US-1.17: diff parsing into change metrics."""
 
-from app.metrics import classify_area, compute_diff_metrics
+from app.metrics import classify_area, compute_diff_metrics, is_vendored
+
+
+def _diff(*paths_and_adds: tuple[str, int]) -> str:
+    """A minimal unified diff adding N lines to each path."""
+    out = []
+    for path, n in paths_and_adds:
+        out.append(f"diff --git a/{path} b/{path}\n")
+        out.append("--- /dev/null\n")
+        out.append(f"+++ b/{path}\n")
+        out.append(f"@@ -0,0 +1,{n} @@\n")
+        out.extend(f"+line {i}\n" for i in range(n))
+    return "".join(out)
 
 
 def test_no_diff_returns_none():
@@ -83,3 +95,69 @@ def test_classify_area_heuristic():
     assert classify_area("apps/api/app/main.py") == "backend"
     assert classify_area("infra/supabase/migrations/001_initial.sql") == "backend"
     assert classify_area("README.md") == "other"
+
+
+# --------------------------------------------------------------- us-109.3
+
+
+def test_vendored_paths_are_recognised():
+    assert is_vendored("node_modules/react/index.js")
+    assert is_vendored("apps/web/node_modules/left-pad/index.js")
+    assert is_vendored("apps/api/.venv/lib/site-packages/httpx/_api.py")
+    assert is_vendored("apps/web/.next/static/chunks/main.js")
+    assert is_vendored("package-lock.json")
+    assert is_vendored("apps/web/pnpm-lock.yaml")
+    assert is_vendored("public/js/jquery.min.js")
+    assert is_vendored("dist/bundle.js.map")
+    assert is_vendored("target/debug/build/foo.rs")
+
+
+def test_authored_paths_that_merely_look_vendored_are_not():
+    """The substring trap: silently discounting real work is worse than the
+    bug being fixed, so matching is on whole path segments."""
+    assert not is_vendored("apps/web/src/redistribute/index.ts")
+    assert not is_vendored("apps/api/app/buildings.py")
+    assert not is_vendored("src/vendors/stripe-client.ts")
+    assert not is_vendored("apps/web/src/lib/distance.ts")
+    assert not is_vendored("package.json")
+    assert not is_vendored("apps/web/src/components/target-picker.tsx")
+    # A file named for a vendored DIRECTORY is still an authored file.
+    assert not is_vendored("docs/node_modules.md")
+
+
+def test_vendored_files_do_not_count_as_output():
+    """The 2026-08-09 shape: a handful of authored files beside a dependency
+    tree. Only the authored ones are anybody's work."""
+    diff = _diff(
+        ("apps/web/src/app/page.tsx", 10),
+        ("apps/api/app/main.py", 5),
+        ("node_modules/react/index.js", 5000),
+        ("package-lock.json", 900),
+    )
+    result = compute_diff_metrics(diff)
+    assert result["lines_added"] == 15
+    assert result["files_changed"] == 2
+    # ...but the changeset really did carry them, so the record still says so.
+    assert len(result["change_breakdown"]) == 4
+    areas = {f["path"]: f["area"] for f in result["change_breakdown"]}
+    assert areas["node_modules/react/index.js"] == "vendored"
+    assert areas["package-lock.json"] == "vendored"
+    assert areas["apps/web/src/app/page.tsx"] == "frontend"
+
+
+def test_vendored_beats_a_matching_frontend_marker():
+    """`apps/web/node_modules/...` matches the frontend marker too. Whichever
+    check wins decides whether 1.8M lines count as somebody's work."""
+    assert classify_area("apps/web/node_modules/react/index.js") == "vendored"
+    assert classify_area("apps/web/.next/static/main.css") == "vendored"
+
+
+def test_an_entirely_vendored_changeset_counts_as_zero_not_none():
+    """None means "no diff to parse" and leaves the columns null. A changeset
+    that is all dependency tree was parsed fine and produced no output — those
+    are different facts and must not collapse."""
+    result = compute_diff_metrics(_diff(("node_modules/react/index.js", 5000)))
+    assert result is not None
+    assert result["lines_added"] == 0
+    assert result["files_changed"] == 0
+    assert len(result["change_breakdown"]) == 1
