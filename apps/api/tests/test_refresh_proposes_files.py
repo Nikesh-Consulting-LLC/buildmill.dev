@@ -340,3 +340,25 @@ def test_dispatch_no_longer_snapshots_the_files():
     src = inspect.getsource(db.dispatch_guidelines_refresh)
     assert "current_guidelines" not in src
     assert '"document"' in src  # the new scope
+
+
+# --- found on live: the pass is decided by a manager, past the SELECT-only RLS
+
+
+M271 = (
+    MIGRATIONS / "271_the_pass_is_decided_by_a_manager.sql"
+).read_text(encoding="utf-8")
+
+
+def test_deciding_the_pass_runs_as_definer_with_an_explicit_capability_check():
+    """guideline_refreshes has only a SELECT policy (the bundle was always
+    closed by a definer trigger), so an INVOKER decide saw no row under
+    FOR UPDATE and answered 'refresh not found' on live. Definer, with the
+    authorization stated in the body, is the fix — and the check must be
+    there, or definer would let any member decide any org's pass."""
+    body = M271.split("create or replace function public.decide_guidelines_refresh(", 1)[1]
+    head = body.split("$$", 1)[0]
+    assert "security definer" in head
+    assert "set search_path = public" in head
+    assert "has_org_capability(v_ref.org_id, 'manage_project')" in M271
+    assert "revoke all on function public.decide_guidelines_refresh" in M271

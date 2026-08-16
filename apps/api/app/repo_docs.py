@@ -720,6 +720,17 @@ async def commit_files(
         entries.append(
             {"path": path, "mode": "100644", "type": "blob", "sha": blob}
         )
+    if deletes:
+        # A `sha: null` entry for a path the base tree does not hold makes
+        # GitHub refuse the whole tree with `GitRPC::BadObjectState` (found on
+        # live 2026-08-15: the instruction publish deletes every kind with no
+        # content, most of which never existed in the repo). Delete only what
+        # is there. A truncated listing cannot prove absence, so it keeps
+        # every delete rather than silently leaving stale files behind.
+        listing = await github.get_tree(token, owner, repo, base_tree)
+        if not listing.get("truncated"):
+            present = {e["path"] for e in listing.get("tree", []) if e.get("type") == "blob"}
+            deletes = {p for p in deletes if p in present}
     for path in sorted(deletes or ()):
         entries.append(
             {"path": path, "mode": "100644", "type": "blob", "sha": None}
