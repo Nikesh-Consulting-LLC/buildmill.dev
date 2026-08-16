@@ -218,6 +218,9 @@ export const HEALTH_STYLES: Record<Health, string> = {
 export type AgentRunnerData = {
   loading: boolean;
   name: string;
+  /** US-87.5: this agent's own org, whichever workspace the viewer has active.
+   *  us-109.1: also what the settings page's Remove writes against. */
+  orgId: string;
   workers: Worker[];
   otherWorkers: Worker[];
   slot: AgentSlot | null;
@@ -542,6 +545,7 @@ export function useAgentRunner(
   return {
     loading,
     name,
+    orgId,
     workers,
     otherWorkers,
     slot,

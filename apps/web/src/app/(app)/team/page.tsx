@@ -273,8 +273,19 @@ export default async function TeamPage({
 
   const effortByPrincipal: Record<string, AgentEffort> = {};
   let totalWorkSeconds = 0;
+  // us-109.2: the org's totals over the same window. Summed from the same rows
+  // as the per-agent figures — a tile that disagreed with the rows under it
+  // would be worse than no tile. Note these accumulate over EVERY row, agent
+  // or not, while the per-principal accumulator below skips a row whose worker
+  // no longer maps to a principal: the org spent that money regardless.
+  let totalLinesAdded = 0;
+  let totalLinesRemoved = 0;
+  let totalCostUsd = 0;
   for (const row of effortRows ?? []) {
     totalWorkSeconds += Number(row.work_seconds ?? 0);
+    totalLinesAdded += Number(row.lines_added ?? 0);
+    totalLinesRemoved += Number(row.lines_removed ?? 0);
+    totalCostUsd += Number(row.cost_usd ?? 0);
     const pid = workerToPrincipal.get(row.worker_id as string);
     if (!pid) continue;
     const acc = (effortByPrincipal[pid] ??= {
@@ -298,6 +309,9 @@ export default async function TeamPage({
     completed: completedCount.count ?? 0,
     queued: queuedCount.count ?? 0,
     workSeconds: totalWorkSeconds,
+    linesAdded: totalLinesAdded,
+    linesRemoved: totalLinesRemoved,
+    costUsd: totalCostUsd,
   };
 
   // US-35.1: the machines an agent can be given a seat on, for the Add-agent

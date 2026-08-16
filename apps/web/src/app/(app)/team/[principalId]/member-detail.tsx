@@ -13,9 +13,19 @@ import { createClient } from "@/lib/supabase/client";
 import { apiFetch } from "@/lib/api";
 import { formatLastSeen } from "@/lib/format-time";
 import { ROLE_LABELS } from "@/lib/permissions";
+import { money } from "@/lib/budget";
+import { compactTokens, formatWorkSeconds } from "@/lib/work-seconds";
 import { ProjectAccess } from "../capabilities";
+import { RemoveMember } from "../remove-member";
 import { RUN_KIND_LABELS, type RunKind } from "@/lib/run-kinds";
-import { principalName, type AgentSeat, type MemberRow, type WorkerRow } from "../team-view";
+import {
+  formatWhen,
+  principalName,
+  type AgentEffort,
+  type AgentSeat,
+  type MemberRow,
+  type WorkerRow,
+} from "../team-view";
 
 export function MemberDetail({
   orgId,
@@ -24,6 +34,12 @@ export function MemberDetail({
   projects,
   slot,
   embedded,
+  moduleLabel,
+  tokenCount,
+  effort,
+  effortWindowDays,
+  canManage,
+  onRemoved,
 }: {
   orgId: string;
   member: MemberRow;
@@ -38,6 +54,18 @@ export function MemberDetail({
    *  shows the name/kind, status, and current task, so this suppresses the
    *  repeated header and the fields the row already surfaces. */
   embedded?: boolean;
+  /** us-109.1: the four facts the roster row stopped showing, because a
+   *  manager looks them up rather than scans them. `null`/absent renders
+   *  nothing rather than a dash — a person has no module, and an agent with
+   *  no runs in the window has no effort. */
+  moduleLabel?: string | null;
+  tokenCount?: number;
+  effort?: AgentEffort | null;
+  effortWindowDays?: number;
+  /** Gates the Remove action below (`manage_members`). An agent's Remove is
+   *  on its settings page instead — this is the only home a person has. */
+  canManage?: boolean;
+  onRemoved?: () => void;
 }) {
   const isAgent = member.principals?.kind === "agent";
   const [caps, setCaps] = useState<{ project_id: string }[] | null>(null);
@@ -198,6 +226,67 @@ export function MemberDetail({
         </div>
       )}
 
+      {/* us-109.1: what the roster row used to carry — the CLI module, the
+          token count, the join date. Fixed facts, read once, so they belong
+          one click in rather than on a line that is scanned. */}
+      <section className="grid gap-2">
+        <h3 className="text-sm font-semibold">About</h3>
+        <dl className="grid gap-x-8 gap-y-1.5 text-xs sm:grid-cols-3">
+          {isAgent && (
+            <div>
+              <dt className="text-muted-foreground">Agent type</dt>
+              <dd className="font-medium">{moduleLabel ?? "Not set"}</dd>
+            </div>
+          )}
+          {tokenCount !== undefined && (
+            <div>
+              <dt className="text-muted-foreground">Tokens</dt>
+              <dd className="font-medium">
+                {tokenCount} active token{tokenCount === 1 ? "" : "s"}
+              </dd>
+            </div>
+          )}
+          <div>
+            <dt className="text-muted-foreground">Joined</dt>
+            <dd className="font-medium">{formatWhen(member.created_at)}</dd>
+          </div>
+        </dl>
+      </section>
+
+      {/* us-109.1: the output half of US-91.12's effort line. The row keeps
+          "worked · completed" — whether this agent is earning its seat — and
+          the rest is here, where there is room to say which window it covers
+          rather than showing five unlabelled numbers. */}
+      {isAgent && effort && (
+        <section className="grid gap-2">
+          <h3 className="text-sm font-semibold">
+            Output{effortWindowDays ? ` (last ${effortWindowDays} days)` : ""}
+          </h3>
+          <dl className="grid gap-x-8 gap-y-1.5 text-xs sm:grid-cols-3">
+            <div>
+              <dt className="text-muted-foreground">Worked</dt>
+              <dd className="font-medium tabular-nums">
+                {formatWorkSeconds(effort.workSeconds)} · {effort.issuesCompleted}{" "}
+                completed
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Lines of code</dt>
+              <dd className="font-medium tabular-nums">
+                +{effort.linesAdded.toLocaleString()} −
+                {effort.linesRemoved.toLocaleString()}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Tokens &amp; cost</dt>
+              <dd className="font-medium tabular-nums">
+                {compactTokens(effort.tokens)} · {money(effort.costUsd)}
+              </dd>
+            </div>
+          </dl>
+        </section>
+      )}
+
       {/* US-27.9: the row already names the machine ("Pod-001 slot 5") but
           that text can't be a link — the row is itself a toggle button, and
           links can't nest inside one. This is that link, restored here. */}
@@ -324,6 +413,28 @@ export function MemberDetail({
               isAgent={isAgent}
             />
           )}
+        </section>
+      )}
+
+      {/* us-109.1: a person has no settings page, so this is where their
+          Remove lives now that it is off the roster row. An agent's is on
+          `/team/{id}/settings` — deliberately not repeated here, so there is
+          exactly one place to remove any given member. */}
+      {!isAgent && canManage && onRemoved && (
+        <section className="grid gap-2 border-t pt-4">
+          <h3 className="text-sm font-semibold">Remove from this org</h3>
+          <p className="text-xs text-muted-foreground">
+            They lose access immediately and their tokens are revoked. Suspend
+            instead if they may come back.
+          </p>
+          <RemoveMember
+            orgId={orgId}
+            principalId={member.principal_id}
+            name={principalName(member)}
+            isAgent={false}
+            onRemoved={onRemoved}
+            className="mt-1"
+          />
         </section>
       )}
     </div>

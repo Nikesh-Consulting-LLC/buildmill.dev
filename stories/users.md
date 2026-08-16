@@ -25,7 +25,10 @@ seed-publishes-files and section preview, 99.7's accept/decline, 100.1's
 retired-unbuilt-do-not-re-propose list — is in
 [APPLICATION.md → Delivery history](../APPLICATION.md#delivery-history).
 
-Nineteen stories are open: Phase 107's fixed-outcome and queue guard (requested
+Twenty-two stories are open: Phase 109's Team page cleanup (requested
+2026-08-16), Phase 108's production crash inbox (drafted
+2026-08-16, two of its six defects breaking live paths today), Phase 107's
+fixed-outcome and queue guard (requested
 2026-08-16), Phase 106's Workbench quick action (requested
 2026-08-16), Phase 103's release deadlock (built and released
 2026-08-16), Phase 104's two pieces of work that existed nowhere safe,
@@ -35,25 +38,69 @@ today), and the residue carried out of Phases 85–89:
 
 | Order | Story | Title | Status |
 |---|---|---|---|
-| 1 | [us-107.1](us-107.1-a-work-item-can-be-marked-fixed.md) | A work item can be marked fixed | Testing |
-| 2 | [us-107.2](us-107.2-nothing-sits-queued-forever.md) | Nothing sits queued forever | Testing |
-| 3 | [us-107.3](us-107.3-an-agent-capability-has-an-icon.md) | An agent capability has an icon | Testing |
-| 4 | [us-106.1](us-106.1-a-draft-dispatches-from-the-workbench.md) | A draft dispatches from the Workbench | Testing |
-| 5 | [us-105.1](us-105.1-a-report-can-be-marked-fixed.md) | A report can be marked fixed | Testing |
-| 6 | [us-105.2](us-105.2-a-report-is-promoted-in-one-click.md) | A report is promoted in one click | Testing |
-| 7 | [us-103.1](us-103.1-an-abandoned-release-prep-is-reaped.md) | An abandoned release prep is reaped | Testing |
-| 8 | [us-103.3](us-103.3-the-manager-can-stop-an-in-flight-release.md) | The manager can stop an in-flight release | Testing |
-| 9 | [us-103.2](us-103.2-a-restarted-runner-re-adopts-its-prep.md) | A restarted runner re-adopts the prep it was holding | Testing |
-| 10 | [us-103.4](us-103.4-the-workbench-shows-the-release-in-flight.md) | The Workbench shows the release in flight | Testing |
-| 11 | [us-103.5](us-103.5-a-release-in-flight-freezes-dispatch.md) | A release in flight freezes dispatch, and says so | Testing |
-| 12 | [us-104.1](us-104.1-every-migration-number-is-unique.md) | Every migration number is unique | Testing |
-| 13 | [us-104.2](us-104.2-the-api-test-suite-lives-in-the-repo.md) | The API test suite lives in the repo | Testing |
-| 14 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
-| 15 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
-| 16 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
-| 17 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
-| 18 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
-| 19 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+| 1 | [us-109.1](us-109.1-the-team-row-says-who-not-how-much.md) | The Team row says who, not how much | Testing |
+| 2 | [us-109.2](us-109.2-the-team-kpis-price-the-work.md) | The team's KPI row prices the work | Testing |
+| 3 | [us-108.1](us-108.1-the-crash-inbox-goes-to-zero.md) | The crash inbox goes to zero | New |
+| 4 | [us-107.1](us-107.1-a-work-item-can-be-marked-fixed.md) | A work item can be marked fixed | Testing |
+| 5 | [us-107.2](us-107.2-nothing-sits-queued-forever.md) | Nothing sits queued forever | Testing |
+| 6 | [us-107.3](us-107.3-an-agent-capability-has-an-icon.md) | An agent capability has an icon | Testing |
+| 7 | [us-106.1](us-106.1-a-draft-dispatches-from-the-workbench.md) | A draft dispatches from the Workbench | Testing |
+| 8 | [us-105.1](us-105.1-a-report-can-be-marked-fixed.md) | A report can be marked fixed | Testing |
+| 9 | [us-105.2](us-105.2-a-report-is-promoted-in-one-click.md) | A report is promoted in one click | Testing |
+| 10 | [us-103.1](us-103.1-an-abandoned-release-prep-is-reaped.md) | An abandoned release prep is reaped | Testing |
+| 11 | [us-103.3](us-103.3-the-manager-can-stop-an-in-flight-release.md) | The manager can stop an in-flight release | Testing |
+| 12 | [us-103.2](us-103.2-a-restarted-runner-re-adopts-its-prep.md) | A restarted runner re-adopts the prep it was holding | Testing |
+| 13 | [us-103.4](us-103.4-the-workbench-shows-the-release-in-flight.md) | The Workbench shows the release in flight | Testing |
+| 14 | [us-103.5](us-103.5-a-release-in-flight-freezes-dispatch.md) | A release in flight freezes dispatch, and says so | Testing |
+| 15 | [us-104.1](us-104.1-every-migration-number-is-unique.md) | Every migration number is unique | Testing |
+| 16 | [us-104.2](us-104.2-the-api-test-suite-lives-in-the-repo.md) | The API test suite lives in the repo | Testing |
+| 17 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
+| 18 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
+| 19 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
+| 20 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
+| 21 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
+| 22 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+
+**Phase 109 — The Team page answers at a glance** (requested 2026-08-16). The
+roster row had accreted every fact anyone ever wanted about a member: a module
+name that never changes, a token count, a join date, and five accounting
+figures — three lines per row, of which one was the question being asked. All
+of it reference, sitting in the place reserved for scanning. **us-109.1** moves
+the module, the token count, the join date and the output figures into the
+expand panel US-53.3 already built to hold exactly this, keeps the seat (two
+agents may share a name, so it is the only thing telling them apart) and the
+two figures that say whether an agent is earning its seat, and takes **Remove**
+off the row entirely — it was the one irreversible action there, wearing the
+same button as Suspend and sitting beside it — to an agent's settings page and
+a person's expand panel, plus the duplicate runner-console door. **us-109.2**
+answers the question the row could not: three more KPI tiles — spend, lines
+added and removed, and a **human-equivalent** estimate in hours derived from
+lines changed at a named, unit-tested rate, labelled a rough estimate on its
+face so a confident-looking number is not read as a measurement. Both are web
+only: no migration, no API change, and no query that was not already running.
+
+**Phase 108 — The crash inbox goes to zero** (drafted 2026-08-16, from an
+audit of production `app_issues`). The hub held 23 reports; eight had been
+promoted to work items and **all eight were still `draft`**, never planned,
+never coded — while six of them had in fact been fixed weeks earlier by hand
+under US-79.2–79.5 and `f8d488e`. `promoted` records that somebody looked, not
+that anything changed, so telling fixed from unfixed meant reading every crash
+site in the tree against every stack trace. That audit found **six real,
+unfixed defects**, and **us-108.1** closes them: a `dict` handed to a `jsonb`
+column in `db.update_release`, which is breaking release-notes submission in
+production right now; an unbound `token` in the runner's `session_host._open`
+that kills every interactive session reaching it, arriving in the inbox
+disguised as an API 502; a NUL byte in command output killing the runner
+socket dispatch; the git proxy and llm gateway having no `except httpx.`
+anywhere, so an upstream blip becomes a naked 500 — the exact shape US-79.5
+solved for Supabase and nowhere else; a deliberate authorisation 404 reaching
+a manager as "repository not found" about a project created two minutes
+earlier; and a transient `GitRPC::BadObjectState` costing a Save for want of
+one retry. Three further reports (15 + 2 + 1 occurrences) share one root cause
+that **us-97.1 already owns and has not built** — a `301` from a renamed repo
+parsed as payload — and are deliberately left to it rather than fixed twice.
+The story also closes the eight stale work items and the reports behind them,
+so the hub's open list becomes the six fixed here plus us-97.1's three.
 
 **Phase 103 — A release cannot get stuck** (drafted 2026-08-16, from the
 2026.08.16.3 incident). The runner restarted ten minutes into preparing a
