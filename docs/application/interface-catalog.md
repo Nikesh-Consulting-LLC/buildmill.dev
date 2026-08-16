@@ -360,10 +360,15 @@ secret that reaches an agent machine is one worker token per slot, in a 0600 env
 
 A worker connects to the single `POST /mcp` endpoint — the ASGI app `factory_mcp.py` builds,
 mounted at `/mcp` in `apps/api/app/main.py`. Every request carries the same `X-Worker-Token`
-header as the other worker-credentialed surfaces. Project scope is no longer part of the URL: a
-worker token is scoped to at most one project via `workers.project_id`, set when the worker is
-created or changed from Settings → Workers / a member's Team page. A worker gets its token from a
-project's own Connect page (`/projects/[id]/connect`) or the Connect tab under `/team`.
+header as the other worker-credentialed surfaces. **There is no project scope on the token**
+(us-110.1): a worker reaches every project its `worker_capabilities` grants name — the same list
+the pool filter has always used, and the only place an agent's projects are set. The two earlier
+answers are both retired: US-3.14's `/mcp/<org>/<project>` URL path (any path segment after `/mcp`
+now 404s) and migration 216's `workers.project_id` column, dropped by 279. A tool callable without
+a claim defaults `project_id` to the worker's project when it has exactly one grant, and otherwise
+requires it explicitly — `list_available_work` and `list_factory_queue` return a `project_id` per
+run for that purpose. A worker gets its token from a project's own Connect page
+(`/projects/[id]/connect`) or the Connect tab under `/team`.
 
 The most important table here for an operating agent. `factory_mcp.py` defines **53** tools (us-100.5 corrected the long-stale 36; count them with `grep -c '^@mcp.tool(' apps/api/app/factory_mcp.py`). Rows
 below are ordered the way a worker actually calls them — discover → claim → gather context → work

@@ -79,9 +79,6 @@ export type WorkerRow = {
   status: "active" | "revoked";
   last_seen_at: string | null;
   created_at: string;
-  /** The single project this token's MCP endpoint serves — null means
-   * unscoped (created before this column existed, or never assigned). */
-  project_id: string | null;
   /** Opt-in, on by default: browse/read/download a project's repository
    * over MCP with no claimed run — get_project_tree, read_project_file,
    * get_project_workspace. Off only when a manager has deliberately
@@ -1010,7 +1007,6 @@ function MemberList({
                         orgId={orgId}
                         member={m}
                         workers={mine}
-                        projects={projects}
                         canManageTokens={myPrincipalId === m.principal_id || canManage}
                         slot={seat ?? null}
                       />

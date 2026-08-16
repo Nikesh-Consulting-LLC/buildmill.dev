@@ -51,7 +51,7 @@ export default async function TeamPage({
     supabase
       .from("workers")
       .select(
-        "id, name, type, user_id, principal_id, token_last4, status, last_seen_at, created_at, project_id"
+        "id, name, type, user_id, principal_id, token_last4, status, last_seen_at, created_at"
       )
       .eq("org_id", orgId)
       .order("created_at", { ascending: true }),

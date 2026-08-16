@@ -26,7 +26,7 @@ from pathlib import Path
 import pytest
 
 from app import factory_mcp
-from app.factory_mcp import _current_worker, _scoped_project
+from app.factory_mcp import _current_worker
 
 REPO = Path(__file__).resolve().parents[3]
 MIGRATIONS = REPO / "infra" / "supabase" / "migrations"
@@ -48,12 +48,16 @@ CURRENT = {
 
 
 @pytest.fixture(autouse=True)
-def as_worker():
+def as_worker(monkeypatch):
+    # us-110.1: no MCP scope contextvar any more — a no-claim read defaults to
+    # the worker's project when it has exactly one granted.
+    monkeypatch.setattr(
+        "app.factory_mcp.db.sole_granted_project",
+        lambda s, w: RUN["project_id"],
+    )
     tok = _current_worker.set(dict(WORKER))
-    ptok = _scoped_project.set(RUN["project_id"])
     yield
     _current_worker.reset(tok)
-    _scoped_project.reset(ptok)
 
 
 @pytest.fixture

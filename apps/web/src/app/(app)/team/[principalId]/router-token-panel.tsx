@@ -15,27 +15,18 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { confirmDialog } from "@/components/ui/confirm-dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { principalName, type AgentSeat, type MemberRow, type WorkerRow } from "../team-view";
 
 export function RouterTokenPanel({
   orgId,
   member,
   workers,
-  projects,
   canManageTokens,
   slot,
 }: {
   orgId: string;
   member: MemberRow;
   workers: WorkerRow[];
-  projects: { id: string; name: string }[];
   canManageTokens: boolean;
   /** US-27.9: the machine this agent runs on, when Build Mill owns it — only
    *  needed for the revoke warning's wording. */
@@ -88,22 +79,6 @@ export function RouterTokenPanel({
         if (typeof data === "string") setReveal({ name: w.name, token: data });
         router.refresh();
       }
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function setMcpProject(w: WorkerRow, projectId: string) {
-    setError(null);
-    setBusyId(w.id);
-    const supabase = createClient();
-    try {
-      const { error: e } = await supabase.rpc("set_worker_project", {
-        p_worker: w.id,
-        p_project: projectId || null,
-      });
-      if (e) setError(e.message);
-      else router.refresh();
     } finally {
       setBusyId(null);
     }
@@ -230,31 +205,9 @@ export function RouterTokenPanel({
                 <span className="truncate text-xs text-muted-foreground">
                   …{w.token_last4} · Last used {formatLastSeen(w.last_seen_at)}
                 </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="text-xs text-muted-foreground">MCP project</span>
-                  <Select
-                    items={[
-                      { value: "", label: "Unscoped" },
-                      ...projects.map((p) => ({ value: p.id, label: p.name })),
-                    ]}
-                    value={w.project_id ?? ""}
-                    onValueChange={(v) =>
-                      typeof v === "string" && setMcpProject(w, v)
-                    }
-                  >
-                    <SelectTrigger className="h-7 w-40 text-xs">
-                      <SelectValue placeholder="Unscoped" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">Unscoped</SelectItem>
-                      {projects.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </span>
+                {/* us-110.1: the MCP project picker stood here. A worker's
+                    projects are its access grants now — one list, edited on
+                    the Projects tab, not a second scope narrowing it. */}
                 <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
                   <Checkbox
                     checked={w.no_claim_checkout}

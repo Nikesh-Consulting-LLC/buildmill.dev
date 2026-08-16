@@ -888,3 +888,74 @@ def test_pool_lists_only_org_queued_runs(db, settings, ctx, workers):
         assert row["repo_full_name"]
     finally:
         _cleanup(db, issue_id)
+
+
+def test_a_worker_granted_two_projects_is_offered_both(db, settings, ctx, workers):
+    """us-110.1: the grant list is the whole scope.
+
+    Before this, workers.project_id could pin an agent to one project while
+    its grants named several — and the Add agent wizard produced exactly that
+    combination by default, so the second project's runs were never offered
+    to the agent the manager had just checked it for."""
+    other = _extra_project(db, ctx, workers)
+    issue_a, run_a = _insert_issue_and_run(db, ctx)
+    issue_b, run_b = _insert_issue_and_run(db, ctx, project_id=other)
+    try:
+        ids = {str(r["id"]) for r in app_db.list_worker_pool(settings, workers[0])}
+        assert str(run_a) in ids
+        assert str(run_b) in ids
+    finally:
+        _cleanup(db, issue_a)
+        _cleanup(db, issue_b)
+        _drop_project(db, other)
+
+
+def test_a_project_with_no_grant_is_still_offered_nothing(
+    db, settings, ctx, workers
+):
+    """The other half of us-110.1: widening to the grant list is not widening
+    to the org. Revoke the grant and the run disappears from the pool, which
+    is US-31.3's fail-closed rule doing the whole job on its own."""
+    other = _extra_project(db, ctx, workers)
+    issue_b, run_b = _insert_issue_and_run(db, ctx, project_id=other)
+    try:
+        ids = {str(r["id"]) for r in app_db.list_worker_pool(settings, workers[0])}
+        assert str(run_b) in ids
+
+        db.execute(
+            "delete from public.worker_capabilities "
+            "where worker_id = %s and project_id = %s",
+            (workers[0]["id"], other),
+        )
+        db.commit()
+        ids = {str(r["id"]) for r in app_db.list_worker_pool(settings, workers[0])}
+        assert str(run_b) not in ids
+    finally:
+        _cleanup(db, issue_b)
+        _drop_project(db, other)
+
+
+def test_the_pool_row_carries_the_project_id(db, settings, ctx, workers):
+    """us-110.1: a multi-project worker has no scope to default from, so the
+    listing must hand it an addressable project, not just a display name."""
+    issue_id, run_id = _insert_issue_and_run(db, ctx)
+    try:
+        pool = app_db.list_worker_pool(settings, workers[0])
+        row = next(r for r in pool if str(r["id"]) == str(run_id))
+        assert str(row["project_id"]) == str(ctx["project_id"])
+    finally:
+        _cleanup(db, issue_id)
+
+
+def test_sole_granted_project_refuses_to_guess(db, settings, ctx, workers):
+    """The default for the no-claim reads: the worker's project when it has
+    exactly one, and None — ask explicitly — when it has several. Migration
+    216's backfill used this same rule once; us-110.1 applies it live."""
+    assert app_db.sole_granted_project(settings, workers[0]["id"]) == str(
+        ctx["project_id"]
+    )
+    other = _extra_project(db, ctx, workers)
+    try:
+        assert app_db.sole_granted_project(settings, workers[0]["id"]) is None
+    finally:
+        _drop_project(db, other)

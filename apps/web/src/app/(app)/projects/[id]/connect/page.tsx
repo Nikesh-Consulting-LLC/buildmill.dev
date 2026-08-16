@@ -41,10 +41,11 @@ export default async function ProjectConnectPage({
   const remoteUrl = org?.shortname
     ? factoryRemoteUrl(org.shortname, project.slug)
     : null;
-  // A worker's MCP scope now comes from its own project_id, not the URL —
-  // the URL is the same single endpoint everywhere. The Connect page still
-  // needs to tell a manager which of the org's workers are actually scoped
-  // to *this* project, which the caller below does via the `workers` query.
+  // us-110.1: one MCP endpoint for the whole org, and no per-worker scope
+  // narrowing it. A worker reaches whichever projects its access grants name,
+  // so this URL is the same for every worker and the list below is the org's
+  // workers, not "this project's" — which is what the query has always
+  // returned.
   const mcpUrl = factoryMcpUrl();
 
   // Workers for the token-in-hand flow.

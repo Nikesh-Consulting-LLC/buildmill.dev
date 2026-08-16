@@ -4693,14 +4693,14 @@ def runner_health(settings: Settings, worker_id: str) -> str:
 def list_worker_pool(
     settings: Settings,
     worker: dict[str, Any],
-    project_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """The claimable runs this worker may take. Sweeps expired claims back
     into the pool first, so the listing is self-healing without a background
     scheduler. Capability filter (US-31.3, fail-closed): only allow-listed
     project+kind runs are offered — a worker with zero capability rows is
-    offered nothing. URL scope (US-3.14): when project_id is given (a
-    project-scoped MCP url), only that project's runs are listed.
+    offered nothing. us-110.1: that predicate is now the ONLY project filter.
+    The old second one (US-3.14's URL scope, then workers.project_id) is gone,
+    so a worker is offered every project it was granted and nothing else.
     US-26.5: a paused runner is offered nothing at all — an agent that has
     just been installed, or one drained for an update, stays connected and
     configured but takes no work."""
@@ -4712,7 +4712,11 @@ def list_worker_pool(
             """
             select r.id, r.kind, r.issue_id, r.created_at,
                    i.title as issue_title, i.type as issue_type,
-                   p.name as project_name, p.repo_full_name,
+                   -- us-110.1: the id as well as the name. A worker granted
+                   -- several projects has no scope to fall back on, so the
+                   -- listing is where it learns a project_id to pass to the
+                   -- no-claim reads.
+                   r.project_id, p.name as project_name, p.repo_full_name,
                    prev.id as retry_of_run_id
             from public.runs r
             -- US-13.12: release (and later deploy) runs are project-scoped
@@ -4731,7 +4735,6 @@ def list_worker_pool(
               limit 1
             ) prev on true
             where r.org_id = %(org)s and r.status = 'queued'
-              and (%(project)s::uuid is null or r.project_id = %(project)s::uuid)
               -- US-31.3: fail-closed, through the ONE shared predicate.
               -- Zero access rows means this offers nothing — not everything.
               -- US-55.1: the predicate is project ACCESS plus the agent's own
@@ -4767,7 +4770,6 @@ def list_worker_pool(
             {
                 "org": str(worker["org_id"]),
                 "worker": str(worker["id"]),
-                "project": project_id,
             },
         ).fetchall()
 
@@ -4913,7 +4915,6 @@ def worker_idle_reason(settings: Settings, worker_id: str) -> dict[str, Any]:
 def list_factory_queue(
     settings: Settings,
     org_id: str,
-    project_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """US-15.2: the whole factory queue — every queued and running run for the
     org, in the manager's execution order — so an agent has context of the
@@ -4954,28 +4955,26 @@ def list_factory_queue(
             ) la on true
             where r.org_id = %(org)s
               and r.status in ('queued', 'running')
-              and (%(project)s::uuid is null or r.project_id = %(project)s::uuid)
             order by p.name asc,
                      case when r.status = 'running' then 0 else 1 end,
                      r.queue_rank asc nulls last,
                      r.created_at asc
             """,
-            {"org": str(org_id), "project": project_id},
+            {"org": str(org_id)},
         ).fetchall()
 
 
 def list_worker_runs(
-    settings: Settings, worker: dict[str, Any], project_id: str | None = None
+    settings: Settings, worker: dict[str, Any]
 ) -> dict[str, list[dict[str, Any]]]:
     """US-5.1: the worker's own live claims, plus its recent submissions
     whose outcome isn't settled (issue still sitting in a review-ish
     status). Merged and failed runs drop out — it's a recovery aid after
-    a session restart, not an archive. project_id scopes both lists when
-    the MCP url is project-scoped (US-3.14)."""
+    a session restart, not an archive. us-110.1: no project narrowing — what
+    this worker holds is what it holds, in every project it was granted."""
     params = {
         "org": str(worker["org_id"]),
         "worker": str(worker["id"]),
-        "project": project_id,
     }
     with _connect(settings) as conn:
         claimed = conn.execute(
@@ -4987,7 +4986,6 @@ def list_worker_runs(
             join public.projects p on p.id = r.project_id
             where r.org_id = %(org)s and r.worker_id = %(worker)s
               and r.status = 'running'
-              and (%(project)s::uuid is null or r.project_id = %(project)s::uuid)
             order by r.claim_expires_at
             """,
             params,
@@ -5004,7 +5002,6 @@ def list_worker_runs(
               and r.status = 'succeeded'
               and i.status in
                 ('prd-review', 'plan-review', 'in-review', 'needs-fixes')
-              and (%(project)s::uuid is null or i.project_id = %(project)s::uuid)
             order by r.finished_at desc
             limit 10
             """,
@@ -5094,22 +5091,29 @@ def org_shortname_matches(
     return row is not None
 
 
-def run_in_project(settings: Settings, run_id: str, project_id: str) -> bool:
-    """US-3.14: does this run belong to the project the MCP url is scoped
-    to? Guards a project-scoped claim from reaching another project's run."""
-    if not _valid_uuid(run_id):
-        return False
+def sole_granted_project(settings: Settings, worker_id: str) -> str | None:
+    """us-110.1: the worker's project when it has exactly one, else None.
+
+    Replaces the default `workers.project_id` used to supply to the no-claim
+    MCP reads. Migration 216's backfill used this same unambiguous-case rule
+    once, at migration time, and refused to guess for a worker granted several
+    projects; this applies it live and refuses in the same place — the caller
+    then asks for an explicit project_id rather than picking one.
+
+    Grant membership is any capability row on (worker, project), matching
+    `public.worker_has_grant(w, p, null)`: the kind checkboxes live in
+    runner_config and say nothing about which projects are the worker's."""
     with _connect(settings) as conn:
-        row = conn.execute(
+        rows = conn.execute(
             """
-            select 1
-            from public.runs r
-            join public.issues i on i.id = r.issue_id
-            where r.id = %s and i.project_id = %s
+            select distinct project_id
+            from public.worker_capabilities
+            where worker_id = %s
+            limit 2
             """,
-            (run_id, project_id),
-        ).fetchone()
-    return row is not None
+            (worker_id,),
+        ).fetchall()
+    return str(rows[0]["project_id"]) if len(rows) == 1 else None
 
 
 def worker_run_refusal(

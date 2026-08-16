@@ -25,7 +25,8 @@ seed-publishes-files and section preview, 99.7's accept/decline, 100.1's
 retired-unbuilt-do-not-re-propose list — is in
 [APPLICATION.md → Delivery history](../APPLICATION.md#delivery-history).
 
-Twenty-three stories are open: Phase 109's Team page cleanup and the metrics
+Twenty-four stories are open: Phase 110's agent-scope cleanup (requested
+2026-08-16), Phase 109's Team page cleanup and the metrics
 bug it uncovered (requested
 2026-08-16), Phase 108's production crash inbox (drafted
 2026-08-16, two of its six defects breaking live paths today), Phase 107's
@@ -39,29 +40,50 @@ today), and the residue carried out of Phases 85–89:
 
 | Order | Story | Title | Status |
 |---|---|---|---|
-| 1 | [us-109.1](us-109.1-the-team-row-says-who-not-how-much.md) | The Team row says who, not how much | Testing |
-| 2 | [us-109.2](us-109.2-the-team-kpis-price-the-work.md) | The team's KPI row prices the work | Testing |
-| 3 | [us-109.3](us-109.3-nobody-wrote-node-modules.md) | Nobody wrote node_modules | Testing |
-| 4 | [us-108.1](us-108.1-the-crash-inbox-goes-to-zero.md) | The crash inbox goes to zero | New |
-| 5 | [us-107.1](us-107.1-a-work-item-can-be-marked-fixed.md) | A work item can be marked fixed | Testing |
-| 6 | [us-107.2](us-107.2-nothing-sits-queued-forever.md) | Nothing sits queued forever | Testing |
-| 7 | [us-107.3](us-107.3-an-agent-capability-has-an-icon.md) | An agent capability has an icon | Testing |
-| 8 | [us-106.1](us-106.1-a-draft-dispatches-from-the-workbench.md) | A draft dispatches from the Workbench | Testing |
-| 9 | [us-105.1](us-105.1-a-report-can-be-marked-fixed.md) | A report can be marked fixed | Testing |
-| 10 | [us-105.2](us-105.2-a-report-is-promoted-in-one-click.md) | A report is promoted in one click | Testing |
-| 11 | [us-103.1](us-103.1-an-abandoned-release-prep-is-reaped.md) | An abandoned release prep is reaped | Testing |
-| 12 | [us-103.3](us-103.3-the-manager-can-stop-an-in-flight-release.md) | The manager can stop an in-flight release | Testing |
-| 13 | [us-103.2](us-103.2-a-restarted-runner-re-adopts-its-prep.md) | A restarted runner re-adopts the prep it was holding | Testing |
-| 14 | [us-103.4](us-103.4-the-workbench-shows-the-release-in-flight.md) | The Workbench shows the release in flight | Testing |
-| 15 | [us-103.5](us-103.5-a-release-in-flight-freezes-dispatch.md) | A release in flight freezes dispatch, and says so | Testing |
-| 16 | [us-104.1](us-104.1-every-migration-number-is-unique.md) | Every migration number is unique | Testing |
-| 17 | [us-104.2](us-104.2-the-api-test-suite-lives-in-the-repo.md) | The API test suite lives in the repo | Testing |
-| 18 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
-| 19 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
-| 20 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
-| 21 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
-| 22 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
-| 23 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+| 1 | [us-110.1](us-110.1-an-agents-projects-are-the-ones-you-checked.md) | An agent's projects are the ones you checked | Testing |
+| 2 | [us-109.1](us-109.1-the-team-row-says-who-not-how-much.md) | The Team row says who, not how much | Testing |
+| 3 | [us-109.2](us-109.2-the-team-kpis-price-the-work.md) | The team's KPI row prices the work | Testing |
+| 4 | [us-109.3](us-109.3-nobody-wrote-node-modules.md) | Nobody wrote node_modules | Testing |
+| 5 | [us-108.1](us-108.1-the-crash-inbox-goes-to-zero.md) | The crash inbox goes to zero | New |
+| 6 | [us-107.1](us-107.1-a-work-item-can-be-marked-fixed.md) | A work item can be marked fixed | Testing |
+| 7 | [us-107.2](us-107.2-nothing-sits-queued-forever.md) | Nothing sits queued forever | Testing |
+| 8 | [us-107.3](us-107.3-an-agent-capability-has-an-icon.md) | An agent capability has an icon | Testing |
+| 9 | [us-106.1](us-106.1-a-draft-dispatches-from-the-workbench.md) | A draft dispatches from the Workbench | Testing |
+| 10 | [us-105.1](us-105.1-a-report-can-be-marked-fixed.md) | A report can be marked fixed | Testing |
+| 11 | [us-105.2](us-105.2-a-report-is-promoted-in-one-click.md) | A report is promoted in one click | Testing |
+| 12 | [us-103.1](us-103.1-an-abandoned-release-prep-is-reaped.md) | An abandoned release prep is reaped | Testing |
+| 13 | [us-103.3](us-103.3-the-manager-can-stop-an-in-flight-release.md) | The manager can stop an in-flight release | Testing |
+| 14 | [us-103.2](us-103.2-a-restarted-runner-re-adopts-its-prep.md) | A restarted runner re-adopts the prep it was holding | Testing |
+| 15 | [us-103.4](us-103.4-the-workbench-shows-the-release-in-flight.md) | The Workbench shows the release in flight | Testing |
+| 16 | [us-103.5](us-103.5-a-release-in-flight-freezes-dispatch.md) | A release in flight freezes dispatch, and says so | Testing |
+| 17 | [us-104.1](us-104.1-every-migration-number-is-unique.md) | Every migration number is unique | Testing |
+| 18 | [us-104.2](us-104.2-the-api-test-suite-lives-in-the-repo.md) | The API test suite lives in the repo | Testing |
+| 19 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
+| 20 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
+| 21 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
+| 22 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
+| 23 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
+| 24 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+
+**Phase 110 — An agent's projects are the ones you checked** (requested
+2026-08-16). Step 3 of the Add agent wizard asks which projects an agent may
+use, twice, in two vocabularies — a single-select *"Which project its MCP tools
+connect to"* writing `workers.project_id`, and a multi-select *"Which projects
+it may access over git"* writing `worker_capabilities`. They are written by two
+independent calls that never read each other, and the helper sentences beneath
+them contradict: one says the agent only ever sees one project's pool, the
+other says it does whatever the roles allow on every project checked. The code
+sides with the first, so an agent created with two projects checked silently
+never claims the second's runs. **us-110.1** settles it by removing the scope
+rather than renaming it: the access list becomes the only place project scope
+is set, `workers.project_id` and `set_worker_project` are dropped, and the two
+jobs the scope was quietly doing are replaced — the pool filter was already the
+US-31.3 capability gate, and the default `project_id` for the ten no-claim
+tools becomes the worker's sole grant when it has exactly one, with the pool
+listings returning a project id for when it has several. It also retires the
+`/mcp/<org-shortname>/<project-slug>` URL that ten refusal messages still
+recommend and that has 404'd since migration 216. The automated provisioner
+already creates unscoped workers this way; only the wizard pinned them.
 
 **Phase 109 — The Team page answers at a glance** (requested 2026-08-16). The
 roster row had accreted every fact anyone ever wanted about a member: a module
