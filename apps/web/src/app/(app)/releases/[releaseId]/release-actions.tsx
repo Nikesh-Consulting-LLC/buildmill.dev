@@ -15,7 +15,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { StopReleaseButton, STOPPABLE } from "../stop-release-button";
+import { StopReleaseButton } from "../stop-release-button";
+import { STOPPABLE } from "../release-states";
 import { RetryReleaseButton } from "../retry-release-button";
 
 /** US-21.5/21.6: the actions a release's state allows.

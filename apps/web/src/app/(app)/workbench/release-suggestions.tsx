@@ -28,10 +28,8 @@ import {
 import { StatusBadge, type IssueStatus } from "@/components/status-badge";
 import { TypeBadge, type IssueType } from "@/components/type-badge";
 import { CutReleaseDialog } from "../releases/cut-release-dialog";
-import {
-  STOPPABLE,
-  StopReleaseButton,
-} from "../releases/stop-release-button";
+import { StopReleaseButton } from "../releases/stop-release-button";
+import { STOPPABLE } from "../releases/release-states";
 import { duration } from "./release-liveness";
 import type { ReleaseSuggestion } from "./data";
 

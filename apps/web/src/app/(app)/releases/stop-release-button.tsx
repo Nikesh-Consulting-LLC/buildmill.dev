@@ -29,13 +29,6 @@ import { Textarea } from "@/components/ui/textarea";
  * Stop is a verdict on the ATTEMPT — the agent died, the job hung, I changed
  * my mind. Reject is a verdict on the BUILD, and burns the version forever.
  * The copy here keeps them apart on purpose. */
-export const STOPPABLE = new Set([
-  "queued",
-  "running",
-  "notes-ready",
-  "uat-deploy-failed",
-]);
-
 export function StopReleaseButton({
   releaseId,
   version,
