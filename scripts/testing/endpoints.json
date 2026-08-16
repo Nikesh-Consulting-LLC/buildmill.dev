@@ -1,0 +1,2902 @@
+[
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/gate-latency",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "gate_latency",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/admin/memberships",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "unlink_membership",
+    "params": {},
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/admin/memberships",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "update_membership_role",
+    "params": {},
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/admin/memberships",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "link_membership",
+    "params": {},
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/modules",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "list_agent_modules",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/admin/modules/{key}",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "set_module_availability",
+    "params": {
+      "key": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/orgs",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "list_orgs",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/admin/orgs",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "create_org",
+    "params": {},
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/admin/orgs/{org_id}",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "delete_org",
+    "params": {
+      "org_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/admin/orgs/{org_id}",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "update_org",
+    "params": {
+      "org_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/admin/orgs/{org_id}/archive",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "archive_org",
+    "params": {
+      "org_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/orgs/{org_id}/members",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "list_org_members",
+    "params": {
+      "org_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/performance",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "performance_summary",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/performance/detail",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "performance_detail",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/project-templates",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "list_project_templates",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/admin/project-templates",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "create_project_template",
+    "params": {},
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/admin/project-templates/{template_id}",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "delete_project_template",
+    "params": {
+      "template_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/admin/project-templates/{template_id}",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "patch_project_template",
+    "params": {
+      "template_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/admin/project-templates/{template_id}/duplicate",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "duplicate_project_template",
+    "params": {
+      "template_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/project-templates/{template_id}/sections",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "list_project_template_sections",
+    "params": {
+      "template_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/admin/project-templates/{template_id}/sections/{section_type}/{section_key}",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "delete_project_template_section",
+    "params": {
+      "template_id": "string",
+      "section_type": "string",
+      "section_key": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "PUT",
+    "path": "/api/v1/admin/project-templates/{template_id}/sections/{section_type}/{section_key}",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "upsert_project_template_section",
+    "params": {
+      "template_id": "string",
+      "section_type": "string",
+      "section_key": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/prompt-templates",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "list_prompt_templates",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/admin/prompt-templates/{key}",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "reset_prompt_template",
+    "params": {
+      "key": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "PUT",
+    "path": "/api/v1/admin/prompt-templates/{key}",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "upsert_prompt_template",
+    "params": {
+      "key": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "PUT",
+    "path": "/api/v1/admin/role-capabilities",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "set_role_capabilities",
+    "params": {},
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/admin/role-capabilities/reset",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "reset_role_capabilities",
+    "params": {},
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/run-analytics",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "run_analytics",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/run-analytics/detail",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "run_analytics_detail",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/run-config",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "get_platform_run_config",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "PUT",
+    "path": "/api/v1/admin/run-config",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "set_platform_run_config",
+    "params": {},
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/usage",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "platform_usage",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/user-activity",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "user_activity",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/users",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "list_users",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/admin/users/{user_id}",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "delete_user",
+    "params": {
+      "user_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/admin/users/{user_id}",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "edit_user",
+    "params": {
+      "user_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/admin/users/{user_id}/approve",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "approve_user",
+    "params": {
+      "user_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/admin/users/{user_id}/deactivate",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "deactivate_user",
+    "params": {
+      "user_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/admin/users/{user_id}/reset-password",
+    "tag": "admin",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "reset_password",
+    "params": {
+      "user_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/agent-pools/slots/{slot_id}",
+    "tag": "agent-pools",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "set_pool_slot_state",
+    "params": {
+      "slot_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/agent-pools/{pool_id}/place",
+    "tag": "agent-pools",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "place",
+    "params": {
+      "pool_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/agent-servers",
+    "tag": "agent-servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "create_agent_server",
+    "params": {},
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/agent-servers/current-version",
+    "tag": "agent-servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "current_version",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/agent-servers/{host_id}",
+    "tag": "agent-servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "update_agent_server",
+    "params": {
+      "host_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/agent-servers/{host_id}/preflight",
+    "tag": "agent-servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "preflight",
+    "params": {
+      "host_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/agent-servers/{host_id}/probe",
+    "tag": "agent-servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "probe",
+    "params": {
+      "host_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/agent-servers/{host_id}/provision",
+    "tag": "agent-servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "provision",
+    "params": {
+      "host_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/agent-servers/{host_id}/slots",
+    "tag": "agent-servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "add_slots",
+    "params": {
+      "host_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/agent-servers/{host_id}/slots/idle-reasons",
+    "tag": "agent-servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "slot_idle_reasons",
+    "params": {
+      "host_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/agent-servers/{host_id}/slots/{slot_id}",
+    "tag": "agent-servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "remove_slot",
+    "params": {
+      "host_id": "string",
+      "slot_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/agent-servers/{host_id}/slots/{slot_id}",
+    "tag": "agent-servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "set_slot_state",
+    "params": {
+      "host_id": "string",
+      "slot_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/agent-servers/{host_id}/slots/{slot_id}/reissue-token",
+    "tag": "agent-servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "reissue_slot_token",
+    "params": {
+      "host_id": "string",
+      "slot_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/agent-servers/{host_id}/slots/{slot_id}/restart",
+    "tag": "agent-servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "restart_slot",
+    "params": {
+      "host_id": "string",
+      "slot_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/agent-servers/{host_id}/teardown",
+    "tag": "agent-servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "teardown",
+    "params": {
+      "host_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/agent-servers/{host_id}/update",
+    "tag": "agent-servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "update_fleet",
+    "params": {
+      "host_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/agent-sessions",
+    "tag": "agent-sessions",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "open_session",
+    "params": {},
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/agent-sessions/{session_id}/close",
+    "tag": "agent-sessions",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "close_session",
+    "params": {
+      "session_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/agents/idle-reasons",
+    "tag": "agents",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "agent_idle_reasons",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/agents/{principal_id}/name",
+    "tag": "agents",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "rename_agent",
+    "params": {
+      "principal_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/report/{deployment_id}/issues",
+    "tag": "app-issues",
+    "auth": "report_key",
+    "public": false,
+    "op": "submit_report",
+    "params": {
+      "deployment_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/auth/me",
+    "tag": "auth",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "me",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/deployments/{deployment_id}",
+    "tag": "deployments",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "delete_deployment",
+    "params": {
+      "deployment_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/deployments/{deployment_id}/agent-dispatch",
+    "tag": "deployments",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "agent_dispatch",
+    "params": {
+      "deployment_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/deployments/{deployment_id}/drift",
+    "tag": "deployments",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "deployment_drift",
+    "params": {
+      "deployment_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/deployments/{deployment_id}/duplicate",
+    "tag": "deployments",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "duplicate_deployment",
+    "params": {
+      "deployment_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/deployments/{deployment_id}/env/{name}",
+    "tag": "deployments",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "remove_env_var",
+    "params": {
+      "deployment_id": "string",
+      "name": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "PUT",
+    "path": "/api/v1/deployments/{deployment_id}/env/{name}",
+    "tag": "deployments",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "set_env_var",
+    "params": {
+      "deployment_id": "string",
+      "name": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/deployments/{deployment_id}/health-check",
+    "tag": "deployments",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "manual_health_check",
+    "params": {
+      "deployment_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/deployments/{deployment_id}/preflight",
+    "tag": "deployments",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "run_preflight",
+    "params": {
+      "deployment_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/deployments/{deployment_id}/redeploy-zip",
+    "tag": "deployments",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "redeploy_last_zip",
+    "params": {
+      "deployment_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/deployments/{deployment_id}/rollback",
+    "tag": "deployments",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "rollback_deployment",
+    "params": {
+      "deployment_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/deployments/{deployment_id}/run",
+    "tag": "deployments",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "run_deployment",
+    "params": {
+      "deployment_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/deployments/{deployment_id}/runs/{run_id}/artifact",
+    "tag": "deployments",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "download_artifact",
+    "params": {
+      "deployment_id": "string",
+      "run_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/deployments/{deployment_id}/runs/{run_id}/cancel",
+    "tag": "deployments",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "cancel_run",
+    "params": {
+      "deployment_id": "string",
+      "run_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/deployments/{deployment_id}/runs/{run_id}/promote",
+    "tag": "deployments",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "promote_run",
+    "params": {
+      "deployment_id": "string",
+      "run_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/deployments/{deployment_id}/runs/{run_id}/redeploy",
+    "tag": "deployments",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "redeploy_run",
+    "params": {
+      "deployment_id": "string",
+      "run_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/deployments/{deployment_id}/zip",
+    "tag": "deployments",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "deploy_from_zip",
+    "params": {
+      "deployment_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/git/{org_shortname}/{project_spec}/git-receive-pack",
+    "tag": "git",
+    "auth": "basic_worker_token",
+    "public": false,
+    "op": "receive_pack",
+    "params": {
+      "org_shortname": "string",
+      "project_spec": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/git/{org_shortname}/{project_spec}/git-upload-pack",
+    "tag": "git",
+    "auth": "basic_worker_token",
+    "public": false,
+    "op": "upload_pack",
+    "params": {
+      "org_shortname": "string",
+      "project_spec": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/git/{org_shortname}/{project_spec}/info/refs",
+    "tag": "git",
+    "auth": "basic_worker_token",
+    "public": false,
+    "op": "info_refs",
+    "params": {
+      "org_shortname": "string",
+      "project_spec": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/github/connect-url",
+    "tag": "github",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "connect_url",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/github/connections/pat",
+    "tag": "github",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "connect_pat",
+    "params": {},
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/github/connections/{connection_id}/disconnect",
+    "tag": "github",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "disconnect_connection",
+    "params": {
+      "connection_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/github/install/callback",
+    "tag": "github",
+    "auth": "none",
+    "public": true,
+    "op": "install_callback",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/github/projects/{project_id}/issues/pull",
+    "tag": "github",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "pull_issues",
+    "params": {
+      "project_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/github/repos",
+    "tag": "github",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "repos",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/github/repos/{owner}/{repo}/branches",
+    "tag": "github",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "repo_branches",
+    "params": {
+      "owner": "string",
+      "repo": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/github/repos/{owner}/{repo}/branches",
+    "tag": "github",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "create_branch",
+    "params": {
+      "owner": "string",
+      "repo": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/github/repos/{owner}/{repo}/projects",
+    "tag": "github",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "repo_projects",
+    "params": {
+      "owner": "string",
+      "repo": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/github/repos/{owner}/{repo}/pulls",
+    "tag": "github",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "repo_pulls",
+    "params": {
+      "owner": "string",
+      "repo": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/issues/batch-dispatch",
+    "tag": "issues",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "batch_dispatch_ids",
+    "params": {},
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/issues/{issue_id}/attempts",
+    "tag": "issues",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "attempts",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/issues/{issue_id}/attempts/release",
+    "tag": "issues",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "release_attempts",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/issues/{issue_id}/batch-dispatch",
+    "tag": "issues",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "batch_dispatch",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/issues/{issue_id}/complexity-score",
+    "tag": "issues",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "complexity_score",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/issues/{issue_id}/deployments",
+    "tag": "issues",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "issue_deployments",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/issues/{issue_id}/dispatch",
+    "tag": "issues",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "dispatch",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/issues/{issue_id}/dispatch-merge",
+    "tag": "issues",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "dispatch_merge",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/issues/{issue_id}/revert",
+    "tag": "issues",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "revert",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/llm/elaborate-test",
+    "tag": "llm",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "elaborate_test",
+    "params": {},
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/llm/functions",
+    "tag": "llm",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "list_llm_functions",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/llm/generate-deploy-script",
+    "tag": "llm",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "generate_deploy_script_endpoint",
+    "params": {},
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/llm/learnings/{project_id}/submissions/{submission_id}/decide",
+    "tag": "llm",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "decide_learning_submission",
+    "params": {
+      "project_id": "string",
+      "submission_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/llm/learnings/{project_id}/update",
+    "tag": "llm",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "update_learnings",
+    "params": {
+      "project_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "PUT",
+    "path": "/api/v1/llm/orgs/{org_id}/model-prices",
+    "tag": "llm",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "put_model_price",
+    "params": {
+      "org_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/llm/orgs/{org_id}/model-prices/{model}",
+    "tag": "llm",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "delete_model_price",
+    "params": {
+      "org_id": "string",
+      "model": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/llm/orgs/{org_id}/spend",
+    "tag": "llm",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "org_spend",
+    "params": {
+      "org_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/llm/orgs/{org_id}/spend-trend",
+    "tag": "llm",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "org_spend_trend",
+    "params": {
+      "org_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/llm/orgs/{org_id}/work-summary",
+    "tag": "llm",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "org_work_summary",
+    "params": {
+      "org_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/llm/tldr",
+    "tag": "llm",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "tldr",
+    "params": {},
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/llm/work-items/{issue_id}/tldr",
+    "tag": "llm",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "work_item_tldr",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/llm-gateway/{path}",
+    "tag": "llm-gateway",
+    "auth": "scoped_key",
+    "public": false,
+    "op": "proxy",
+    "params": {
+      "path": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/llm-gateway/{path}",
+    "tag": "llm-gateway",
+    "auth": "scoped_key",
+    "public": false,
+    "op": "proxy",
+    "params": {
+      "path": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/mcp-proxy/{slug}",
+    "tag": "mcp-catalog",
+    "auth": "scoped_key",
+    "public": false,
+    "op": "proxy_mcp",
+    "params": {
+      "slug": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/mcp-servers/{server_id}",
+    "tag": "mcp-catalog",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "delete_server",
+    "params": {
+      "server_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/mcp-servers/{server_id}",
+    "tag": "mcp-catalog",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "update_server",
+    "params": {
+      "server_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/mcp-servers/{server_id}/validate",
+    "tag": "mcp-catalog",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "validate_server",
+    "params": {
+      "server_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/orgs/{org_id}/mcp-servers",
+    "tag": "mcp-catalog",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "list_servers",
+    "params": {
+      "org_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/orgs/{org_id}/mcp-servers",
+    "tag": "mcp-catalog",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "create_server",
+    "params": {
+      "org_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/orgs/{org_id}/members/provision",
+    "tag": "members",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "provision_member",
+    "params": {
+      "org_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/orgs/{org_id}/members/{user_id}/reset-password",
+    "tag": "members",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "reset_member_password",
+    "params": {
+      "org_id": "string",
+      "user_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/notifications/endpoints",
+    "tag": "notifications",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "create_endpoint",
+    "params": {},
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/notifications/endpoints/{endpoint_id}",
+    "tag": "notifications",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "delete_endpoint",
+    "params": {
+      "endpoint_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/notifications/endpoints/{endpoint_id}/test",
+    "tag": "notifications",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "test_endpoint",
+    "params": {
+      "endpoint_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/preset-templates",
+    "tag": "presets",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "list_templates",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/admin/preset-templates/{key}",
+    "tag": "presets",
+    "auth": "platform_admin",
+    "public": false,
+    "op": "patch_template",
+    "params": {
+      "key": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/orgs/{org_id}/presets",
+    "tag": "presets",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "create_preset",
+    "params": {
+      "org_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/orgs/{org_id}/presets/outcomes",
+    "tag": "presets",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "preset_outcomes",
+    "params": {
+      "org_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/orgs/{org_id}/presets/reseed",
+    "tag": "presets",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "preview_reseed",
+    "params": {
+      "org_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/orgs/{org_id}/presets/reseed",
+    "tag": "presets",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "apply_reseed",
+    "params": {
+      "org_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/presets/{preset_id}",
+    "tag": "presets",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "delete_preset",
+    "params": {
+      "preset_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/presets/{preset_id}",
+    "tag": "presets",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "patch_preset",
+    "params": {
+      "preset_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/projects/{project_id}/build-config/{name}",
+    "tag": "projects",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "remove_build_config",
+    "params": {
+      "project_id": "string",
+      "name": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "PUT",
+    "path": "/api/v1/projects/{project_id}/build-config/{name}",
+    "tag": "projects",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "set_build_config",
+    "params": {
+      "project_id": "string",
+      "name": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/projects/{project_id}/docs-tree/sync",
+    "tag": "projects",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "docs_tree_sync",
+    "params": {
+      "project_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/projects/{project_id}/env/{entry_id}",
+    "tag": "projects",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "delete_env_entry",
+    "params": {
+      "project_id": "string",
+      "entry_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/projects/{project_id}/env/{entry_id}/secret",
+    "tag": "projects",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "set_env_secret",
+    "params": {
+      "project_id": "string",
+      "entry_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/projects/{project_id}/guidelines.md",
+    "tag": "projects",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "guidelines_md",
+    "params": {
+      "project_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/projects/{project_id}/guidelines/refresh",
+    "tag": "projects",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "refresh_guidelines",
+    "params": {
+      "project_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/projects/{project_id}/guidelines/save-instructions",
+    "tag": "projects",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "save_instructions",
+    "params": {
+      "project_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/projects/{project_id}/instructions/status",
+    "tag": "projects",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "instruction_publish_status",
+    "params": {
+      "project_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/projects/{project_id}/instructions/template-offers",
+    "tag": "projects",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "template_instruction_offers",
+    "params": {
+      "project_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/projects/{project_id}/learnings.md",
+    "tag": "projects",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "learnings_md",
+    "params": {
+      "project_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/projects/{project_id}/releases",
+    "tag": "projects",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "create_release",
+    "params": {
+      "project_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/projects/{project_id}/releases/preview",
+    "tag": "projects",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "preview_release",
+    "params": {
+      "project_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/projects/{project_id}/releases/{release_id}/dispatch",
+    "tag": "projects",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "redispatch_release",
+    "params": {
+      "project_id": "string",
+      "release_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/projects/{project_id}/wireframes/sync",
+    "tag": "projects",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "wireframes_sync",
+    "params": {
+      "project_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/releases/{release_id}/cancel",
+    "tag": "releases",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "cancel",
+    "params": {
+      "release_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/releases/{release_id}/confirm-released",
+    "tag": "releases",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "confirm_released",
+    "params": {
+      "release_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/releases/{release_id}/promote",
+    "tag": "releases",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "promote",
+    "params": {
+      "release_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/releases/{release_id}/reject",
+    "tag": "releases",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "reject",
+    "params": {
+      "release_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/releases/{release_id}/retry",
+    "tag": "releases",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "retry",
+    "params": {
+      "release_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/releases/{release_id}/rolled-back",
+    "tag": "releases",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "mark_rolled_back",
+    "params": {
+      "release_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/releases/{release_id}/sign-off",
+    "tag": "releases",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "sign_off",
+    "params": {
+      "release_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/releases/{release_id}/signoff-blocker",
+    "tag": "releases",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "signoff_blocker",
+    "params": {
+      "release_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/releases/{release_id}/test-cases/{case_id}/result",
+    "tag": "releases",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "record_result",
+    "params": {
+      "release_id": "string",
+      "case_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/runs/{run_id}/abandon",
+    "tag": "reviews",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "abandon",
+    "params": {
+      "run_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/runs/{run_id}/approve",
+    "tag": "reviews",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "approve",
+    "params": {
+      "run_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/runs/{run_id}/cancel",
+    "tag": "reviews",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "cancel",
+    "params": {
+      "run_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/runs/{run_id}/finish-approval",
+    "tag": "reviews",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "finish_approval",
+    "params": {
+      "run_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/runs/{run_id}/force-requeue",
+    "tag": "reviews",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "force_requeue",
+    "params": {
+      "run_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/runs/{run_id}/reject",
+    "tag": "reviews",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "reject",
+    "params": {
+      "run_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/runs/{run_id}/reject-conflict",
+    "tag": "reviews",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "reject_conflict",
+    "params": {
+      "run_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/runs/{run_id}/request-stop",
+    "tag": "reviews",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "request_stop",
+    "params": {
+      "run_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/runs/{run_id}/reset",
+    "tag": "reviews",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "reset_run",
+    "params": {
+      "run_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/runs/{run_id}/resume",
+    "tag": "reviews",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "resume_stopped",
+    "params": {
+      "run_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/runner/{worker_id}/command",
+    "tag": "runner",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "run_runner_command",
+    "params": {
+      "worker_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/runner/{worker_id}/config",
+    "tag": "runner",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "update_runner_config",
+    "params": {
+      "worker_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/runner/{worker_id}/idle-reason",
+    "tag": "runner",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "idle_reason",
+    "params": {
+      "worker_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/runner/{worker_id}/policy-preview",
+    "tag": "runner",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "policy_preview",
+    "params": {
+      "worker_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/runner/{worker_id}/prepare-workspace",
+    "tag": "runner",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "prepare_workspace",
+    "params": {
+      "worker_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/runner/{worker_id}/prepare-workspace-job",
+    "tag": "runner",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "prepare_workspace_job",
+    "params": {
+      "worker_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/servers",
+    "tag": "servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "create_server",
+    "params": {},
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/servers/test-connection",
+    "tag": "servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "test_connection_dry_run",
+    "params": {},
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/servers/{server_id}",
+    "tag": "servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "delete_server",
+    "params": {
+      "server_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/servers/{server_id}",
+    "tag": "servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "update_server",
+    "params": {
+      "server_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/servers/{server_id}/claude-subscription/disconnect",
+    "tag": "servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "claude_subscription_disconnect",
+    "params": {
+      "server_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/servers/{server_id}/claude-subscription/prepare",
+    "tag": "servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "claude_subscription_prepare",
+    "params": {
+      "server_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/servers/{server_id}/claude-subscription/verify",
+    "tag": "servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "claude_subscription_verify",
+    "params": {
+      "server_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/servers/{server_id}/files",
+    "tag": "servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "list_files",
+    "params": {
+      "server_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/servers/{server_id}/files/delete",
+    "tag": "servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "delete_path",
+    "params": {
+      "server_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/servers/{server_id}/files/download",
+    "tag": "servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "download_file",
+    "params": {
+      "server_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/servers/{server_id}/files/extract",
+    "tag": "servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "extract_archive",
+    "params": {
+      "server_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/servers/{server_id}/files/mkdir",
+    "tag": "servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "make_folder",
+    "params": {
+      "server_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/servers/{server_id}/files/new",
+    "tag": "servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "new_file",
+    "params": {
+      "server_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/servers/{server_id}/files/read",
+    "tag": "servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "read_file",
+    "params": {
+      "server_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/servers/{server_id}/files/upload",
+    "tag": "servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "upload_file",
+    "params": {
+      "server_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/servers/{server_id}/files/write",
+    "tag": "servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "write_file",
+    "params": {
+      "server_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/servers/{server_id}/test",
+    "tag": "servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "test_connection",
+    "params": {
+      "server_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/servers/{server_id}/trust-host-key",
+    "tag": "servers",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "trust_host_key",
+    "params": {
+      "server_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/releases/{release_id}/suites/{suite_id}/rerun",
+    "tag": "suites",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "rerun_release_suite",
+    "params": {
+      "release_id": "string",
+      "suite_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/releases/{release_id}/suites/{suite_id}/waive",
+    "tag": "suites",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "waive_release_suite",
+    "params": {
+      "release_id": "string",
+      "suite_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/suites/{suite_id}/run",
+    "tag": "suites",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "run_suite",
+    "params": {
+      "suite_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/health",
+    "tag": "untagged",
+    "auth": "none",
+    "public": true,
+    "op": "health",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/worker/pool",
+    "tag": "worker",
+    "auth": "worker_token",
+    "public": false,
+    "op": "pool",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/worker/release-prep",
+    "tag": "worker",
+    "auth": "worker_token",
+    "public": false,
+    "op": "list_release_prep",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/worker/release-prep/{prep_id}",
+    "tag": "worker",
+    "auth": "worker_token",
+    "public": false,
+    "op": "get_release_prep_status",
+    "params": {
+      "prep_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/worker/release-prep/{prep_id}/claim",
+    "tag": "worker",
+    "auth": "worker_token",
+    "public": false,
+    "op": "claim_release_prep",
+    "params": {
+      "prep_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/worker/release-prep/{prep_id}/heartbeat",
+    "tag": "worker",
+    "auth": "worker_token",
+    "public": false,
+    "op": "heartbeat_release_prep",
+    "params": {
+      "prep_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/worker/release-prep/{prep_id}/submit",
+    "tag": "worker",
+    "auth": "worker_token",
+    "public": false,
+    "op": "submit_release_prep",
+    "params": {
+      "prep_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/worker/runs/{run_id}/claim",
+    "tag": "worker",
+    "auth": "worker_token",
+    "public": false,
+    "op": "claim",
+    "params": {
+      "run_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/worker/runs/{run_id}/comment",
+    "tag": "worker",
+    "auth": "worker_token",
+    "public": false,
+    "op": "add_comment",
+    "params": {
+      "run_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/worker/runs/{run_id}/context",
+    "tag": "worker",
+    "auth": "worker_token",
+    "public": false,
+    "op": "context",
+    "params": {
+      "run_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/worker/runs/{run_id}/documents",
+    "tag": "worker",
+    "auth": "worker_token",
+    "public": false,
+    "op": "upload_run_document",
+    "params": {
+      "run_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/worker/runs/{run_id}/documents/{document_id}",
+    "tag": "worker",
+    "auth": "worker_token",
+    "public": false,
+    "op": "fetch_run_document",
+    "params": {
+      "run_id": "string",
+      "document_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/worker/runs/{run_id}/heartbeat",
+    "tag": "worker",
+    "auth": "worker_token",
+    "public": false,
+    "op": "heartbeat",
+    "params": {
+      "run_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/worker/runs/{run_id}/release",
+    "tag": "worker",
+    "auth": "worker_token",
+    "public": false,
+    "op": "release",
+    "params": {
+      "run_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/worker/runs/{run_id}/resume-claim",
+    "tag": "worker",
+    "auth": "worker_token",
+    "public": false,
+    "op": "resume_claim",
+    "params": {
+      "run_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/worker/runs/{run_id}/submit",
+    "tag": "worker",
+    "auth": "worker_token",
+    "public": false,
+    "op": "submit",
+    "params": {
+      "run_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/artifacts/{artifact_id}",
+    "tag": "workflow",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "patch_artifact",
+    "params": {
+      "artifact_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/issues/{issue_id}/breakdown/dispatch",
+    "tag": "workflow",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "dispatch_breakdown_run",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/issues/{issue_id}/elaboration/approve",
+    "tag": "workflow",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "approve_elaboration",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/issues/{issue_id}/elaboration/dispatch",
+    "tag": "workflow",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "dispatch_elaboration",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/issues/{issue_id}/elaboration/send-back",
+    "tag": "workflow",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "send_back_elaboration",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/issues/{issue_id}/merge-override",
+    "tag": "workflow",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "merge_override",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/issues/{issue_id}/plan/approve",
+    "tag": "workflow",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "approve_plan",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/issues/{issue_id}/plan/send-back",
+    "tag": "workflow",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "send_back_plan",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/issues/{issue_id}/plans/approve-all",
+    "tag": "workflow",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "approve_all_plans",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/issues/{issue_id}/prd/approve",
+    "tag": "workflow",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "approve_prd",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/issues/{issue_id}/prd/draft",
+    "tag": "workflow",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "draft_prd",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/issues/{issue_id}/prd/send-back",
+    "tag": "workflow",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "send_back_prd",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/issues/{issue_id}/replan",
+    "tag": "workflow",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "replan",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/issues/{issue_id}/reset",
+    "tag": "workflow",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "reset_issue",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/issues/{issue_id}/test-run/dispatch",
+    "tag": "workflow",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "dispatch_test_run",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/issues/{issue_id}/wireframe/dispatch",
+    "tag": "workflow",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "dispatch_wireframe",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": true,
+    "mutating": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/issues/{issue_id}/wireframe/preview",
+    "tag": "workflow",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "wireframe_preview",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/issues/{issue_id}/wireframes/batch-dispatch",
+    "tag": "workflow",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "dispatch_wireframe_batch",
+    "params": {
+      "issue_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  }
+]

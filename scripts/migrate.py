@@ -62,7 +62,7 @@ def targets(env: dict[str, str]) -> dict[str, str]:
 
 
 def strip_prefix(name: str) -> str:
-    """`252_project_env` -> `project_env`, `077b_fix_x` -> `fix_x`.
+    """`276_project_env` -> `project_env`, `077b_fix_x` -> `fix_x`.
 
     The one definition of a migration's identity, applied to file stems and to
     ledger rows alike so the two can be compared. The `[a-z]?` covers the

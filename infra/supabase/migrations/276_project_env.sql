@@ -1,19 +1,26 @@
--- 252_project_env (US-89.2): the environment is defined once.
+-- 276_project_env (US-89.2): the environment is defined once.
 --
--- Numbered 249 when built (2026-08-13, branch `us-89-zero-secret-workspace`)
--- and renumbered to 252 on merge: phase 87's 249_org_pending_count.sql took
--- the same number on a parallel branch.
+-- Numbered 249 when built (2026-08-13, branch `us-89-zero-secret-workspace`):
+-- phase 87's 249_org_pending_count.sql took the same number on a parallel
+-- branch. The fix sat unmerged on a local branch for three days and went
+-- stale -- it renumbered this to 252, and 252_agent_effort_ledger.sql landed
+-- on main on 2026-08-14 while it waited. Renumbered to 276 on merge
+-- (us-104.1), which is free.
 --
 -- ALREADY LIVE on both projects — do NOT re-apply. Verified 2026-08-13:
 -- the table, its 4 indexes, 4 RLS policies and touch trigger exist on prod
 -- (wdudmfhhqxrqzoyhuzwx) and dev (nncquokoblcfcqyajzmk) alike.
 --
--- The ledger row is recorded under the OLD name `249_project_env` on both,
--- because it was applied through Supabase's own migration path, which stores
--- the name verbatim rather than prefix-stripped the way scripts/migrate.py
--- does. That mismatch is not repaired here (rewriting applied history is
--- worse than recording it); migrate.py normalizes both sides when it checks,
--- so the skip-if-applied guard still holds for this file.
+-- The two ledgers do not even agree with each other on what this row is
+-- called. Re-checked 2026-08-16: dev records it as `249_project_env`, prod as
+-- plain `project_env` — the same migration, applied through paths that store
+-- the name differently, so neither one matches this file's stem on its face.
+-- That is precisely why migrate.py compares on the prefix-stripped stem
+-- (`strip_prefix`), and why renumbering the file is safe: `276_project_env`,
+-- `249_project_env` and `project_env` all reduce to `project_env`, so the
+-- rename cannot orphan the row or offer to re-apply a live migration. The
+-- disagreement itself is left alone — rewriting applied history is worse than
+-- recording it.
 --
 -- One place per project answering "what does an agent get when it works
 -- here?" — the Supabase login of the app under development, a SQL

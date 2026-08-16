@@ -25,8 +25,8 @@ seed-publishes-files and section preview, 99.7's accept/decline, 100.1's
 retired-unbuilt-do-not-re-propose list — is in
 [APPLICATION.md → Delivery history](../APPLICATION.md#delivery-history).
 
-Eleven stories are open: Phase 103's release deadlock (drafted 2026-08-16, from
-an incident that had to be cleared by hand against the production database),
+Thirteen stories are open: Phase 103's release deadlock (built and released
+2026-08-16), Phase 104's two pieces of work that existed nowhere safe,
 Phase 97's GitHub linkage repair (requested 2026-08-15, costing live runs
 today), and the residue carried out of Phases 85–89:
 
@@ -37,12 +37,14 @@ today), and the residue carried out of Phases 85–89:
 | 3 | [us-103.2](us-103.2-a-restarted-runner-re-adopts-its-prep.md) | A restarted runner re-adopts the prep it was holding | Testing |
 | 4 | [us-103.4](us-103.4-the-workbench-shows-the-release-in-flight.md) | The Workbench shows the release in flight | Testing |
 | 5 | [us-103.5](us-103.5-a-release-in-flight-freezes-dispatch.md) | A release in flight freezes dispatch, and says so | Testing |
-| 6 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
-| 7 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
-| 8 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
-| 9 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
-| 10 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
-| 11 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+| 6 | [us-104.1](us-104.1-every-migration-number-is-unique.md) | Every migration number is unique | Testing |
+| 7 | [us-104.2](us-104.2-the-api-test-suite-lives-in-the-repo.md) | The API test suite lives in the repo | Testing |
+| 8 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
+| 9 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
+| 10 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
+| 11 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
+| 12 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
+| 13 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
 
 **Phase 103 — A release cannot get stuck** (drafted 2026-08-16, from the
 2026.08.16.3 incident). The runner restarted ten minutes into preparing a
@@ -70,6 +72,25 @@ flight, through migration 235's existing `issue_dispatch_refusal` so the button
 and the RPC cannot disagree. Writing stories, bugs and chores stays open;
 routing them waits for the release to be released, stopped or rejected, and
 every surface says so in those words.
+
+**Phase 104 — The tree can be trusted** (drafted 2026-08-16). Two pieces of
+real work were found existing nowhere safe, and both are the same failure in
+different clothes. **us-104.1**: `main` carried five duplicated migration
+numbers (014, 015, 205, 249, 271), which makes "applied in numeric order"
+ambiguous at each one. A fix for the 249 collision had been *written* on
+2026-08-13 — renumbering the file, plus an Essential guard so the next
+collision fails in a test rather than on somebody's replay, plus a real bug it
+uncovered in `migrate.py` whose skip-if-applied check was dead for 92 of 258
+prod rows — and then it sat on an unpushed local branch, went stale (it
+renumbered to 252; `252_agent_effort_ledger` landed on main the next day), and
+was deleted in a branch cleanup on 2026-08-16. It was recovered from the
+object store, brought current at 276/277, and merged. **us-104.2**: the
+Playwright API suite in `scripts/testing/` — 22 specs over 227 operations,
+whose auth-boundary layer asserts that a *forged but well-formed* credential
+is refused, not merely that a missing one is — had been untracked since
+2026-08-15 with its own `.gitignore` already written for the commit that never
+came. Both stories exist because a guard that lives on one laptop is not a
+guard.
 
 **Phase 97 — GitHub linkage stays true** (drafted 2026-08-15, from the
 run-`ff9ef2be` incident). A repository rename/transfer on GitHub answers

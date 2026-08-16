@@ -1,5 +1,12 @@
--- 271_a_release_case_knows_its_section (us-101.2): a release's checklist gets
+-- 277_a_release_case_knows_its_section (us-101.2): a release's checklist gets
 -- a running order.
+--
+-- Numbered 271 when built, colliding with 271_the_pass_is_decided_by_a_manager
+-- (us-100.5), which merged two hours earlier the same evening. Renumbered to
+-- 277 by us-104.1 -- the later arrival moves, the earlier one keeps its
+-- number. ALREADY APPLIED to both projects under the old name; the ledger is
+-- matched on the prefix-stripped stem, so the rename does not orphan its row
+-- and nothing is re-applied.
 --
 -- A release's cases are rendered ordered by `issue_id`, then `title` — which
 -- is to say, ordered by a UUID. UAT is worked top to bottom and the order is
