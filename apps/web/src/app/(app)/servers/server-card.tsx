@@ -1,9 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, Bot, ChevronRight, KeyRound, Server } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { apiCall } from "@/lib/api";
+import { notReadySummary, type AgentStatus } from "@/lib/idle-reasons";
 import { cn } from "@/lib/utils";
 import { MachineActions } from "./machine-actions";
 import { STATUS_LABELS, STATUS_STYLES, probeAge } from "./agent-host";
@@ -30,14 +33,52 @@ export type ServerUsage = {
 /** US-35.2: the agent side of a machine, when it has one. `null` is the normal
  *  state of a deploy target nobody has provisioned to run agents. */
 export type MachineAgents = {
+  /** us-116.4: the `agent_servers` row, so the card can ask the host-scoped
+   *  status route — the same statuses the slot cards render. */
+  hostId: string;
   status: string;
   agentCount: number;
   enabledCount: number;
-  deadCount: number;
   drifted: boolean;
   lastProbeAt: string | null;
   probeError: string | null;
 };
+
+/** us-116.4: "N agents not ready (2 stopped, 1 offline)" from the same status
+ *  every other surface renders — replaces the probe-only "N enabled agents are
+ *  not running", which disagreed with the roster whenever a paused or offline
+ *  agent's unit happened to be active. */
+function NotReadyLine({ hostId }: { hostId: string }) {
+  const [summary, setSummary] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const res = await apiCall(`/api/v1/agent-servers/${hostId}/slots/idle-reasons`);
+        const statuses = Object.values((res?.reasons ?? {}) as Record<string, AgentStatus>);
+        if (!cancelled) setSummary(notReadySummary(statuses.map((s) => s.state)));
+      } catch {
+        // a missing summary is not worth breaking the card over
+      }
+    }
+    void load();
+    const timer = setInterval(load, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [hostId]);
+  if (!summary) return null;
+  return (
+    <span
+      className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400"
+      data-testid="not-ready"
+    >
+      <AlertTriangle className="size-3.5" />
+      {summary}
+    </span>
+  );
+}
 
 export function ServerCard({
   server,
@@ -118,14 +159,7 @@ export function ServerCard({
               )}
               <ChevronRight className="ml-auto size-3.5 text-muted-foreground" />
             </span>
-            {agents.deadCount > 0 && (
-              <span className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
-                <AlertTriangle className="size-3.5" />
-                {agents.deadCount} enabled{" "}
-                {agents.deadCount === 1 ? "agent is" : "agents are"} not running
-                on the machine
-              </span>
-            )}
+            {agents.agentCount > 0 && <NotReadyLine hostId={agents.hostId} />}
             {agents.probeError ? (
               <span className="text-xs text-amber-600 dark:text-amber-400">
                 Last health check failed: {agents.probeError}

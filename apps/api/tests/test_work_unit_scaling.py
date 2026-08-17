@@ -147,6 +147,8 @@ def test_scaling_happens_after_preset_validation_not_by_widening_it():
     with __import__("pytest").raises(presets.PresetInvalid):
         presets.clean_settings({"max_turns": 501})
     # The scaled value is computed after resolution, in the claim path.
+    # (us-116.1: the claim resolves through model_resolution's helper now —
+    # the one place the resolver's arguments are built.)
     assert WORKER_SRC.index("units = db.run_work_units") > WORKER_SRC.index(
-        "resolved = run_settings.resolve("
+        "resolved = model_resolution.resolve_for_kind("
     )

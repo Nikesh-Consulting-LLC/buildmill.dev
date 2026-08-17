@@ -27,6 +27,12 @@ import {
 } from "@/lib/agent-roles";
 import { cn } from "@/lib/utils";
 import {
+  STATUS_LABELS,
+  stateFor,
+  statusTextClass,
+  type AgentStatus,
+} from "@/lib/idle-reasons";
+import {
   modulePlaceable,
   resolveActiveModule,
   stepValid as stepIsValid,
@@ -1200,16 +1206,20 @@ function DoneStep({
   } | null>(null);
   const [enabling, setEnabling] = useState(false);
   const [enableError, setEnableError] = useState<string | null>(null);
+  // us-116.4: the new agent's state — the same word the roster will show it
+  // with, from the same status the roster reads.
+  const [status, setStatus] = useState<AgentStatus | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     const supabase = createClient();
     async function poll() {
+      // us-116.4: presence is the `live_runner_sessions` view — connected AND
+      // heartbeated inside the window — the one predicate every surface reads.
       const s = await supabase
-        .from("runner_sessions")
+        .from("live_runner_sessions")
         .select("host_info, module_settings")
         .eq("worker_id", created.workerId)
-        .is("disconnected_at", null)
         .order("connected_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -1218,6 +1228,12 @@ function DoneStep({
           (s.data as { host_info: unknown; module_settings: unknown } | null) ??
             null,
         );
+      try {
+        const st = await apiCall(`/api/v1/runner/${created.workerId}/idle-reason`);
+        if (!cancelled) setStatus((st as AgentStatus) ?? null);
+      } catch {
+        // the state line is context; the connection poll above still answers
+      }
       // US-57.3 follow-on: a queued pool placement has no job at all yet —
       // `pool_placement_sweep` creates one once the host frees up — so the
       // slot poll must not wait on a job id existing.
@@ -1314,6 +1330,17 @@ function DoneStep({
           <p className="flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-400">
             <Check className="size-4" /> Connected — the runner said hello.
           </p>
+          {/* us-116.4: what the roster will call it, from the same status. */}
+          {status && (
+            <p className="text-xs" data-testid="agent-state">
+              <span className={cn("font-medium", statusTextClass(stateFor(online, status)))}>
+                {STATUS_LABELS[stateFor(online, status)]}
+              </span>
+              {status.detail ? (
+                <span className="text-muted-foreground"> — {status.detail}</span>
+              ) : null}
+            </p>
+          )}
           {Array.isArray(reportedModules) && (
             <p className="text-xs text-muted-foreground">
               Modules on the machine: {reportedModules.join(", ") || "none"}

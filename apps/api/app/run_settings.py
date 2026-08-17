@@ -5,7 +5,8 @@ the supervisor when it retries a failure, and the manager at dispatch. That is
 the model asked for: defaults set once, an override the supervisor may take when
 necessary, and the manager's own choice at the moment of dispatch.
 
-Precedence is **manager > supervisor > agent model pin > agent route/org default**.
+Precedence is **manager > supervisor > agent model pin > agent route/org default
+> org default provider model** (the last for `model` only, us-116.7).
 A manager's explicit choice is the strongest signal available and outranks a
 supervisor escalation; the supervisor's override outranks the standing default
 because it is reacting to a failure the default already failed at.
@@ -31,6 +32,10 @@ from typing import Any
 # so a finished run can say who decided, not just what happened.
 AGENT = "agent"
 ORG_DEFAULT = "org-default"
+# us-116.7: the floor for `model` only — the org's default LLM provider's own
+# default model, chosen on Settings → LLM providers. Weaker than every layer
+# above; recorded so a finished run says the org's default provider decided.
+ORG_DEFAULT_PROVIDER = "org-default-provider"
 SUPERVISOR = "supervisor"
 MANAGER = "manager"
 
@@ -121,12 +126,22 @@ def resolve(
     agent_model_override: str | None = None,
     supervisor_override: dict[str, Any] | None = None,
     manager_override: dict[str, Any] | None = None,
+    org_default_model: str | None = None,
 ) -> Resolved:
     """Effective settings for one run.
 
     `presets_by_id` and `org_default` are read by the caller so this stays pure
     and testable — the precedence rules are the thing worth pinning, and a
     resolver that opens its own connection cannot be pinned cheaply.
+
+    us-116.7: `org_default_model` is the floor for `model` — the org's default
+    LLM provider's default model, which the gateway already answers with when
+    a key carries no model. It is applied only when nothing above it named a
+    model, and before the supervisor and manager layers, so those still win.
+    US-78.5's refusal ("never a CLI falling back to a default nobody chose")
+    now fires only when there is no pin, no preset model AND no default
+    provider model: the org's default provider model IS chosen — by the
+    manager, on the page whose purpose is choosing it.
     """
     out = Resolved()
 
@@ -172,6 +187,12 @@ def resolve(
     if legacy_model and "model" not in out.values:
         out.values["model"] = legacy_model
         out.sources["model"] = AGENT
+
+    # us-116.7: the floor. The org's default provider's own default model —
+    # the manager's chosen default, and what the gateway would use anyway.
+    if org_default_model and "model" not in out.values:
+        out.values["model"] = str(org_default_model).strip()
+        out.sources["model"] = ORG_DEFAULT_PROVIDER
 
     # --- layer 2: the supervisor, reacting to a failure the default failed at.
     out.apply(SUPERVISOR, supervisor_override)

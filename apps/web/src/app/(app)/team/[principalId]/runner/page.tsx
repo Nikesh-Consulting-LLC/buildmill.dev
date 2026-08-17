@@ -17,6 +17,13 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 
 import { apiCall } from "@/lib/api";
+import {
+  STATUS_LABELS,
+  idleFixHref,
+  stateFor,
+  statusBadgeClass,
+  type AgentStatus,
+} from "@/lib/idle-reasons";
 import { SpendSummary } from "@/components/spend-summary";
 
 import { AgentTabs } from "../agent-tabs";
@@ -72,29 +79,22 @@ function fixForIncident(
   return null;
 }
 
-/** The same question for the idle-reason readout, whose reasons are a fixed set. */
+/** The same question for the idle-reason readout, whose reasons are a fixed
+ *  set. us-116.2: the shared map (`idleFixHref`) carries the settings-page
+ *  anchors for the configuration reasons; `paused` stays here because its fix
+ *  is the machine, which only this page knows. */
 function fixForIdle(
   principalId: string,
   reason: string,
   slot: AgentSlot | null,
 ): Fix | null {
-  switch (reason) {
-    case "no-grants":
-      // US-35.1: grants live on the agent's own profile now, not on a
-      // worker page — that route is a redirect.
-      return { href: `/team?principal=${principalId}`, label: "Capability grants" };
-    case "paused":
-      // US-35.2: the machine, not the retired agent-server page.
-      return slot?.serverId
-        ? { href: `/servers/${slot.serverId}`, label: "Agent controls" }
-        : null;
-    case "revoked":
-      return { href: "/team", label: "Mint a new token" };
-    case "queue-held":
-      return { href: "/issues", label: "The work queue" };
-    default:
-      return null;
+  if (reason === "paused") {
+    // US-35.2: the machine, not the retired agent-server page.
+    return slot?.serverId
+      ? { href: `/servers/${slot.serverId}`, label: "Agent controls" }
+      : null;
   }
+  return idleFixHref(principalId, reason);
 }
 
 export default function AgentRunnerPage() {
@@ -141,10 +141,7 @@ export default function AgentRunnerPage() {
             >
               {slot.hostName}
             </Link>{" "}
-            · slot {slot.slotIndex} ·{" "}
-            <span className={slot.paused ? "text-muted-foreground" : "text-emerald-600 dark:text-emerald-400"}>
-              {slot.paused ? "paused" : "enabled"}
-            </span>
+            · slot {slot.slotIndex}
           </span>
           <span className="ml-auto flex gap-2">
             <button
@@ -284,9 +281,7 @@ function RunnerConsole({
   // US-27.9: why this agent is not working, from the same resolver the host's
   // Agents tab uses. A connected socket proves the process is alive; it does
   // not prove the worker may claim.
-  const [idle, setIdle] = useState<{ reason: string; detail: string } | null>(
-    null,
-  );
+  const [idle, setIdle] = useState<AgentStatus | null>(null);
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -306,22 +301,24 @@ function RunnerConsole({
   }, [worker.id]);
 
   const idleFix = idle
-    ? fixForIdle(principalId, idle.reason, slot)
+    ? fixForIdle(principalId, idle.reason ?? idle.state, slot)
     : null;
+  // us-116.4: THE state — the same word the roster and the machine page show
+  // for this agent. Presence from the live view (realtime), the rest from the
+  // status poll above; `online · paused` is gone because "online" said nothing
+  // about whether it could work.
+  const state = stateFor(online, idle);
 
   return (
     <div className="rounded-lg border">
       <div className="flex flex-wrap items-center gap-3 border-b p-4">
         <span className="font-medium">{worker.name}</span>
         <span
-          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${
-            online
-              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-              : "bg-muted text-muted-foreground"
-          }`}
+          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${statusBadgeClass(state)}`}
+          data-testid="agent-state"
         >
           <span className={`h-1.5 w-1.5 rounded-full ${online ? "bg-emerald-500" : "bg-muted-foreground"}`} />
-          {online ? "online" : "offline"}
+          {STATUS_LABELS[state]}
         </span>
         {/* US-13.8: "offline · healthy" was a contradiction — health only
             means something while connected or when faults exist. */}

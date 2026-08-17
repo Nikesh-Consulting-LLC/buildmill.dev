@@ -15,7 +15,12 @@ def wired(monkeypatch):
         "modules": ["interactive"],
         "live": True,
         "opened": {"id": "sess-1", "git_remote_url": "https://f/git/o/p.git"},
-        "model": "grok-4.5",
+        # us-116.1: the model is RESOLVED, not read — the fixture holds the
+        # agent's config and the org's default preset, and the router asks the
+        # same resolver a run's claim asks.
+        "config": {"enabled_kinds": ["code"], "model_overrides": {"code": "grok-4.5"}},
+        "org_default": None,
+        "recorded": [],
         "minted": [],
         "requests": [],
         "finished": [],
@@ -51,9 +56,28 @@ def wired(monkeypatch):
         agent_sessions.db, "open_agent_session", lambda *a, **k: state["opened"]
     )
     monkeypatch.setattr(
-        agent_sessions.db, "session_model", lambda *a, **k: state["model"]
+        agent_sessions.db, "get_runner_config", lambda *a, **k: state["config"]
     )
-    monkeypatch.setattr(agent_sessions.db, "get_runner_config", lambda *a, **k: {})
+    monkeypatch.setattr(
+        agent_sessions.model_resolution.db, "presets_by_id", lambda *a, **k: {}
+    )
+    monkeypatch.setattr(
+        agent_sessions.model_resolution.db,
+        "org_default_preset",
+        lambda *a, **k: state["org_default"],
+    )
+    # us-116.7: the org's default provider model — the floor. None by default
+    # so every case above still exercises the layers above it.
+    monkeypatch.setattr(
+        agent_sessions.model_resolution.db,
+        "org_default_provider_model",
+        lambda *a, **k: state.get("floor"),
+    )
+    monkeypatch.setattr(
+        agent_sessions.db,
+        "record_session_model",
+        lambda s, sid, model, kind: state["recorded"].append((sid, model, kind)),
+    )
 
     def _mint(settings, org_id, worker_id, **kw):
         state["minted"].append({"org_id": org_id, "worker_id": worker_id, **kw})
@@ -138,7 +162,7 @@ def test_an_agent_with_no_model_is_refused_before_anything_spawns(
 ):
     """US-78.5's rule, applied server-side: no model, no session — and the row
     must not stay 'opening' forever."""
-    wired["model"] = ""
+    wired["config"] = {"enabled_kinds": ["code"], "model_overrides": {}}
     res = _open(client, make_token())
     assert res.status_code == 409
     assert "no model" in res.json()["detail"]
@@ -289,3 +313,137 @@ def test_the_console_serves_a_session_the_same_way_it_serves_a_run(
     contents = [t["content"] for t in hello["trace"]]
     assert "hello from the session" in contents
     assert not any(c.startswith("stage:") for c in contents)
+
+
+# ---------------------------------------------------------------------------
+# us-116.1: a session picks a model the agent actually has.
+# ---------------------------------------------------------------------------
+
+ARCHITECT_KINDS = ["prd", "breakdown", "plan", "guidelines", "elaborate", "wireframe"]
+
+
+def test_an_architect_with_six_planning_roles_pinned_opens_a_session(
+    client, make_token, wired
+):
+    """AC1: every role it claims is pinned to grok-4.5 and none of them is
+    `code`. It has a model; it reasons with that model all day; the old
+    `session_model` refused it for lacking a model for work it is configured
+    never to do."""
+    wired["worker"] = {"id": "w-1", "name": "Architect", "org_id": "org-1"}
+    wired["config"] = {
+        "enabled_kinds": ARCHITECT_KINDS,
+        "model_overrides": {k: "grok-4.5" for k in ARCHITECT_KINDS},
+    }
+    res = _open(client, make_token())
+    assert res.status_code == 200, res.text
+    assert wired["minted"][0]["model"] == "grok-4.5"
+    # AC3: the kind it resolved through is on the row — the first claimed
+    # kind in ROUTE_KINDS order, since `code` is not claimed.
+    assert wired["recorded"] == [("sess-1", "grok-4.5", "prd")]
+
+
+def test_code_is_preferred_when_the_agent_claims_it(client, make_token, wired):
+    """AC3/AC5: Programmer resolves exactly as it always did — `code` first."""
+    wired["config"] = {
+        "enabled_kinds": ["test", "code"],
+        "model_overrides": {"test": "claude-haiku-4-5", "code": "grok-4.5"},
+    }
+    res = _open(client, make_token())
+    assert res.status_code == 200
+    assert wired["minted"][0]["model"] == "grok-4.5"
+    assert wired["recorded"][0][2] == "code"
+
+
+def test_a_null_enabled_kinds_claims_every_kind_and_resolves_through_code(
+    client, make_token, wired
+):
+    """us-53.4: a never-saved agent is unrestricted, not benched — it tries
+    `code` first exactly as before."""
+    wired["config"] = {"enabled_kinds": None, "model_overrides": {"code": "grok-4.5"}}
+    res = _open(client, make_token())
+    assert res.status_code == 200
+    assert wired["recorded"][0] == ("sess-1", "grok-4.5", "code")
+
+
+def test_the_org_default_preset_reaches_a_session(client, make_token, wired):
+    """AC6: an agent that pins nothing, in an org whose default preset names
+    a model, opens on that model — the tier a run already gets."""
+    wired["config"] = {"enabled_kinds": ["code"], "model_overrides": {}}
+    wired["org_default"] = {
+        "id": "p-bal", "name": "Balanced", "model": "claude-sonnet-5",
+        "settings": {}, "version": 3, "tool_grants": [],
+    }
+    res = _open(client, make_token())
+    assert res.status_code == 200
+    assert wired["minted"][0]["model"] == "claude-sonnet-5"
+    assert wired["recorded"][0] == ("sess-1", "claude-sonnet-5", "code")
+
+
+def test_the_refusal_names_the_agent_the_roles_tried_and_both_places(
+    client, make_token, wired
+):
+    """AC4: never a control that is not on the page. The org default is
+    Balanced with model null — the message says so rather than implying the
+    tier will cover it."""
+    wired["worker"] = {"id": "w-1", "name": "Architect", "org_id": "org-1"}
+    wired["config"] = {"enabled_kinds": ARCHITECT_KINDS, "model_overrides": {}}
+    wired["org_default"] = {
+        "id": "p-bal", "name": "Balanced", "model": None,
+        "settings": {}, "version": 3, "tool_grants": [],
+    }
+    res = _open(client, make_token())
+    assert res.status_code == 409
+    detail = res.json()["detail"]
+    assert detail.startswith("Architect has no model for any of the roles it claims (Planning).")
+    assert "Model per role" in detail
+    assert "Balanced" in detail and "has none today" in detail
+    assert "Programming" not in detail, "it must not name a role the agent does not claim"
+    assert wired["finished"] == [("sess-1", "failed", "no model configured")]
+    assert wired["recorded"] == []
+
+
+def test_the_session_and_the_claim_build_the_resolver_arguments_in_one_place():
+    """AC8: the seam. `run_settings.resolve(` is called from exactly one
+    module in the app; a second copy of the precedence rules is how the
+    session path drifted in the first place."""
+    import re
+    from pathlib import Path
+
+    app_dir = Path(agent_sessions.__file__).resolve().parents[1]
+    callers = sorted(
+        str(p.relative_to(app_dir)).replace("\\", "/")
+        for p in app_dir.rglob("*.py")
+        if re.search(r"run_settings\.resolve\(", p.read_text(encoding="utf-8"))
+    )
+    assert callers == ["model_resolution.py"], callers
+    # and both owners go through it
+    from app.routers import worker
+
+    assert "model_resolution.resolve_for_kind(" in Path(worker.__file__).read_text(encoding="utf-8")
+    assert "model_resolution.resolve_session(" in Path(agent_sessions.__file__).read_text(encoding="utf-8")
+
+
+def test_the_org_default_provider_model_reaches_a_session(client, make_token, wired):
+    """us-116.7 AC2: DevOps — no pins, org default preset with no model, org
+    default provider names grok-4.6 — opens on grok-4.6."""
+    wired["worker"] = {"id": "w-1", "name": "DevOps", "org_id": "org-1"}
+    wired["config"] = {"enabled_kinds": ["test", "release", "deploy"], "model_overrides": {}}
+    wired["org_default"] = {"id": "p-bal", "name": "Balanced", "model": None,
+                            "settings": {}, "version": 3, "tool_grants": []}
+    wired["floor"] = "grok-4.6"
+    res = _open(client, make_token())
+    assert res.status_code == 200, res.text
+    assert wired["minted"][0]["model"] == "grok-4.6"
+    assert wired["recorded"] == [("sess-1", "grok-4.6", "test")]
+
+
+def test_the_session_refusal_names_the_third_place(client, make_token, wired):
+    wired["worker"] = {"id": "w-1", "name": "DevOps", "org_id": "org-1"}
+    wired["config"] = {"enabled_kinds": ["release", "deploy"], "model_overrides": {}}
+    wired["org_default"] = None
+    wired["floor"] = None
+    res = _open(client, make_token())
+    assert res.status_code == 409
+    detail = res.json()["detail"]
+    assert "(Deployment)" in detail
+    assert "Settings → LLM providers" in detail

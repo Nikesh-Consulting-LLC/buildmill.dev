@@ -250,3 +250,138 @@ def test_close_asks_the_agent_first_when_it_declared_the_capability():
         assert blunt.calls == [("close", None)]
 
     asyncio.run(scenario())
+
+
+# ---------------------------------------------------------------------------
+# us-116.3: a session opens through the run's own door.
+#
+# Every session from 2026-08-14 to 08-17 died on the machine after the API had
+# said yes: `_open` passed a `token` name US-89.1 had removed. No test reached
+# that line. These drive `_open` past checkout preparation with fakes for the
+# checkout and the ACP agent, and pin that a session and a run open the CLI
+# through ONE routine — the same config, the same env, the same refusal.
+# ---------------------------------------------------------------------------
+
+
+def _drive_open(monkeypatch, tmp_path, *, agent=None, model_env=None, env=None):
+    """Run `session.open` against a scripted ACP agent; return (conn, prim, agent)."""
+    from test_interactive_module import FakePrimitives, ScriptedAgent
+
+    from supervisor import gitwork, mcpconfig, session_host as sh
+    from supervisor.modules import interactive
+
+    agent = agent or ScriptedAgent(http_mcp=True)
+    prims: list = []
+
+    class Prims(FakePrimitives):
+        pass
+
+    def make_prims(env=None):
+        p = Prims(agent)
+        p.env = dict(env or {})
+        prims.append(p)
+        return p
+
+    async def fake_checkout(prim, remote, name, project_id=None):
+        return tmp_path / "workspace"
+
+    async def fake_probe(url, headers, timeout=30):
+        return ["get_work_context", "submit_changeset"]
+
+    monkeypatch.setattr(sh, "LocalPrimitives", make_prims)
+    monkeypatch.setattr(gitwork, "prepare_checkout", fake_checkout)
+    monkeypatch.setattr(mcpconfig, "probe", fake_probe)
+    monkeypatch.setattr(interactive, "STOPPED_RUNS", set())
+    monkeypatch.setenv("GROK_HOME", str(tmp_path / "grok-home"))
+    for key, value in {
+        "FACTORY_API_URL": "https://api.example",
+        "FACTORY_WORKER_TOKEN": "sfw_session_token_1163",
+        **(env or {}),
+    }.items():
+        if value is None:
+            monkeypatch.delenv(key, raising=False)
+        else:
+            monkeypatch.setenv(key, value)
+
+    conn = FakeConnection()
+    params = {
+        "session_id": "s-open-1",
+        "project_id": "proj-1",
+        "git_remote_url": "https://git.example/org/repo.git",
+        "model_env": model_env
+        if model_env is not None
+        else {"GROK_MODELS_BASE_URL": "https://g/v1", "GROK_MODEL": "grok-4.5"},
+    }
+
+    async def scenario():
+        try:
+            await sh.handle(conn, {"method": "session.open", "id": 11, "params": params})
+        finally:
+            await sh.close_all()
+
+    asyncio.run(scenario())
+    return conn, (prims[0] if prims else None), agent
+
+
+def test_a_session_opens_with_the_token_from_the_process_env(monkeypatch, tmp_path):
+    """The `NameError` this story fixes: `_open` named a `token` that did not
+    exist. Against the pre-fix file this test fails with exactly that error in
+    the reply. The token comes from FACTORY_WORKER_TOKEN and nowhere else — it
+    is what the credential env the child receives is built from."""
+    conn, prim, agent = _drive_open(monkeypatch, tmp_path)
+    _, result, _ = conn.replies[0]
+    assert result["ok"] is True, result
+    assert result["acp_session_id"] == "sess-new"
+    # The child carries the credential its config names — the worker token,
+    # read from the env at open time.
+    env = prim.session_env[0]
+    assert env["FACTORY_MCP_KEY"] == "sfw_session_token_1163"
+
+
+def test_a_session_and_a_run_open_the_cli_the_same_way(monkeypatch, tmp_path):
+    """us-115.1's shape, on the SESSION path too: the servers in the CLI's own
+    config, none on `session/new`, `MCP_INIT_STRATEGY=blocking` in the child's
+    env, and no token-bearing file in the checkout."""
+    conn, prim, agent = _drive_open(monkeypatch, tmp_path)
+    assert conn.replies[0][1]["ok"] is True
+    config = (tmp_path / "grok-home" / "config.toml").read_text(encoding="utf-8")
+    assert '[mcp_servers."factory"]' in config
+    assert '[model."grok-4.5"]' in config
+    assert "auto_update = false" in config
+    assert "sfw_session_token_1163" not in config
+    assert agent.session_new_params["mcpServers"] == []
+    assert prim.session_env[0]["MCP_INIT_STRATEGY"] == "blocking"
+    # No `.factory-mcp.json` anywhere near the workspace: a session has no
+    # `execute()` to remove it afterwards.
+    assert not list(tmp_path.rglob(".factory-mcp.json"))
+
+
+def test_both_owners_go_through_one_door(monkeypatch, tmp_path):
+    """The seam this story exists for: `_run_cli` and `session_host._open`
+    both call `open_agent_cli`. A third copy of the config-and-spawn sequence
+    is how the last two regressions happened."""
+    import inspect
+
+    from supervisor import session_host as sh
+    from supervisor.modules import interactive
+
+    assert "open_agent_cli(" in inspect.getsource(sh._open)
+    assert "open_agent_cli(" in inspect.getsource(interactive.InteractiveModule._run_cli)
+    for src in (inspect.getsource(sh), inspect.getsource(interactive.InteractiveModule._run_cli)):
+        assert "open_session(" not in src, "spawn belongs to open_agent_cli only"
+        assert "write_model_config(" not in src, "the config write belongs to open_agent_cli only"
+
+
+def test_a_session_with_no_model_is_refused_with_the_runs_own_sentence(
+    monkeypatch, tmp_path
+):
+    """One refusal string for both owners (AC4)."""
+    from supervisor.modules.interactive import NO_MODEL_REFUSAL
+
+    conn, prim, agent = _drive_open(
+        monkeypatch, tmp_path, model_env={"GROK_MODELS_BASE_URL": "https://g/v1"}
+    )
+    _, result, _ = conn.replies[0]
+    assert result["ok"] is False
+    assert result["error"] == NO_MODEL_REFUSAL[:500]
+    assert not any(m.get("method") == "session/new" for m in agent.sent)

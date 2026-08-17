@@ -142,21 +142,21 @@ export type MachineOption = {
 // US-35.1: why an agent is not working, keyed by principal id — the same
 // computation the host-scoped route serves, so Team and the fleet page cannot
 // disagree.
-export type IdleReason = { reason: string; detail?: string };
+export type IdleReason = { reason: string; detail?: string | null; state?: string; last_seen_at?: string | null };
 
 /** US-35.1: "Idle" alone was the whole problem — presence is not permission.
- *  `working` and plain `idle` need no explanation; the rest are conditions a
- *  manager has to act on, so they read as such. Exported for the member page
- *  (US-53.3), which absorbed the drawer that used to render them here. */
-export const IDLE_LABELS: Record<string, string> = {
-  revoked: "Token revoked",
-  paused: "Paused",
-  "no-grants": "No project grants",
-  "queue-held": "Queue held",
-  idle: "Idle",
-  working: "Working",
-  unknown: "Unknown",
-};
+ *  us-116.2: the vocabulary and its tone live in `@/lib/idle-reasons` (a pure
+ *  module the web tests can pin); re-exported here for the member page
+ *  (US-53.3), which absorbed the drawer that used to render them. */
+import {
+  IDLE_LABELS,
+  STATUS_LABELS,
+  idleTone,
+  stateFor,
+  statusBadgeClass,
+  statusTextClass,
+} from "@/lib/idle-reasons";
+export { IDLE_LABELS, idleTone };
 
 /** US-35.3: how long the current claim has been held. Ticks client-side from a
  *  server timestamp — a run that started 40 minutes ago should not read "just
@@ -170,13 +170,6 @@ function elapsedSince(iso: string | null | undefined, now: number): string | nul
   if (mins < 60) return `${mins}m`;
   const hours = Math.floor(mins / 60);
   return `${hours}h ${mins % 60}m`;
-}
-
-export function idleTone(reason: string) {
-  if (reason === "working") return "text-emerald-600 dark:text-emerald-400";
-  if (reason === "idle") return "text-muted-foreground";
-  // Everything else is a condition that stops work happening.
-  return "text-amber-600 dark:text-amber-400";
 }
 
 export function formatWhen(iso: string) {
@@ -225,6 +218,7 @@ export function TeamView({
   canManageOrg,
   myPrincipalId,
   initialExpandedId,
+  renderedAt = 0,
 }: {
   orgId: string;
   canManage: boolean;
@@ -266,25 +260,35 @@ export function TeamView({
   myPrincipalId: string | null;
   /** A deep link (`/team/{id}`, `?principal=`) lands here — expand that row. */
   initialExpandedId: string | null;
+  /** us-116.4: the server render's timestamp. Changes on every refresh the
+   *  realtime subscriptions trigger, so the status poll below re-runs with
+   *  presence — the roster used to fetch reasons once and never again. */
+  renderedAt?: number;
 }) {
   const router = useRouter();
 
-  // US-35.1: why each agent is idle, from the org-scoped read the fleet page's
-  // host-scoped route shares.
+  // US-35.1 → us-116.4: each agent's status — presence in front of the idle
+  // reason, from the org-scoped read the fleet page's host-scoped route
+  // shares. `state` is what the State cell renders; `reason` feeds the fix
+  // link. Re-fetched on every refresh and every 30 s.
   const [idleReasons, setIdleReasons] = useState<Record<string, IdleReason>>({});
   useEffect(() => {
     let cancelled = false;
-    apiFetch(`/api/v1/agents/idle-reasons?org=${orgId}`)
-      .then((d) => {
-        if (!cancelled) setIdleReasons(d?.by_principal ?? {});
-      })
-      // Best-effort: an agent's reason is context, and failing to fetch it must
-      // not take the roster down with it.
-      .catch(() => {});
+    const load = () =>
+      apiFetch(`/api/v1/agents/idle-reasons?org=${orgId}`)
+        .then((d) => {
+          if (!cancelled) setIdleReasons(d?.by_principal ?? {});
+        })
+        // Best-effort: an agent's reason is context, and failing to fetch it must
+        // not take the roster down with it.
+        .catch(() => {});
+    void load();
+    const timer = setInterval(load, 30000);
     return () => {
       cancelled = true;
+      clearInterval(timer);
     };
-  }, [orgId]);
+  }, [orgId, renderedAt]);
 
   // US-10.12: keep the roster's runner status pills live.
   useEffect(() => {
@@ -657,6 +661,16 @@ function MemberList({
       </span>
     ) : null;
 
+    // us-116.4: THE state — presence (the live view, realtime-fresh) in front
+    // of the API's answer, one label map. The old online/offline pill collapsed
+    // into this: "online" alone told the manager nothing about whether the
+    // agent could work, and "Paused" on the machine page then read as a
+    // contradiction.
+    const agentState =
+      isAgent && status
+        ? stateFor(status.online, idle ? { ...idle, state: idle.state ?? idle.reason } : null)
+        : null;
+
     const presence =
       isAgent && status ? (
         <span className="flex items-center gap-1.5">
@@ -665,10 +679,9 @@ function MemberList({
           <span
             className={cn(
               "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-              status.online
-                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-                : "bg-muted text-muted-foreground",
+              statusBadgeClass(agentState ?? "ready"),
             )}
+            data-testid="agent-state"
           >
             <span
               className={cn(
@@ -676,7 +689,7 @@ function MemberList({
                 status.online ? "bg-emerald-500" : "bg-muted-foreground",
               )}
             />
-            {status.online ? "online" : "offline"}
+            {STATUS_LABELS[agentState ?? "ready"]}
           </span>
           {status.health !== "healthy" && (
             <span
@@ -720,15 +733,13 @@ function MemberList({
             <span
               className={cn(
                 "text-xs font-medium",
-                idleTone(idle?.reason ?? (status?.online ? "idle" : "unknown")),
+                statusTextClass(agentState ?? "ready"),
               )}
             >
-              {status && !status.online
-                ? "Offline"
-                : (IDLE_LABELS[idle?.reason ?? "idle"] ?? "Idle")}
+              {STATUS_LABELS[agentState ?? "ready"]}
             </span>
             <span className="max-w-56 truncate text-[11px] text-muted-foreground">
-              {status && !status.online
+              {agentState === "offline"
                 ? `last seen ${formatLastSeen(lastSeen ?? null)}`
                 : revoked
                   ? "its token has been revoked"

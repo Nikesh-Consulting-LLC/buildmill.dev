@@ -43,6 +43,9 @@ def wired(monkeypatch):
     )
     monkeypatch.setattr(db, "presets_by_id", lambda s, org: {DEEP["id"]: DEEP})
     monkeypatch.setattr(db, "org_default_preset", lambda s, org: None)
+    # us-116.7: the floor. None here keeps every pre-existing case as it was;
+    # the floor's own tests set it.
+    monkeypatch.setattr(db, "org_default_provider_model", lambda s, org: state.get("floor"))
     monkeypatch.setattr(
         db,
         "record_run_settings",
@@ -161,3 +164,92 @@ def test_the_manager_override_rides_in_the_run_input_context(monkeypatch, wired)
     record = worker_router.stamp_run_settings(object(), run, dict(WORKER))
     assert record["resolved_settings"]["model"] == "grok-4"
     assert record["settings_sources"]["model"] == "manager"
+
+
+# ---------------------------------------------------------------------------
+# us-116.7: the org's default model counts.
+# ---------------------------------------------------------------------------
+
+
+def test_the_org_default_provider_model_is_the_floor(monkeypatch, wired):
+    """No route, no pin, an org default preset with model null — and the org's
+    default LLM provider names a model. The run resolves to it, and the record
+    says who decided."""
+    monkeypatch.setattr(
+        db, "get_runner_config",
+        lambda s, wid: {"run_routes": {}, "model_routes": {}, "enabled_modules": ["interactive"]},
+    )
+    monkeypatch.setattr(
+        db, "org_default_preset",
+        lambda s, org: {"id": "p-bal", "name": "Balanced", "model": None,
+                        "settings": {}, "version": 3, "tool_grants": []},
+    )
+    wired["floor"] = "grok-4.6"
+    monkeypatch.setattr(db, "get_org_llm_config", lambda s, org: _providers("grok-4.6"))
+    record = worker_router.stamp_run_settings(object(), dict(RUN), dict(WORKER))
+    assert record["resolved_settings"]["model"] == "grok-4.6"
+    assert record["settings_sources"]["model"] == "org-default-provider"
+    assert wired["failed"] is None
+
+
+def test_every_tier_above_the_floor_still_wins(monkeypatch, wired):
+    """A pin, a preset model, a legacy route and a manager override each beat
+    the floor; the floor never overrides."""
+    wired["floor"] = "floor-model"
+    monkeypatch.setattr(db, "get_org_llm_config", lambda s, org: _providers(
+        "floor-model", "pinned", "claude-opus-5", "legacy", "chosen"))
+    cases = [
+        ({"run_routes": {}, "model_routes": {}, "model_overrides": {"code": "pinned"}}, "pinned", "agent"),
+        ({"run_routes": {"code": {"preset_id": DEEP["id"]}}, "model_routes": {}}, "claude-opus-5", "agent"),
+        ({"run_routes": {}, "model_routes": {"code": "legacy"}}, "legacy", "agent"),
+    ]
+    for config, expect, source in cases:
+        monkeypatch.setattr(db, "get_runner_config", lambda s, wid, c=config: c)
+        record = worker_router.stamp_run_settings(object(), dict(RUN), dict(WORKER))
+        assert record["resolved_settings"]["model"] == expect, config
+        assert record["settings_sources"]["model"] == source
+    monkeypatch.setattr(db, "get_runner_config", lambda s, wid: {"run_routes": {}, "model_routes": {}})
+    run = {**RUN, "input_context": {"settings_override": {"manager": {"model": "chosen"}}}}
+    record = worker_router.stamp_run_settings(object(), run, dict(WORKER))
+    assert record["resolved_settings"]["model"] == "chosen"
+    assert record["settings_sources"]["model"] == "manager"
+
+
+def test_an_interactive_agent_with_no_model_anywhere_is_failed_at_claim(monkeypatch, wired):
+    """The runner used to spend the claim to say 'nothing was spent'. Now the
+    claim fails the run with the three-place sentence and the runner never
+    spawns."""
+    monkeypatch.setattr(
+        db, "get_runner_config",
+        lambda s, wid: {"run_routes": {}, "model_routes": {}, "enabled_modules": ["interactive"],
+                        "enabled_kinds": ["code"]},
+    )
+    monkeypatch.setattr(
+        db, "org_default_preset",
+        lambda s, org: {"id": "p-bal", "name": "Balanced", "model": None,
+                        "settings": {}, "version": 3, "tool_grants": []},
+    )
+    wired["floor"] = None
+    with pytest.raises(HTTPException) as e:
+        worker_router.stamp_run_settings(object(), dict(RUN), dict(WORKER))
+    assert e.value.status_code == 409
+    detail = e.value.detail
+    assert detail.startswith("pod-1 has no model for any of the roles it claims (Programming).")
+    assert "Model per role" in detail
+    assert "Balanced" in detail and "has none today" in detail
+    assert "Settings → LLM providers" in detail
+    rid, error, name = wired["failed"]
+    assert rid == RUN["id"] and "Settings → LLM providers" in error and name == "pod-1"
+
+
+def test_a_non_interactive_run_with_no_model_is_still_never_refused(monkeypatch, wired):
+    """Unchanged for the CLIs that carry their own default: a null model means
+    the gateway answers with the org default at call time (US-27.8)."""
+    monkeypatch.setattr(
+        db, "get_runner_config",
+        lambda s, wid: {"run_routes": {}, "model_routes": {}, "enabled_modules": ["claude"]},
+    )
+    wired["floor"] = None
+    record = worker_router.stamp_run_settings(object(), dict(RUN), dict(WORKER))
+    assert record["resolved_settings"] == {}
+    assert wired["failed"] is None

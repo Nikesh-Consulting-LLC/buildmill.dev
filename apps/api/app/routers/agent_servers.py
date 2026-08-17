@@ -851,8 +851,9 @@ async def slot_idle_reasons(
     out: dict[str, Any] = {}
     for row in rows:
         if row.get("worker_id"):
+            # us-116.4: the one status (presence first), same as /agents.
             out[str(row["id"])] = await asyncio.to_thread(
-                db.worker_idle_reason, settings, str(row["worker_id"])
+                db.agent_status, settings, str(row["worker_id"])
             )
     return {"reasons": out}
 

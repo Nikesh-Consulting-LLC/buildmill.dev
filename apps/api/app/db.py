@@ -1882,18 +1882,79 @@ def open_runner_session(
     return str(row["id"])
 
 
+# us-116.4: how long a session may go without a heartbeat before it is not
+# live. Three missed beats (the runner beats every 30 s), and the same window
+# claims already use for a stale heartbeat (`HEARTBEAT_STALE_SECONDS`). The
+# `live_runner_sessions` view (migration 281) is the same number in SQL —
+# `test_presence.py` pins the two together.
+PRESENCE_WINDOW_SECONDS = 90
+
+
 def touch_runner_session(settings: Settings, session_id: str) -> None:
-    """Heartbeat a live session (last_seen_at = now); no-op once disconnected."""
+    """Heartbeat a live session (last_seen_at = now).
+
+    us-116.4: a beat REVIVES a row the sweep closed (`disconnected_at = null`).
+    The runner only beats while its socket is up, so a beat is proof of life;
+    without this, one delayed beat past the window would leave a live agent
+    reading Offline until it happened to reconnect."""
     with _connect(settings) as conn:
         conn.execute(
             """
             update public.runner_sessions
-            set last_seen_at = now()
-            where id = %s and disconnected_at is null
+            set last_seen_at = now(), disconnected_at = null
+            where id = %s
             """,
             (session_id,),
         )
         conn.commit()
+
+
+def close_stale_runner_sessions(
+    settings: Settings, window_seconds: int = PRESENCE_WINDOW_SECONDS
+) -> int:
+    """us-116.4: the reaper migration 099 promised. Rows whose heartbeat is
+    older than the window get `disconnected_at = now()`, so realtime
+    subscribers on the table see the change and the row agrees with the
+    `live_runner_sessions` view. Runs on the API's liveness loop."""
+    with _connect(settings) as conn:
+        rows = conn.execute(
+            """
+            update public.runner_sessions
+            set disconnected_at = now()
+            where disconnected_at is null
+              and last_seen_at < now() - make_interval(secs => %s)
+            returning id
+            """,
+            (window_seconds,),
+        ).fetchall()
+        conn.commit()
+    return len(rows)
+
+
+def worker_is_live(settings: Settings, worker_id: str) -> bool:
+    """us-116.4: presence, by the ONE predicate — a session connected and
+    heartbeated inside the window (the `live_runner_sessions` view)."""
+    if not _valid_uuid(worker_id):
+        return False
+    with _connect(settings) as conn:
+        row = conn.execute(
+            "select 1 from public.live_runner_sessions where worker_id = %s limit 1",
+            (worker_id,),
+        ).fetchone()
+    return row is not None
+
+
+def worker_last_seen(settings: Settings, worker_id: str) -> Any:
+    """The most recent heartbeat this worker's sessions recorded, live or not —
+    the "last seen 4 min ago" beside Offline."""
+    if not _valid_uuid(worker_id):
+        return None
+    with _connect(settings) as conn:
+        row = conn.execute(
+            "select max(last_seen_at) as seen from public.runner_sessions where worker_id = %s",
+            (worker_id,),
+        ).fetchone()
+    return (row or {}).get("seen")
 
 
 def close_runner_session(settings: Settings, session_id: str) -> None:
@@ -2398,10 +2459,10 @@ def worker_session_declares_auth(settings: Settings, worker_id: str) -> bool:
         row = conn.execute(
             """
             select 1
-            from public.runner_sessions rs,
+            from public.live_runner_sessions rs,
                  jsonb_array_elements(rs.module_settings) m,
                  jsonb_array_elements(m->'settings') k
-            where rs.worker_id = %s and rs.disconnected_at is null
+            where rs.worker_id = %s
               and m->>'module' = 'claude' and k->>'name' = 'auth'
             limit 1
             """,
@@ -4799,15 +4860,27 @@ def worker_idle_reason(settings: Settings, worker_id: str) -> dict[str, Any]:
     every three seconds. Every surface agreed with "waiting for work" and every
     surface was wrong.
 
-    Presence is not permission. Returns one of:
+    Presence is not permission. Returns one of, in this precedence:
 
-      working      — it holds a run right now
       revoked      — its token is dead; the machine is running and useless
+      working      — it holds a run right now
       paused       — deliberately, by an admin (US-26.5)
+      no-roles     — us-116.2: every role unchecked (`enabled_kinds = []`)
+      no-model     — us-116.2: no model resolves for any kind it claims
       no-grants    — its capability grants match nothing that is queued
       queue-held   — there is work, but every item of it is held or paused
       idle         — the healthy one: there is genuinely nothing to do
+
+    us-116.2: the two configuration reasons sit ABOVE the queue tier because a
+    misconfigured agent is not idle, it is stuck — an agent with no roles, no
+    model and no grants used to render identically to a working one. `no-model`
+    is `model_resolution.resolve_session` (us-116.1) asked early — one
+    definition of "has a model" — and an agent that resolves a model for some
+    claimed roles but not others is NOT flagged: it can work, and a warning
+    about a role it is not being asked to perform is noise. `enabled_kinds`
+    NULL is not `no-roles`: us-53.4 makes a never-saved agent unrestricted.
     """
+    from . import model_resolution  # local: model_resolution imports db
     if not _valid_uuid(worker_id):
         return {"reason": "unknown", "detail": "no such agent"}
     with _connect(settings) as conn:
@@ -4834,16 +4907,45 @@ def worker_idle_reason(settings: Settings, worker_id: str) -> dict[str, Any]:
         if held:
             return {"reason": "working", "detail": "holding a run"}
 
-        paused = conn.execute(
-            "select paused from public.runner_config where worker_id = %s",
+        config_row = conn.execute(
+            "select paused, enabled_kinds, model_overrides, model_routes, run_routes "
+            "from public.runner_config where worker_id = %s",
             (worker_id,),
         ).fetchone()
-        if paused and paused["paused"]:
+        if config_row and config_row["paused"]:
             return {
                 "reason": "paused",
                 "detail": "paused by an admin — connected, but claiming nothing",
             }
 
+    # us-116.2: configuration before queue state. Outside the connection above
+    # so the resolver's own reads (presets, org default) open their own.
+    config = dict(config_row) if config_row else {}
+    kinds = config.get("enabled_kinds")
+    if isinstance(kinds, list) and not kinds:
+        return {
+            "reason": "no-roles",
+            "detail": (
+                "every role is unchecked, so this agent claims nothing — check "
+                "at least one under What this agent does on its settings page"
+            ),
+        }
+    picked = model_resolution.resolve_session(
+        model_resolution.load_inputs(settings, str(worker["org_id"]), config=config)
+    )
+    if not picked.model:
+        roles = ", ".join(model_resolution.roles_of(picked.tried)) or "no role"
+        return {
+            "reason": "no-model",
+            "detail": (
+                f"no model resolves for any role this agent claims ({roles}) — "
+                "set one under Model per role on its settings page, give the "
+                "org's default preset a model, or set a default model on the "
+                "org's default LLM provider (Settings → LLM providers)"
+            ),
+        }
+
+    with _connect(settings) as conn:
         # Everything queued in the org, before this worker's own filters.
         queued = conn.execute(
             """
@@ -4924,6 +5026,45 @@ def worker_idle_reason(settings: Settings, worker_id: str) -> dict[str, Any]:
             "reason": "idle",
             "detail": f"{len(offerable)} item(s) claimable — it should pick one up",
         }
+
+
+# us-116.4: the one vocabulary every surface renders, in precedence order.
+# `offline` sits first because nothing below it is actionable while the agent is
+# not there; `stopped` is what the manager's vocabulary calls `paused` (a state
+# the manager put it in and only the manager lifts); `ready` is today's `idle`.
+AGENT_STATES: tuple[str, ...] = (
+    "offline", "revoked", "working", "stopped", "no-roles", "no-model",
+    "no-grants", "queue-held", "ready",
+)
+_STATE_OF_REASON = {"paused": "stopped", "idle": "ready"}
+
+
+def agent_status(settings: Settings, worker_id: str) -> dict[str, Any]:
+    """us-116.4: THE status of one agent — presence in front of
+    `worker_idle_reason`, one answer for the roster, the runner page, the
+    machine page, the superadmin card and the wizard.
+
+    Returns `{state, reason, detail, last_seen_at}`: `state` is one of
+    `AGENT_STATES`; `reason` is `worker_idle_reason`'s word (kept so existing
+    readers of the batch endpoints keep working); `detail` is the sentence
+    under it. Presence is `worker_is_live` — the `live_runner_sessions` view,
+    never a second predicate."""
+    if not worker_is_live(settings, worker_id):
+        seen = worker_last_seen(settings, worker_id)
+        return {
+            "state": "offline",
+            "reason": "offline",
+            "detail": "no live control socket — the agent's process is not connected",
+            "last_seen_at": seen.isoformat() if hasattr(seen, "isoformat") else seen,
+        }
+    reason = worker_idle_reason(settings, worker_id)
+    word = str(reason.get("reason") or "unknown")
+    return {
+        "state": _STATE_OF_REASON.get(word, word),
+        "reason": word,
+        "detail": reason.get("detail"),
+        "last_seen_at": None,
+    }
 
 
 def list_factory_queue(
@@ -8361,6 +8502,26 @@ def get_org_llm_config(
     return list(providers), {r["function_key"]: dict(r) for r in routes}
 
 
+def org_default_provider_model(settings: Settings, org_id: str) -> str | None:
+    """us-116.7: the model on the org's default LLM provider — the manager's
+    chosen default (Settings → LLM providers), already what the gateway falls
+    back to when a key carries no model (`llm_gateway`, US-27.8). The run
+    resolver's floor: an agent that pins nothing and whose default preset
+    names nothing reasons with this rather than refusing to run. None when
+    the org has no default provider, or its default provider names no model
+    — the "nobody chose" case US-78.5's refusal is for."""
+    if not _valid_uuid(org_id):
+        return None
+    with _connect(settings) as conn:
+        row = conn.execute(
+            "select default_model from public.llm_providers "
+            "where org_id = %s and is_default limit 1",
+            (org_id,),
+        ).fetchone()
+    model = str((row or {}).get("default_model") or "").strip()
+    return model or None
+
+
 def get_project_learnings_content(settings: Settings, project_id: str) -> str:
     """The raw learnings document row (not the assembled view) — the merge
     pipeline's input, mirroring the REST update path (US-1.21/US-5.6)."""
@@ -10230,29 +10391,25 @@ def record_agent_session_event(
     return True
 
 
-def session_model(settings: Settings, worker_id: str) -> str:
-    """The model a CLI-window session reasons with — the agent's own `code`
-    role, the closest thing a free-form conversation has to a kind. Empty when
-    the agent has none, which the CALLER must turn into a refusal (US-78.5's
-    rule: no model, no session — never a CLI falling back to a default nobody
-    chose).
+def record_session_model(
+    settings: Settings, session_id: str, model: str, kind: str | None
+) -> None:
+    """us-116.1: which model a CLI-window session reasons with, and which
+    kind it resolved through — on the row, so "why is this conversation using
+    Sonnet" has an answer that is not a guess.
 
-    US-83.2: this replaces `session_model_env`, a stub that returned
-    `{"model": ...}` while the runner expected the full gateway env — no key
-    was ever minted, so a session's CLI would have started credential-less and
-    the no-model refusal (keyed on GROK_MODELS_BASE_URL) could never fire.
-    The env is now built where runs build theirs: a real mint plus
-    `llm_gateway.module_env`, in the session-open path."""
-    if not _valid_uuid(worker_id):
-        return ""
+    (This replaces `session_model`, the two-line reader of
+    `model_overrides.code` that was a second implementation of the resolver's
+    precedence rules; a session now resolves through
+    `model_resolution.resolve_session`, the same path a run's claim uses.)"""
+    if not _valid_uuid(session_id):
+        return
     with _connect(settings) as conn:
-        row = conn.execute(
-            "select model_overrides, model_routes from public.runner_config where worker_id = %s",
-            (worker_id,),
-        ).fetchone()
-    overrides = (row or {}).get("model_overrides") or {}
-    routes = (row or {}).get("model_routes") or {}
-    return str(overrides.get("code") or routes.get("code") or "")
+        conn.execute(
+            "update public.agent_sessions set model = %s, model_kind = %s where id = %s",
+            (model or None, kind or None, session_id),
+        )
+        conn.commit()
 
 
 def idle_agent_sessions(settings: Settings, minutes: int) -> list[dict[str, Any]]:

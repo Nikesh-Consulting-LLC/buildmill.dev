@@ -93,11 +93,12 @@ export function ProjectAccess({
     if (!isAgent) return;
     let cancelled = false;
     const supabase = createClient();
+    // us-116.4: presence is the `live_runner_sessions` view — connected AND
+    // heartbeated inside the window — the one predicate every surface reads.
     supabase
-      .from("runner_sessions")
+      .from("live_runner_sessions")
       .select("id")
       .eq("worker_id", workerId)
-      .is("disconnected_at", null)
       .limit(1)
       .then(({ data }) => {
         if (!cancelled) setRunnerLive((data ?? []).length > 0);

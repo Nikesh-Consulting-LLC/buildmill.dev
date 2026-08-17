@@ -60,6 +60,15 @@ def _reasons(monkeypatch, mapping):
     )
 
 
+@pytest.fixture(autouse=True)
+def _live(monkeypatch):
+    """us-116.4: the route answers `db.agent_status`, which asks presence
+    first. Every agent here is live unless a test says otherwise, so the
+    idle-reason cases below still exercise the reason tier."""
+    monkeypatch.setattr(db, "worker_is_live", lambda settings, worker_id: True)
+    monkeypatch.setattr(db, "worker_last_seen", lambda settings, worker_id: None)
+
+
 def test_returns_a_reason_per_worker(client, monkeypatch):
     _rows(
         monkeypatch,
@@ -167,3 +176,38 @@ def test_reasons_come_from_the_shared_computation(client, monkeypatch):
 
     assert seen == [WORKER_A]
     assert body["reasons"][WORKER_A]["reason"] == "paused"
+
+
+# ---------------------------------------------------------------------------
+# us-116.4: one status — presence in front, the manager's words.
+# ---------------------------------------------------------------------------
+
+
+def test_the_answer_carries_state_with_paused_read_as_stopped_and_idle_as_ready(
+    client, monkeypatch
+):
+    _rows(monkeypatch, [{"id": WORKER_A, "principal_id": PRINCIPAL_A},
+                        {"id": WORKER_B, "principal_id": None}])
+    _reasons(monkeypatch, {
+        WORKER_A: {"reason": "paused", "detail": "paused by an admin"},
+        WORKER_B: {"reason": "idle", "detail": "nothing is queued"},
+    })
+    body = client.get(f"/api/v1/agents/idle-reasons?org={ORG_ID}").json()
+    assert body["reasons"][WORKER_A]["state"] == "stopped"
+    assert body["reasons"][WORKER_A]["reason"] == "paused"
+    assert body["reasons"][WORKER_B]["state"] == "ready"
+
+
+def test_an_agent_with_no_live_heartbeat_is_offline_whatever_its_reason(client, monkeypatch):
+    """Presence beats everything: an offline agent's idle reason is not even
+    computed — nothing below offline is actionable while it is not there."""
+    _rows(monkeypatch, [{"id": WORKER_A, "principal_id": PRINCIPAL_A}])
+    monkeypatch.setattr(db, "worker_is_live", lambda settings, worker_id: False)
+    monkeypatch.setattr(db, "worker_last_seen", lambda settings, worker_id: "2026-08-17T11:48:58+00:00")
+    called: list[str] = []
+    monkeypatch.setattr(db, "worker_idle_reason",
+                        lambda settings, worker_id: called.append(worker_id) or {"reason": "revoked"})
+    body = client.get(f"/api/v1/agents/idle-reasons?org={ORG_ID}").json()
+    assert body["reasons"][WORKER_A]["state"] == "offline"
+    assert body["reasons"][WORKER_A]["last_seen_at"] == "2026-08-17T11:48:58+00:00"
+    assert called == []

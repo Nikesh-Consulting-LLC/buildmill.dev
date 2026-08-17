@@ -69,7 +69,9 @@ export default async function TeamPage({
       .is("archived_at", null)
       .order("name", { ascending: true }),
     // US-10.12: live runner presence + recent faults, for the roster status pills.
-    supabase.from("runner_sessions").select("worker_id").is("disconnected_at", null),
+    // us-116.4: presence is the `live_runner_sessions` view — connected AND
+    // heartbeated inside the window — the one predicate every surface reads.
+    supabase.from("live_runner_sessions").select("worker_id"),
     supabase
       .from("runner_incidents")
       .select("worker_id")
@@ -344,6 +346,7 @@ export default async function TeamPage({
         canManageOrg={can("manage_org")}
         myPrincipalId={myPrincipal?.id ?? null}
         initialExpandedId={expand ?? null}
+        renderedAt={Date.now()}
       />
     </div>
   );

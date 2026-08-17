@@ -25,10 +25,10 @@ from .. import (
     github_tokens,
     issue_sync,
     mcp_tools,
+    model_resolution,
     project_env,
     reconcile,
     release_prep,
-    run_settings,
     validation,
 )
 from ..config import Settings, get_settings
@@ -151,14 +151,13 @@ def stamp_run_settings(
             kind,
         )
 
-    resolved = run_settings.resolve(
-        kind=kind,
-        run_routes=config.get("run_routes"),
-        presets_by_id=db.presets_by_id(settings, org_id),
-        org_default=db.org_default_preset(settings, org_id),
-        legacy_model=(config.get("model_routes") or {}).get(kind),
-        # US-66.1: the agent's own pin for this kind, if it set one.
-        agent_model_override=(config.get("model_overrides") or {}).get(kind),
+    # us-116.1: the resolver's inputs are built in ONE place, shared with the
+    # session path — the two used to disagree because the session had its own
+    # two-line copy of these rules.
+    inputs = model_resolution.load_inputs(settings, org_id, config=config)
+    resolved = model_resolution.resolve_for_kind(
+        inputs,
+        kind,
         supervisor_override=supervisor,
         manager_override=overrides.get("manager"),
     )
@@ -219,11 +218,25 @@ def stamp_run_settings(
         except Exception:  # noqa: BLE001 — a narration must not cost a claim
             logger.warning("could not record the escalation reason for %s", run["id"])
 
+    # us-116.7: an interactive agent cannot start without a model — its CLI's
+    # config needs a model block, and the runner refuses (US-78.5). With the
+    # org's default provider model as the resolver's floor, reaching here with
+    # nothing means the org chose nothing anywhere. Fail the run HERE, with the
+    # three-place sentence, rather than let the runner spend a claim to say
+    # "nothing was spent". Other modules keep today's behaviour: a null model
+    # means the gateway answers with the org default at call time.
+    model = record["resolved_settings"].get("model")
+    if not model and "interactive" in (config.get("enabled_modules") or []):
+        reason = model_resolution.no_model_refusal(
+            str(worker.get("name") or ""), [kind], inputs.org_default
+        )
+        db.fail_run_minimal(settings, str(run["id"]), reason, worker.get("name"))
+        raise HTTPException(status_code=409, detail=reason)
+
     # US-32.8: the gateway resolves a provider FROM the model id (us-27.8), so a
     # model no provider offers routes nowhere. Fail the run here, naming the
     # model, rather than letting the agent spend a lease discovering it — and
     # rather than refusing the claim, which would loop the run forever.
-    model = record["resolved_settings"].get("model")
     if model:
         providers, _routes = db.get_org_llm_config(settings, org_id)
         offered: set[str] = set()

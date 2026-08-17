@@ -588,6 +588,8 @@ export type Database = {
           error: string | null
           id: string
           last_active_at: string
+          model: string | null
+          model_kind: string | null
           org_id: string
           project_id: string
           status: string
@@ -602,6 +604,8 @@ export type Database = {
           error?: string | null
           id?: string
           last_active_at?: string
+          model?: string | null
+          model_kind?: string | null
           org_id: string
           project_id: string
           status?: string
@@ -616,6 +620,8 @@ export type Database = {
           error?: string | null
           id?: string
           last_active_at?: string
+          model?: string | null
+          model_kind?: string | null
           org_id?: string
           project_id?: string
           status?: string
@@ -6029,6 +6035,60 @@ export type Database = {
           project_name: string | null
         }
         Relationships: []
+      }
+      live_runner_sessions: {
+        Row: {
+          agent_versions: Json | null
+          connected_at: string | null
+          disconnected_at: string | null
+          host_info: Json | null
+          id: string | null
+          last_seen_at: string | null
+          module_settings: Json | null
+          modules_available: string[] | null
+          org_id: string | null
+          worker_id: string | null
+        }
+        Insert: {
+          agent_versions?: Json | null
+          connected_at?: string | null
+          disconnected_at?: string | null
+          host_info?: Json | null
+          id?: string | null
+          last_seen_at?: string | null
+          module_settings?: Json | null
+          modules_available?: string[] | null
+          org_id?: string | null
+          worker_id?: string | null
+        }
+        Update: {
+          agent_versions?: Json | null
+          connected_at?: string | null
+          disconnected_at?: string | null
+          host_info?: Json | null
+          id?: string | null
+          last_seen_at?: string | null
+          module_settings?: Json | null
+          modules_available?: string[] | null
+          org_id?: string | null
+          worker_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "runner_sessions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "runner_sessions_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Functions: {

@@ -315,12 +315,20 @@ own criteria are unmet and recorded rather than implied: a session's work is not
 yet promotable through the submit path, and `llm_usage.session_id` has a column but
 no writer, because the gateway keys usage on `run_id`.
 
-Three gaps from that phase are still open and are recorded here so they are not
-rediscovered by hitting them: `platform_run_config.model_routes` is empty, so an
-interactive agent created by the wizard resolves a model from nowhere and refuses to
-run until one is set on the agent itself (us-78.5 AC3 is not true yet — choosing a
-fleet-wide default is a superadmin decision about which model and whose money, which
-is why it was left rather than picked); no Buildmill-owned fork of
+Three gaps from that phase were recorded here so they are not rediscovered by
+hitting them; the first has since closed. `platform_run_config.model_routes` was
+empty, so an interactive agent created by the wizard resolved a model from nowhere
+and refused to run until one was set on the agent itself (us-78.5 AC3 — a
+fleet-wide default was left unpicked because it was a superadmin decision about
+which model and whose money). **us-116.7 (2026-08-17) closed it without a
+platform-wide model**: the run resolver's floor is now the org's *own* default
+LLM provider's default model (Settings → LLM providers — chosen by that org,
+billed to that org's key, and already what the gateway answered with when a key
+carried no model), recorded as `settings_sources.model = org-default-provider`;
+`platform_run_config.model_routes` stays empty and stops mattering, and the
+refusal fires only when no pin, no preset model and no default provider model
+exists — for an interactive agent, at claim (`stamp_run_settings`), not on the
+machine. Still open: no Buildmill-owned fork of
 `xai-org/grok-build` exists, so the provisioner installs upstream's binary under our
 own name (us-78.1 AC1 unmet, and Apache-2.0 §6 means the name must change before this
 is presented as a product); and the CLI-window button's glow (us-78.11 AC2) has never
