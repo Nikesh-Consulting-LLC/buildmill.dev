@@ -440,6 +440,23 @@ class CLIModule:
         """Flags that point this CLI at `config_path` and nothing else."""
         return []
 
+    def mcp_config_dir(self, workdir: Path) -> Path:
+        """Where this run's `.factory-mcp.json` is written.
+
+        The workspace itself, for every CLI that is *pointed at* the file:
+        `--mcp-config .factory-mcp.json` resolves against the checkout, and the
+        file is removed in a `finally` either way.
+
+        us-115.1 lets a module say otherwise. A CLI that takes its servers from
+        its OWN config file never reads this one — leaving it in the tree only
+        puts a URL and a credential where the agent can find them, which is
+        exactly what six interactive runs did between 2026-08-15 and 08-17
+        (15–44 raw `curl` calls each, zero `factory__*` tool calls). Overriding
+        this keeps one description of the run's tool surface and moves it out
+        of reach.
+        """
+        return workdir
+
     # ---------------------------------------------------------------- US-32.8
     # Everything above this line decided what a run SHOULD use. These three
     # make it true at the point it matters: the command line.
@@ -676,8 +693,11 @@ class CLIModule:
             mcp_path: str | None = None
             from .. import mcpconfig
 
+            # us-115.1: the module decides where the file lands (the scratch dir
+            # itself by default; beside it for a CLI that reads its own config).
+            config_dir = self.mcp_config_dir(scratch)
             written = mcpconfig.write(
-                scratch,
+                config_dir,
                 os.environ.get("FACTORY_API_URL", ""),
                 token,
                 (ctx.context or {}).get("project_id"),
@@ -692,7 +712,7 @@ class CLIModule:
                 )
             finally:
                 if mcp_path:
-                    mcpconfig.remove(scratch)
+                    mcpconfig.remove(config_dir)
             if res.exit_code != 0 or not mcp_path:
                 return self._failed(
                     res,
@@ -739,8 +759,11 @@ class CLIModule:
             # read context, study the repo, ask a question and report progress
             # while it works instead of living off one frozen prompt.
             if self.supports_mcp:
+                # us-115.1: the workspace by default, beside it for a module
+                # whose CLI reads its servers from its own config.
+                mcp_dir = self.mcp_config_dir(workdir)
                 written = mcpconfig.write(
-                    workdir,
+                    mcp_dir,
                     os.environ.get("FACTORY_API_URL", ""),
                     os.environ.get("FACTORY_WORKER_TOKEN", ""),
                     project_id,
@@ -880,7 +903,9 @@ class CLIModule:
         finally:
             # US-31.9: the config carries the worker token, so it never
             # outlives the run — on success, on failure, and on a crash.
+            # us-115.1: removed from wherever it was written, which is not
+            # always the workspace.
             if mcp_path:
                 from .. import mcpconfig
 
-                mcpconfig.remove(workdir)
+                mcpconfig.remove(Path(mcp_path).parent)

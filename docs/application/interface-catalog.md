@@ -363,7 +363,11 @@ secret that reaches an agent machine is one worker token per slot, in a 0600 env
 
 A worker connects to the single `POST /mcp` endpoint — the ASGI app `factory_mcp.py` builds,
 mounted at `/mcp` in `apps/api/app/main.py`. Every request carries the same `X-Worker-Token`
-header as the other worker-credentialed surfaces. **There is no project scope on the token**
+header as the other worker-credentialed surfaces, **or the same token as
+`Authorization: Bearer <token>`** (us-115.1) — MCP's own auth shape, so a client configured the
+standard way authenticates. `X-Worker-Token` is checked first and is unchanged; a client that
+declares an `Authorization` header also skips its OAuth discovery, which is four `.well-known`
+probes this mount can only answer 401 or 404. **There is no project scope on the token**
 (us-110.1): a worker reaches every project its `worker_capabilities` grants name — the same list
 the pool filter has always used, and the only place an agent's projects are set. The two earlier
 answers are both retired: US-3.14's `/mcp/<org>/<project>` URL path (any path segment after `/mcp`

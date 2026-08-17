@@ -37,6 +37,23 @@ MAX_BODY = 32 * 1024 * 1024
 UPSTREAM_TIMEOUT = 300
 
 
+def _presented_key(headers: dict[str, str]) -> str:
+    """The local key this request carries, in either accepted form.
+
+    us-115.1: `Authorization: Bearer <key>` is equivalent to the header. It is
+    MCP's own auth shape, and it is what lets the CLI's config name the
+    credential with `bearer_token_env_var` — which in turn makes the CLI skip
+    OAuth discovery entirely, because a server carrying an `Authorization`
+    header is by definition already authenticated.
+    """
+    direct = headers.get(LOCAL_KEY_HEADER)
+    if direct:
+        return direct
+    auth = headers.get("authorization") or ""
+    scheme, _, value = auth.partition(" ")
+    return value.strip() if scheme.lower() == "bearer" else ""
+
+
 class McpBroker:
     def __init__(self, api_url: str):
         self._api = (api_url or "").rstrip("/")
@@ -117,7 +134,7 @@ class McpBroker:
                 k, v = line.split(":", 1)
                 headers[k.strip().lower()] = v.strip()
 
-        if headers.get(LOCAL_KEY_HEADER) != self.local_key:
+        if not secrets.compare_digest(_presented_key(headers), self.local_key):
             await self._respond(writer, 403, b"missing or wrong local key")
             return
 

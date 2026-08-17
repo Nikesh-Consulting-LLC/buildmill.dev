@@ -49,6 +49,7 @@ async def open_session(
     on_update: Callable[[dict], Awaitable[None]] | None = None,
     on_permission: Any = None,
     on_disconnect: Callable[[], None] | None = None,
+    env: dict[str, str] | None = None,
 ) -> OpenedSession:
     """Spawn the agent, handshake, hand it its tools, resume or start a session.
 
@@ -62,6 +63,12 @@ async def open_session(
     a session that failed to open must not leak a child. The child's stderr
     tail rides the error, because "initialize did not answer" without the
     binary's own words is a puzzle, not a report.
+
+    us-115.1: `env` overlays the child's environment. A CLI that reads its MCP
+    servers from its own config file needs two things there that cannot ride
+    argv — the credential its config points at by name, and
+    `MCP_INIT_STRATEGY`, which the CLI checks before any hint and which is what
+    keeps the first LLM turn from starting while a server is still handshaking.
     """
     muted = {"value": False}
 
@@ -71,7 +78,7 @@ async def open_session(
         if on_update is not None:
             await on_update(params)
 
-    proc = await prim.run_session(argv, cwd=str(cwd))
+    proc = await prim.run_session(argv, cwd=str(cwd), env=env or None)
     handlers = ClientHandlers(
         prim, str(cwd), roots=[str(cwd)], on_permission=on_permission
     )

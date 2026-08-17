@@ -6619,6 +6619,25 @@ async def _send_json(send, status: int, body: bytes) -> None:
     await send({"type": "http.response.body", "body": body})
 
 
+def _presented_token(headers: dict[str, str]) -> str:
+    """The worker token this request carries, in either accepted form.
+
+    us-115.1: `Authorization: Bearer <token>` is equivalent to `X-Worker-Token`.
+    That is MCP's own auth shape, so a client configured the standard way now
+    works — and a client that declares an `Authorization` header skips OAuth
+    discovery, which is four `.well-known` probes this mount answers with 401
+    or 404 before a session can even start.
+
+    `X-Worker-Token` is checked first and keeps working unchanged; every worker,
+    runner and snippet in the wild sends it.
+    """
+    direct = headers.get("x-worker-token")
+    if direct:
+        return direct
+    scheme, _, value = (headers.get("authorization") or "").partition(" ")
+    return value.strip() if scheme.lower() == "bearer" else ""
+
+
 def build_mcp_asgi():
     """The streamable-HTTP MCP app behind worker-token auth: X-Worker-Token
     is verified exactly like the REST endpoints; the worker rides a
@@ -6646,7 +6665,7 @@ def build_mcp_asgi():
         }
         settings = get_settings()
         worker = await asyncio.to_thread(
-            db.get_worker_by_token, settings, headers.get("x-worker-token", "")
+            db.get_worker_by_token, settings, _presented_token(headers)
         )
         if not worker:
             await _send_json(
