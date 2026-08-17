@@ -27,12 +27,38 @@ seed-publishes-files and section preview, 99.7's accept/decline, 100.1's
 retired-unbuilt-do-not-re-propose list — is in
 [APPLICATION.md → Delivery history](../APPLICATION.md#delivery-history).
 
-One story is open: Phase 115's move of the interactive agent's tool configuration
-into the CLI's own `config.toml` (requested 2026-08-17).
+Three stories are open: Phase 115's move of the interactive agent's tool
+configuration into the CLI's own `config.toml` (built 2026-08-17, released, UAT
+outstanding), and Phase 116's pair on why an agent that has a model is refused a
+session and why the Team page never says so (requested 2026-08-17).
 
 | Order | Story | Title | Status |
 |---|---|---|---|
 | 1 | [us-115.1](us-115.1-the-agent-reads-its-own-config.md) | The interactive agent's tools come from its own config | Testing |
+| 2 | [us-116.1](us-116.1-a-session-picks-a-model-the-agent-has.md) | A session picks a model the agent actually has | New |
+| 3 | [us-116.2](us-116.2-an-agent-shows-what-it-is-missing.md) | An agent shows what it is missing | New |
+
+**Phase 116 — An agent says what it is missing** (requested 2026-08-17, after a
+session open was refused with *"This agent has no model to reason with"* on an
+agent that has one). A CLI session resolves its model from
+`db.session_model`, two lines that read `model_overrides.code` and stop —
+skipping `run_settings.resolve`, the one server-side resolver whose own
+docstring warns that a second implementation of the precedence rules "would
+disagree". It also hard-codes the `code` kind, so an **Architect** with all six
+of its roles pinned to `grok-4.5` is refused a conversation for lacking a model
+for work it is configured never to do — and the settings page renders a model
+picker only for roles the agent claims, so the Code dropdown the refusal names
+is not on the page. Of six active interactive agents on prod, only Programmer
+can open a session. **us-116.1** makes a session resolve through the same
+resolver a run uses, for a kind the agent actually claims, and makes the
+remaining refusal name the roles it tried and both places a model can come from.
+**us-116.2** puts the answer on the Team page *before* the click: the roster's
+State column gains `no-model` and `no-roles` above the queue-state reasons
+(today an agent with no roles, no model and no grants renders identically to a
+working one — it says `Idle`), the Start session button is disabled with its
+reason instead of failing after the click, and the Model per role block shows
+what "Inherit the org default" actually resolves to — on prod that default is
+"Balanced" with `model: null`, so blank currently inherits nothing.
 
 **Phase 115 — The interactive agent's tools come from its own config**
 (requested 2026-08-17). The interactive agent gets the factory's MCP server as a
