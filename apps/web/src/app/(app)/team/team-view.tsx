@@ -19,13 +19,7 @@ import { createClient } from "@/lib/supabase/client";
 import { RoleCapabilities } from "@/components/role-icon";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { money } from "@/lib/budget";
-import {
-  formatHumanHours,
-  humanEquivalentDays,
-  humanEquivalentHours,
-} from "@/lib/human-equivalent";
-import { compactTokens, formatWorkSeconds } from "@/lib/work-seconds";
+import { formatWorkSeconds } from "@/lib/work-seconds";
 import { formatLastSeen } from "@/lib/format-time";
 import { ROLES, ROLE_LABELS, type Role } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
@@ -199,72 +193,6 @@ export type AgentEffort = {
   costUsd: number;
 };
 
-export type TeamKpis = {
-  windowDays: number;
-  completed: number;
-  queued: number;
-  workSeconds: number;
-  /** us-109.2: the org's totals over the same window — the lines tile, the
-   *  spend tile, and the human-equivalent estimate derived from the two line
-   *  counts. */
-  linesAdded: number;
-  linesRemoved: number;
-  costUsd: number;
-};
-
-/** The numbers the manager brings to this page. All but one are 30-day
- *  windows — a tile that does not say which is a number nobody can act on, so
- *  each says it on its face. */
-function KpiRow({ kpis }: { kpis: TeamKpis }) {
-  // us-109.2: an approximation, and the note says so rather than letting a
-  // confident-looking number be read as a measurement.
-  const humanHours = humanEquivalentHours(kpis.linesAdded, kpis.linesRemoved);
-  const humanDays = humanEquivalentDays(humanHours);
-  const tiles = [
-    {
-      label: "Work items completed",
-      value: String(kpis.completed),
-      note: `merged · last ${kpis.windowDays} days`,
-    },
-    {
-      label: "Work items queued",
-      value: String(kpis.queued),
-      note: "dispatched, not finished · right now",
-    },
-    {
-      label: "Agent work",
-      value: formatWorkSeconds(kpis.workSeconds),
-      note: `across every agent · last ${kpis.windowDays} days`,
-    },
-    {
-      label: "Human equivalent",
-      value: formatHumanHours(humanHours),
-      note: `~${humanDays < 10 ? humanDays.toFixed(1) : Math.round(humanDays)} days · rough estimate from lines changed`,
-    },
-    {
-      label: "Lines of code",
-      value: `+${compactTokens(kpis.linesAdded)} −${compactTokens(kpis.linesRemoved)}`,
-      note: `added and removed · last ${kpis.windowDays} days`,
-    },
-    {
-      label: "Spent",
-      value: money(kpis.costUsd),
-      note: `agent model spend · last ${kpis.windowDays} days`,
-    },
-  ];
-  return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {tiles.map((t) => (
-        <div key={t.label} className="rounded-lg border p-3">
-          <p className="text-xs font-medium text-muted-foreground">{t.label}</p>
-          <p className="mt-0.5 text-2xl font-semibold tabular-nums">{t.value}</p>
-          <p className="text-[11px] text-muted-foreground">{t.note}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export function TeamView({
   orgId,
   canManage,
@@ -284,7 +212,7 @@ export function TeamView({
   moduleByPrincipal,
   runningRunByPrincipal,
   effortByPrincipal,
-  kpis,
+  effortWindowDays,
   canManageOrg,
   myPrincipalId,
   initialExpandedId,
@@ -319,9 +247,10 @@ export function TeamView({
   /** US-78.11: principal -> the run it is holding right now, or absent.
    *  Drives the CLI button's glow. */
   runningRunByPrincipal: Record<string, string>;
-  /** US-91.12: each agent's totals over the KPI window. */
+  /** US-91.12: each agent's totals over the reporting window. */
   effortByPrincipal: Record<string, AgentEffort>;
-  kpis: TeamKpis;
+  /** The window those totals cover, so the expanded panel can label them. */
+  effortWindowDays: number;
   /** US-55.6: gates the Claude Terminal action, same as the agent's own page. */
   canManageOrg: boolean;
   /** The signed-in user's own principal id, for "your own token" wording. */
@@ -412,10 +341,6 @@ export function TeamView({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* US-91.12: is this team producing anything? Three numbers, each
-          stating the window it covers. */}
-      <KpiRow kpis={kpis} />
-
       <div className="flex flex-wrap items-center justify-end gap-2">
         {canManage && (
           <>
@@ -451,7 +376,7 @@ export function TeamView({
         moduleByPrincipal={moduleByPrincipal}
         runningRunByPrincipal={runningRunByPrincipal}
         effortByPrincipal={effortByPrincipal}
-        effortWindowDays={kpis.windowDays}
+        effortWindowDays={effortWindowDays}
         claudeBillingByPrincipal={claudeBillingByPrincipal}
         principals={principals}
         projects={projects as ConnectProject[]}

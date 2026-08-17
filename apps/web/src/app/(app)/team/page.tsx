@@ -9,7 +9,6 @@ import {
   type AgentEffort,
   type MachineOption,
   type MemberRow,
-  type TeamKpis,
   type WorkerRow,
 } from "./team-view";
 
@@ -242,50 +241,25 @@ export default async function TeamPage({
     if (pid && c.id) runningRunByPrincipal[pid] = c.id as string;
   }
 
-  // US-91.12: the three numbers on top, and each agent's own totals — read
-  // from the us-91.11 rollup, so the page's cost does not grow with the number
-  // of runs the workspace has ever done. One query for the window, one count
-  // for each live figure.
+  // US-91.12: each agent's own totals — read from the us-91.11 rollup, so the
+  // page's cost does not grow with the number of runs the workspace has ever
+  // done. The org-wide KPI tiles that used to sit on top of this page are gone:
+  // the Costs page reports the same spend properly, and six tiles above the
+  // roster were paying for that twice in screen space.
   const WINDOW_DAYS = 30;
   const windowStart = new Date(Date.now() - WINDOW_DAYS * 86_400_000)
     .toISOString()
     .slice(0, 10);
-  const [{ data: effortRows }, completedCount, queuedCount] = await Promise.all([
-    supabase
-      .from("agent_effort_daily")
-      .select(
-        "worker_id, work_seconds, issues_completed, lines_added, lines_removed, tokens_in, tokens_out, cost_usd"
-      )
-      .eq("org_id", orgId)
-      .gte("day", windowStart),
-    supabase
-      .from("issues")
-      .select("id", { count: "exact", head: true })
-      .eq("org_id", orgId)
-      .eq("status", "merged")
-      .gte("status_changed_at", `${windowStart}T00:00:00Z`),
-    supabase
-      .from("issues")
-      .select("id", { count: "exact", head: true })
-      .eq("org_id", orgId)
-      .in("status", ["queued", "running"]),
-  ]);
+  const { data: effortRows } = await supabase
+    .from("agent_effort_daily")
+    .select(
+      "worker_id, work_seconds, issues_completed, lines_added, lines_removed, tokens_in, tokens_out, cost_usd"
+    )
+    .eq("org_id", orgId)
+    .gte("day", windowStart);
 
   const effortByPrincipal: Record<string, AgentEffort> = {};
-  let totalWorkSeconds = 0;
-  // us-109.2: the org's totals over the same window. Summed from the same rows
-  // as the per-agent figures — a tile that disagreed with the rows under it
-  // would be worse than no tile. Note these accumulate over EVERY row, agent
-  // or not, while the per-principal accumulator below skips a row whose worker
-  // no longer maps to a principal: the org spent that money regardless.
-  let totalLinesAdded = 0;
-  let totalLinesRemoved = 0;
-  let totalCostUsd = 0;
   for (const row of effortRows ?? []) {
-    totalWorkSeconds += Number(row.work_seconds ?? 0);
-    totalLinesAdded += Number(row.lines_added ?? 0);
-    totalLinesRemoved += Number(row.lines_removed ?? 0);
-    totalCostUsd += Number(row.cost_usd ?? 0);
     const pid = workerToPrincipal.get(row.worker_id as string);
     if (!pid) continue;
     const acc = (effortByPrincipal[pid] ??= {
@@ -303,16 +277,6 @@ export default async function TeamPage({
     acc.tokens += Number(row.tokens_in ?? 0) + Number(row.tokens_out ?? 0);
     acc.costUsd += Number(row.cost_usd ?? 0);
   }
-
-  const kpis: TeamKpis = {
-    windowDays: WINDOW_DAYS,
-    completed: completedCount.count ?? 0,
-    queued: queuedCount.count ?? 0,
-    workSeconds: totalWorkSeconds,
-    linesAdded: totalLinesAdded,
-    linesRemoved: totalLinesRemoved,
-    costUsd: totalCostUsd,
-  };
 
   // US-35.1: the machines an agent can be given a seat on, for the Add-agent
   // picker. Only provisioned ones: a registered-but-not-provisioned machine has
@@ -375,7 +339,7 @@ export default async function TeamPage({
         claudeBillingByPrincipal={claudeBillingByPrincipal}
         moduleByPrincipal={moduleByPrincipal}
         effortByPrincipal={effortByPrincipal}
-        kpis={kpis}
+        effortWindowDays={WINDOW_DAYS}
         runningRunByPrincipal={runningRunByPrincipal}
         canManageOrg={can("manage_org")}
         myPrincipalId={myPrincipal?.id ?? null}
