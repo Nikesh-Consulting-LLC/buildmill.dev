@@ -814,14 +814,19 @@ work item, a Workbench that acts on a draft, and a Team page rebuilt from the ro
   panel `bg-muted/50` because the manager reported the panel "blends with UI".
 
 **What Phases 103–112 recorded as not proven, and what is left to the manager.** Two
-things are owed at this close, not merely unproven: **migration 279 is applied to
-`build-mill-dev` but not to `Software-Factory`** — deliberately deferred to "the release
-that carries the code", which shipped on 2026-08-17 without it, so prod still has
-`workers.project_id`, `set_worker_project` and the five-argument `create_worker` (whose
-`p_project` default is the only reason the deployed code works); apply it with the next
-release. And **109.3's backfill has not been run** — `recompute_run_metrics` was never
-executed, so production still reports the +1.8M vendored lines and the 72,841-hour tile;
-AC6/AC7 stay unmet until someone runs it dry, then `--apply`. The dominant gap
+things were owed at this close, not merely unproven — both settled the same day.
+**Migration 279** was applied to `Software-Factory` on 2026-08-17 (12:20 UTC by the
+ledger), and it found the reader us-110.1 had missed: `get_worker_by_token` — the auth
+path for every `/worker/*` call and the git remote — still selected `workers.project_id`
+without using it, so from 11:49 to 12:57 UTC every worker authentication answered
+`UndefinedColumn` (~8,000 failed polls, two crash-inbox reports) until hotfix `cd24e18`
+dropped the column from the select and added a guard test that scans every `select …
+from public.workers` in the api for it. And **109.3's backfill** — run on 2026-08-17 13:49 UTC through the
+`Ops — recompute run metrics` workflow (added that day: the script needs `DATABASE_URL`,
+which lives only on the VM, so the workflow SSHes in with the deploy key, dry by default,
+`apply` a checkbox): two runs moved (`60af1e2a` +1,788,138 → +2,772 lines, 7,999 → 29
+files; `f878c53b` +7,203 → +2,965) and two `agent_effort_daily` rows were repaired; the
+succeeded runs' summed `lines_added` went from 1,813,644 to 24,055. AC6/AC7 met. The dominant gap
 otherwise is the checkout these were built in: no `apps/web/.env.local`, no
 `apps/api/.env`, no `DATABASE_URL`, so almost nothing visual was rendered before it
 shipped. **103.1**'s `test_release_prep_reaper_sql.py` (10 tests) was not run, the AC1
