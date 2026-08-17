@@ -40,7 +40,7 @@ fleet alarm (116.8).
 | Order | Story | Title | Status |
 |---|---|---|---|
 | 1 | [us-115.1](us-115.1-the-agent-reads-its-own-config.md) | The interactive agent's tools come from its own config | Testing |
-| 2 | [us-116.3](us-116.3-a-session-opens-through-the-runs-own-door.md) | A session opens through the run's own door | New |
+| 2 | [us-116.3](us-116.3-a-session-opens-through-the-runs-own-door.md) | A session opens through the run's own door | Testing |
 | 3 | [us-116.1](us-116.1-a-session-picks-a-model-the-agent-has.md) | A session picks a model the agent actually has | New |
 | 4 | [us-116.2](us-116.2-an-agent-shows-what-it-is-missing.md) | An agent shows what it is missing | New |
 | 5 | [us-116.7](us-116.7-the-orgs-default-model-counts.md) | The org's default model counts | New |
