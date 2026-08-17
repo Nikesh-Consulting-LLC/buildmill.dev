@@ -14,7 +14,7 @@ happen to share that token, or wrongly assuming a token valid on one row won't w
 | Web UI | Human manager in a browser | Supabase Auth session (JWT), RLS-scoped | `apps/web/src/app/(app)/` |
 | Supabase (direct) | Web app, for plain CRUD | Same browser session, enforced by RLS | Supabase JS SDK |
 | FastAPI orchestration | Web app, on the manager's behalf | Bearer JWT, verified server-side via JWKS | `apps/api/app/routers/` |
-| Worker MCP | External agent or IDE worker (an autonomous runner or a person's own tool) | Worker registry token, `X-Worker-Token` header | `apps/api/app/routers/worker.py`, `apps/api/app/factory_mcp.py` |
+| Worker MCP | External agent or IDE worker (an autonomous runner or a person's own tool) | Worker registry token, `X-Worker-Token` header or `Authorization: Bearer` (us-115.1) | `apps/api/app/routers/worker.py`, `apps/api/app/factory_mcp.py` |
 | Runner WebSocket | The supervisor runner process (`apps/runner/supervisor`) | The *same* worker registry token, sent in the WS handshake (`X-Worker-Token`, with a `params.token` fallback) | `apps/api/app/routers/runner_socket.py` |
 | Git proxy | A worker's git client pushing/pulling through the factory remote (optionally an elevated Power Git principal) | The *same* worker registry token again, sent as the HTTP Basic password | `apps/api/app/routers/gitproxy.py` |
 | LLM Gateway | A coding-agent CLI module the runner launches, via its provider SDK pointed at the gateway | A short-lived, scoped gateway key minted per run/route over the Runner WebSocket | `apps/api/app/routers/llm_gateway.py` |

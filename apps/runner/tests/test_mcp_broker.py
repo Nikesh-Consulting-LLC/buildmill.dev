@@ -49,7 +49,7 @@ class FakeUpstream:
         writer.close()
 
 
-async def _roundtrip(monkeypatch, key=None, path="/factory"):
+async def _roundtrip(monkeypatch, key=None, path="/factory", *, bearer=None):
     upstream = FakeUpstream()
     await upstream.start()
     monkeypatch.setenv("FACTORY_WORKER_TOKEN", "sfw_live_token")
@@ -60,10 +60,19 @@ async def _roundtrip(monkeypatch, key=None, path="/factory"):
             resp = await client.post(
                 f"http://127.0.0.1:{broker.port}{path}",
                 content=b'{"jsonrpc":"2.0","id":1,"method":"initialize"}',
-                headers={
-                    "content-type": "application/json",
-                    LOCAL_KEY_HEADER: key if key is not None else broker.local_key,
-                },
+                headers=(
+                    {
+                        "content-type": "application/json",
+                        "authorization": f"Bearer {bearer}",
+                    }
+                    if bearer is not None
+                    else {
+                        "content-type": "application/json",
+                        LOCAL_KEY_HEADER: key
+                        if key is not None
+                        else broker.local_key,
+                    }
+                ),
             )
         return resp, upstream.seen
     finally:
@@ -88,6 +97,52 @@ def test_wrong_local_key_is_refused_before_any_forward(monkeypatch):
     resp, seen = asyncio.run(_roundtrip(monkeypatch, key="not-the-key"))
     assert resp.status_code == 403
     assert seen == {}  # upstream never saw a request
+
+
+def test_a_bearer_token_is_the_same_credential_as_the_header(monkeypatch):
+    """us-115.1 AC6: MCP's own auth shape, so the CLI's config can name the
+    credential with `bearer_token_env_var` — which is also what makes it skip
+    OAuth discovery, four `.well-known` probes this broker answers 403."""
+
+    async def go():
+        upstream = FakeUpstream()
+        await upstream.start()
+        monkeypatch.setenv("FACTORY_WORKER_TOKEN", "sfw_live_token")
+        broker = McpBroker(f"http://127.0.0.1:{upstream.port}")
+        await broker.start()
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    f"http://127.0.0.1:{broker.port}/factory",
+                    content=b'{"jsonrpc":"2.0","id":1,"method":"initialize"}',
+                    headers={
+                        "content-type": "application/json",
+                        "authorization": f"Bearer {broker.local_key}",
+                    },
+                )
+            return resp, upstream.seen
+        finally:
+            await broker.stop()
+            await upstream.stop()
+
+    resp, seen = asyncio.run(go())
+    assert resp.status_code == 200
+    assert seen["headers"]["x-worker-token"] == "sfw_live_token"
+    # The bearer the client sent is machine-local and stops here; it is never
+    # what goes upstream.
+    assert "authorization" not in seen["headers"]
+
+
+def test_a_wrong_bearer_is_refused_like_a_wrong_header(monkeypatch):
+    resp, seen = asyncio.run(_roundtrip(monkeypatch, bearer="not-the-key"))
+    assert resp.status_code == 403
+    assert seen == {}
+
+
+def test_a_request_with_no_credential_at_all_is_refused(monkeypatch):
+    resp, seen = asyncio.run(_roundtrip(monkeypatch, key=""))
+    assert resp.status_code == 403
+    assert seen == {}
 
 
 def test_unknown_path_is_refused(monkeypatch):

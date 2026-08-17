@@ -28,6 +28,7 @@ Everything above `_run_cli` still applies: `settings_argv`, `prompt_prefix`,
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import stat
@@ -81,8 +82,10 @@ _HARDENING = (
 )
 
 
-def write_model_config(home: str, env: dict[str, str]) -> str | None:
-    """The CLI's config file: the factory's model, and its doors closed.
+def write_model_config(
+    home: str, env: dict[str, str], mcp_toml: str = ""
+) -> str | None:
+    """The CLI's config file: the factory's model, its tools, and its doors closed.
 
     Env alone is not enough: `GROK_MODELS_BASE_URL` moves the endpoint, but the
     per-model block is what pins the backend shape and names the env var the
@@ -110,6 +113,14 @@ def write_model_config(home: str, env: dict[str, str]) -> str | None:
     (measured live once — a run with no model kept using the previous run's
     `[model.buildmill]` block and 404'd on a name that no longer exists).
 
+    us-115.1: `mcp_toml` is the run's `[mcp_servers.*]` section, rendered by
+    `mcpconfig.to_grok_toml` from the same dict every other module writes to
+    `.factory-mcp.json`. It belongs HERE — `$GROK_HOME/config.toml` is layer 3
+    of the CLI's merge, above both `managed_config.toml` layers, per-slot, 0600,
+    and already rewritten on every run, so a previous run's servers are
+    overwritten out of existence by the mechanism the model block already
+    relies on. It carries no credential; the values ride the child's env.
+
     `GROK_MODEL_CONTEXT_WINDOW`, when the env carries it, becomes the block's
     `context_window` — the docs say auto-compact timing depends on it, and a
     BYOK entry knows only what this file tells it. Absent, nothing is written:
@@ -124,7 +135,10 @@ def write_model_config(home: str, env: dict[str, str]) -> str | None:
         return None
     path = Path(home) / "config.toml"
     has_model = bool(base and model)
-    body = _HARDENING
+    # One list of sections, joined once: the model block used to REPLACE the
+    # body rather than join it, which is how a third section silently goes
+    # missing the moment a model resolves.
+    sections: list[str] = []
     if has_model:
         window = (env.get("GROK_MODEL_CONTEXT_WINDOW") or "").strip()
         block = (
@@ -136,7 +150,11 @@ def write_model_config(home: str, env: dict[str, str]) -> str | None:
         )
         if window.isdigit():
             block += f"context_window = {int(window)}\n"
-        body = block + "\n" + _HARDENING
+        sections.append(block)
+    if mcp_toml:
+        sections.append(mcp_toml if mcp_toml.endswith("\n") else mcp_toml + "\n")
+    sections.append(_HARDENING)
+    body = "\n".join(sections)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(body, encoding="utf-8")
@@ -288,9 +306,25 @@ class InteractiveModule(CLIModule):
             self._run_id = None
 
     def mcp_argv(self, config_path: str) -> list[str]:
-        """Nothing on the command line: ACP takes MCP servers as a session
-        parameter. `execute()` still hands us the path, and `_run_cli` reads it."""
+        """Nothing on the command line: this CLI reads its servers from its own
+        `config.toml`. `execute()` still hands us the path, and `_run_cli`
+        renders it into that file."""
         return []
+
+    def mcp_config_dir(self, workdir: Path) -> Path:
+        """Beside the workspace, never inside it (us-115.1).
+
+        This CLI never reads `.factory-mcp.json` — `_run_cli` turns it into the
+        `[mcp_servers.*]` section of the CLI's own config. Leaving a copy in the
+        checkout only hands the agent a URL and a credential, which is what six
+        runs used to bypass MCP entirely between 2026-08-15 and 08-17.
+
+        The suffix is `mcpconfig`'s, which is what lets `remove()` take the
+        directory away with the file rather than leaving an empty one beside the
+        workspaces for `workspace.usage()` to report as a workspace."""
+        from .. import mcpconfig
+
+        return workdir.parent / f"{workdir.name}{mcpconfig.CONFIG_DIR_SUFFIX}"
 
     def build_argv(
         self, prompt: str, run_kind: str, extra: list[str] | None = None
@@ -307,6 +341,60 @@ class InteractiveModule(CLIModule):
         cmd = split_cmd(os.environ.get("RUNNER_INTERACTIVE_CMD", DEFAULT_CMD))
         args = split_cmd(os.environ.get("RUNNER_INTERACTIVE_ARGS", ""))
         return [*cmd, *(extra or []), *ACP_ARGS, *args]
+
+    async def _grok_mcp_section(
+        self, mcp_config: str, timeout: Any, emit: Any
+    ) -> tuple[str, dict[str, str]]:
+        """The run's `[mcp_servers.*]` TOML and the env its placeholders need.
+
+        Also the run's proof: the factory MCP is spoken to here, before the CLI
+        exists, so "the tools are missing" is a refusal costing nothing rather
+        than a model discovering it mid-turn and inventing a way around. The
+        engine's old guard keyed on the ACP server list, which us-115.1 empties
+        by design; this replaces it with something stronger — the old one only
+        proved a config had been written.
+        """
+        from .. import mcpconfig
+        from ..acp import AcpError
+
+        try:
+            body = json.loads(Path(mcp_config).read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            raise AcpError(
+                f"the factory's MCP config could not be read: {e} — nothing was spent."
+            ) from e
+
+        # A tool call may not outlive the work it belongs to; the CLI's own
+        # default is 6000s, which outlives every lease we hand out.
+        try:
+            tool_timeout = int(timeout) if timeout else None
+        except (TypeError, ValueError):
+            tool_timeout = None
+        toml_body, env = mcpconfig.to_grok_toml(
+            body, startup_timeout_sec=60, tool_timeout_sec=tool_timeout
+        )
+        if not toml_body:
+            raise AcpError(
+                "the factory's MCP servers could not be expressed in the agent's "
+                "config — nothing was spent."
+            )
+
+        factory = (body.get("mcpServers") or {}).get("factory") or {}
+        url = str(factory.get("url") or "").strip()
+        headers = {str(k): str(v) for k, v in (factory.get("headers") or {}).items()}
+        if not url:
+            raise AcpError(
+                "the factory's MCP config names no url — nothing was spent."
+            )
+        try:
+            tools = await mcpconfig.probe(url, headers, timeout=30)
+        except Exception as e:  # noqa: BLE001 — every failure is the same refusal
+            raise AcpError(
+                f"the factory's MCP server did not answer, so this agent would "
+                f"have run without its tools: {e}. Nothing was spent."
+            ) from e
+        emit("step", f"factory MCP ready — {len(tools)} tools")
+        return toml_body, env
 
     async def _run_cli(
         self,
@@ -382,12 +470,22 @@ class InteractiveModule(CLIModule):
 
         opened = None
         try:
+            # us-115.1: the run's servers, in the CLI's own dialect. One
+            # description (`mcpconfig.build()`, the same dict every other
+            # module writes as JSON), rendered into the file this CLI actually
+            # reads, with the credentials held back for the child's env.
+            mcp_toml, mcp_env = "", {}
+            if mcp_config:
+                mcp_toml, mcp_env = await self._grok_mcp_section(
+                    mcp_config, timeout, emit
+                )
+
             # US-78.5: written before the child starts, because the CLI reads
             # its config at startup. `GROK_HOME` comes from the slot's env file
             # (US-78.1), so each agent on a shared pool machine has its own.
             gateway_env = getattr(prim, "env", {}) or {}
             written = write_model_config(
-                os.environ.get("GROK_HOME", ""), gateway_env
+                os.environ.get("GROK_HOME", ""), gateway_env, mcp_toml
             )
             # US-78.5: a run with no model must not start. It used to proceed
             # and let the CLI fall back to whatever it was configured with,
@@ -402,15 +500,25 @@ class InteractiveModule(CLIModule):
                 )
             # US-83.2: the open sequence — spawn, handshake, tools, resume —
             # lives in the shared engine, the same one the session host uses.
+            #
+            # us-115.1: `mcp_config=None` on purpose — the servers are in the
+            # CLI's config now, and sending them a second time as a `session/new`
+            # parameter would be two descriptions that can disagree. What the
+            # child MUST carry is the strategy and the credential:
+            # `MCP_INIT_STRATEGY` is the first thing the CLI's own resolver
+            # checks, ahead of every hint, and `blocking` is what keeps the
+            # first LLM turn from starting while the factory is still
+            # handshaking (the whole defect this story fixes).
             opened = await open_session(
                 prim,
                 argv,
                 str(cwd),
-                mcp_config=mcp_config,
+                mcp_config=None,
                 resume_session_id=resume_session_id,
                 emit=emit,
                 on_update=on_update,
                 on_permission=on_permission,
+                env={**mcp_env, "MCP_INIT_STRATEGY": "blocking"},
             )
             session_id = opened.session_id
             self._last_session_id = session_id
