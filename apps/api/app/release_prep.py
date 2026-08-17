@@ -14,6 +14,7 @@ deterministic pipeline, fired directly from submit() the moment notes land.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from . import db, deploy, documents, release_notes
@@ -200,7 +201,13 @@ async def submit(
         {
             "notes_summary": notes_summary,
             "notes_detail": notes_detail,
-            "notes_doc": doc,
+            # us-113.1: encoded here, the way every other jsonb write in db.py
+            # does it. A raw dict is not a psycopg parameter — it raised
+            # `cannot adapt type 'dict'` client-side and broke every release
+            # prep for a day. `update_release` guards this too; both, because
+            # the guard protects future callers and this keeps the patch
+            # itself honest.
+            "notes_doc": json.dumps(doc),
             "status": "notes-ready",
             # us-100.6: advisory. `releases.version` is untouched — a proposal
             # is an input to the manager's cut, never the cut itself.

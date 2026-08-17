@@ -1384,15 +1384,24 @@ def update_release(
     settings: Settings, release_id: str, patch: dict[str, Any]
 ) -> dict[str, Any] | None:
     """US-21.3: service-side release update, called from the MCP submit path
-    where the caller is a worker holding the run, not a session user."""
+    where the caller is a worker holding the run, not a session user.
+
+    us-113.1: a `dict` value is encoded here rather than at every call site.
+    psycopg has no dumper for `dict` and raises `cannot adapt type 'dict'`
+    client-side, before any SQL is sent — which is how us-101.4's `notes_doc`
+    broke every release prep for a day while Postgres logged nothing at all.
+    A jsonb column is the only reason to pass a dict, so encoding it is always
+    what the caller meant; lists are left alone, since those are array columns.
+    """
     if not _valid_uuid(release_id) or not patch:
         return None
     cols = ", ".join(f"{k} = %s" for k in patch)
+    values = [json.dumps(v) if isinstance(v, dict) else v for v in patch.values()]
     with _connect(settings) as conn:
         row = conn.execute(
             f"update public.releases set {cols}, updated_at = now() "
             "where id = %s returning *",
-            (*patch.values(), release_id),
+            (*values, release_id),
         ).fetchone()
         conn.commit()
         return row
