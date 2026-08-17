@@ -56,6 +56,7 @@ import {
 import { openClaudeTerminal } from "./open-claude-terminal";
 import { MODULES } from "./[principalId]/agent-runner-data";
 import { MemberDetail } from "./[principalId]/member-detail";
+import { MemberHistory } from "./[principalId]/member-history";
 import { RouterTokenPanel } from "./[principalId]/router-token-panel";
 
 export type MemberRow = {
@@ -595,7 +596,9 @@ function MemberList({
       <button
         type="button"
         onClick={toggle}
-        className="flex min-w-0 items-center gap-2 text-left hover:opacity-80"
+        // w-full, or the button sizes to its content and overflows the cell
+        // before the name ever truncates — which clips the badge after it.
+        className="flex w-full min-w-0 items-center gap-2 text-left hover:opacity-80"
       >
         {isAgent ? (
           <Bot
@@ -611,8 +614,11 @@ function MemberList({
         ) : (
           <User className="size-4 shrink-0 text-muted-foreground" />
         )}
-        <span className="flex min-w-0 flex-col">
-          <span className="flex items-center gap-1.5">
+        <span className="flex w-full min-w-0 flex-col">
+          {/* min-w-0 at EVERY level of the flex chain, or `truncate` below
+              never engages and a long agent name draws straight over the
+              Does column instead of being cut. */}
+          <span className="flex min-w-0 items-center gap-1.5">
             <span className="truncate font-medium">{principalName(m)}</span>
             {isAgent && (
               <span className="shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium uppercase text-muted-foreground">
@@ -901,12 +907,20 @@ function MemberList({
     const detail = (
       <>
         {/* The caller renders this only when `expanded`, so the guard that
-            used to wrap it here would just be the same test twice. */}
-        <div className="border-t bg-muted/20 p-4">
+            used to wrap it here would just be the same test twice.
+            bg-muted/50, not /20: at /20 the panel was so close to the page
+            background that it read as more page rather than as this row's
+            detail. The expanded row above it carries the same tint, so the
+            two form one block. */}
+        <div className="border-t bg-muted/50 p-4">
           <Tabs defaultValue="details">
             <TabsList>
               <TabsTrigger value="details">Details</TabsTrigger>
               <TabsTrigger value="connect">Connect</TabsTrigger>
+              {/* us-112.2: what this member has done, and how well — one
+                  question, so one tab, instead of two sections buried at the
+                  bottom of the longest one. */}
+              <TabsTrigger value="history">History</TabsTrigger>
             </TabsList>
             <TabsContent value="details" className="pt-3">
               <MemberDetail
@@ -943,6 +957,9 @@ function MemberList({
                 orgShortname={orgShortname}
                 initialPrincipalId={m.principal_id}
               />
+            </TabsContent>
+            <TabsContent value="history" className="pt-3">
+              <MemberHistory orgId={orgId} member={m} workers={mine} />
             </TabsContent>
           </Tabs>
         </div>
@@ -981,7 +998,7 @@ function MemberList({
   ];
 
   return (
-    <div className="grid gap-4">
+    <div className="grid min-w-0 gap-4">
       {/* ---- sm and up: a real table, so every field can be read down a
            column instead of hunted at a different x-position per row. ---- */}
       <Table className="hidden sm:table">
@@ -1005,11 +1022,20 @@ function MemberList({
             const c = cellsFor(m);
             return (
               <Fragment key={m.principal_id}>
-                <TableRow id={`member-${m.principal_id}`}>
-                  {/* max-w-0 makes this the column that gives up width — the
-                      inverse of the US-68.6 bug, where the name was the only
-                      thing that would. Everything else is whitespace-nowrap. */}
-                  <TableCell className="max-w-0">{c.identity}</TableCell>
+                <TableRow
+                  id={`member-${m.principal_id}`}
+                  // Expanded row and its panel share a tint so they read as
+                  // one group rather than as a row and a floating slab.
+                  className={cn(c.expanded && "bg-muted/50 hover:bg-muted/50")}
+                >
+                  {/* `w-full max-w-0` is the elastic-cell trick: this column
+                      takes the leftover width and is the one that gives it
+                      back, while every other cell is whitespace-nowrap.
+                      overflow-hidden is the backstop — without it a long name
+                      overflows the cell and paints across its neighbours. */}
+                  <TableCell className="w-full max-w-0 overflow-hidden">
+                    {c.identity}
+                  </TableCell>
                   <TableCell className="whitespace-nowrap">{c.does}</TableCell>
                   <TableCell className="whitespace-nowrap">{c.presence}</TableCell>
                   <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
@@ -1042,17 +1068,24 @@ function MemberList({
         </TableBody>
       </Table>
 
-      {/* ---- below sm: the US-68.6 stacked card, same cell contents ---- */}
-      <ul className="grid gap-2 sm:hidden">
+      {/* ---- below sm: the US-68.6 stacked card, same cell contents ----
+           min-w-0 is load-bearing: a grid item's min-width defaults to
+           min-content, and the flex-wrap rows inside report their
+           single-line width as max-content — so without it the list asks
+           for ~536px inside a 375px phone and the right-hand buttons are
+           clipped off the screen with no way to scroll to them. */}
+      <ul className="grid min-w-0 gap-2 sm:hidden">
         {members.map((m) => {
           const c = cellsFor(m);
           return (
             <li
               key={m.principal_id}
               id={`member-sm-${m.principal_id}`}
-              className="rounded-md border"
+              // min-w-0 again: the li is itself a grid item, so it inherits
+              // the same min-content default the ul did.
+              className="min-w-0 rounded-md border"
             >
-              <div className="flex flex-col gap-3 px-3 py-2 text-sm">
+              <div className="flex min-w-0 flex-col gap-3 px-3 py-2 text-sm">
                 <span className="flex flex-wrap items-center gap-1.5">
                   {c.identity}
                   {c.does}
