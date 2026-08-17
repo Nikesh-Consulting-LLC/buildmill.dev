@@ -25,7 +25,7 @@ seed-publishes-files and section preview, 99.7's accept/decline, 100.1's
 retired-unbuilt-do-not-re-propose list — is in
 [APPLICATION.md → Delivery history](../APPLICATION.md#delivery-history).
 
-Twenty-seven stories are open: Phase 113's release-prep crash (found 2026-08-17, blocking every release since Phase 101 shipped), Phase 112's Team roster table and Phase 111's
+Thirty stories are open: Phase 113's release-prep crash (found 2026-08-17, blocking every release since Phase 101 shipped), Phase 114's template zip export/import and the project Instructions tab that matches the templates (requested 2026-08-17), Phase 112's Team roster table and Phase 111's
 Add agent wizard reorder (both requested 2026-08-17), Phase 110's agent-scope cleanup (requested
 2026-08-16, built and released 2026-08-17), Phase 109's Team page cleanup and the metrics
 bug it uncovered (requested
@@ -42,33 +42,52 @@ today), and the residue carried out of Phases 85–89:
 | Order | Story | Title | Status |
 |---|---|---|---|
 | 1 | [us-113.1](us-113.1-release-notes-can-be-submitted.md) | Release notes can be submitted | New |
-| 2 | [us-112.1](us-112.1-the-team-roster-is-a-table.md) | The Team roster is a table | Testing |
-| 3 | [us-112.2](us-112.2-a-member-has-a-history-tab.md) | A member has a History tab | Testing |
-| 4 | [us-111.1](us-111.1-the-wizard-asks-in-the-right-order.md) | The Add agent wizard asks in the right order | Testing |
-| 5 | [us-110.1](us-110.1-an-agents-projects-are-the-ones-you-checked.md) | An agent's projects are the ones you checked | Testing |
-| 6 | [us-109.1](us-109.1-the-team-row-says-who-not-how-much.md) | The Team row says who, not how much | Testing |
-| 7 | [us-109.2](us-109.2-the-team-kpis-price-the-work.md) | The team's KPI row prices the work | Testing |
-| 8 | [us-109.3](us-109.3-nobody-wrote-node-modules.md) | Nobody wrote node_modules | Testing |
-| 9 | [us-108.1](us-108.1-the-crash-inbox-goes-to-zero.md) | The crash inbox goes to zero | New |
-| 10 | [us-107.1](us-107.1-a-work-item-can-be-marked-fixed.md) | A work item can be marked fixed | Testing |
-| 11 | [us-107.2](us-107.2-nothing-sits-queued-forever.md) | Nothing sits queued forever | Testing |
-| 12 | [us-107.3](us-107.3-an-agent-capability-has-an-icon.md) | An agent capability has an icon | Testing |
-| 13 | [us-106.1](us-106.1-a-draft-dispatches-from-the-workbench.md) | A draft dispatches from the Workbench | Testing |
-| 14 | [us-105.1](us-105.1-a-report-can-be-marked-fixed.md) | A report can be marked fixed | Testing |
-| 15 | [us-105.2](us-105.2-a-report-is-promoted-in-one-click.md) | A report is promoted in one click | Testing |
-| 16 | [us-103.1](us-103.1-an-abandoned-release-prep-is-reaped.md) | An abandoned release prep is reaped | Testing |
-| 17 | [us-103.3](us-103.3-the-manager-can-stop-an-in-flight-release.md) | The manager can stop an in-flight release | Testing |
-| 18 | [us-103.2](us-103.2-a-restarted-runner-re-adopts-its-prep.md) | A restarted runner re-adopts the prep it was holding | Testing |
-| 19 | [us-103.4](us-103.4-the-workbench-shows-the-release-in-flight.md) | The Workbench shows the release in flight | Testing |
-| 20 | [us-103.5](us-103.5-a-release-in-flight-freezes-dispatch.md) | A release in flight freezes dispatch, and says so | Testing |
-| 21 | [us-104.1](us-104.1-every-migration-number-is-unique.md) | Every migration number is unique | Testing |
-| 22 | [us-104.2](us-104.2-the-api-test-suite-lives-in-the-repo.md) | The API test suite lives in the repo | Testing |
-| 23 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
-| 24 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
-| 25 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
-| 26 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
-| 27 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
-| 28 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+| 2 | [us-114.1](us-114.1-a-template-travels-as-a-zip.md) | A template travels as a zip | Testing |
+| 3 | [us-114.2](us-114.2-a-project-edits-its-files-like-a-template.md) | A project edits its files like a template | Testing |
+| 4 | [us-114.3](us-114.3-a-project-knows-its-template.md) | A project knows its template, and can change it | Testing |
+| 5 | [us-112.1](us-112.1-the-team-roster-is-a-table.md) | The Team roster is a table | Testing |
+| 6 | [us-112.2](us-112.2-a-member-has-a-history-tab.md) | A member has a History tab | Testing |
+| 7 | [us-111.1](us-111.1-the-wizard-asks-in-the-right-order.md) | The Add agent wizard asks in the right order | Testing |
+| 8 | [us-110.1](us-110.1-an-agents-projects-are-the-ones-you-checked.md) | An agent's projects are the ones you checked | Testing |
+| 9 | [us-109.1](us-109.1-the-team-row-says-who-not-how-much.md) | The Team row says who, not how much | Testing |
+| 10 | [us-109.2](us-109.2-the-team-kpis-price-the-work.md) | The team's KPI row prices the work | Testing |
+| 11 | [us-109.3](us-109.3-nobody-wrote-node-modules.md) | Nobody wrote node_modules | Testing |
+| 12 | [us-108.1](us-108.1-the-crash-inbox-goes-to-zero.md) | The crash inbox goes to zero | New |
+| 13 | [us-107.1](us-107.1-a-work-item-can-be-marked-fixed.md) | A work item can be marked fixed | Testing |
+| 14 | [us-107.2](us-107.2-nothing-sits-queued-forever.md) | Nothing sits queued forever | Testing |
+| 15 | [us-107.3](us-107.3-an-agent-capability-has-an-icon.md) | An agent capability has an icon | Testing |
+| 16 | [us-106.1](us-106.1-a-draft-dispatches-from-the-workbench.md) | A draft dispatches from the Workbench | Testing |
+| 17 | [us-105.1](us-105.1-a-report-can-be-marked-fixed.md) | A report can be marked fixed | Testing |
+| 18 | [us-105.2](us-105.2-a-report-is-promoted-in-one-click.md) | A report is promoted in one click | Testing |
+| 19 | [us-103.1](us-103.1-an-abandoned-release-prep-is-reaped.md) | An abandoned release prep is reaped | Testing |
+| 20 | [us-103.3](us-103.3-the-manager-can-stop-an-in-flight-release.md) | The manager can stop an in-flight release | Testing |
+| 21 | [us-103.2](us-103.2-a-restarted-runner-re-adopts-its-prep.md) | A restarted runner re-adopts the prep it was holding | Testing |
+| 22 | [us-103.4](us-103.4-the-workbench-shows-the-release-in-flight.md) | The Workbench shows the release in flight | Testing |
+| 23 | [us-103.5](us-103.5-a-release-in-flight-freezes-dispatch.md) | A release in flight freezes dispatch, and says so | Testing |
+| 24 | [us-104.1](us-104.1-every-migration-number-is-unique.md) | Every migration number is unique | Testing |
+| 25 | [us-104.2](us-104.2-the-api-test-suite-lives-in-the-repo.md) | The API test suite lives in the repo | Testing |
+| 26 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
+| 27 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
+| 28 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
+| 29 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
+| 30 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
+| 31 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+
+**Phase 114 — A template travels as a zip** (requested 2026-08-17). A project
+template is seventeen files — the `AGENTS.md` body and one `.buildmill/*.md` per
+task kind (us-100.4) — and the only way to move a tuned set between the catalog,
+an org, or a laptop is to paste them one at a time. **us-114.1** adds Export and
+Import to both template pages: Export downloads the template as a zip in exactly
+the layout a project publishes, and Import overwrites the selected template's
+files from such a zip — never creating a template — after a confirmation that
+names what will be overwritten, cleared, left alone, and ignored. Superadmin on
+the catalog; Owner/Admin (`manage_project`) on the org's copies, with RLS as the
+boundary. **us-114.2** folds the project's *Agent Instructions* and *Task
+Instructions* tabs into one **Instructions** tab drawn with the templates' own
+tree + editor, so a template and the project it seeded look the same. **us-114.3**
+puts a template banner on that tab — which template, how many files differ,
+Reset to template per file, the same Export/Import, and Change template, which
+replaces every file's content and re-links the project.
 
 **Phase 113 — Release notes can be submitted** (found 2026-08-17). Every
 release prep has crashed since Phase 101 shipped: us-101.4 added `notes_doc` to

@@ -52,6 +52,8 @@ import {
   TemplateFileEditor,
   TemplateFileTree,
 } from "@/components/template-files-editor";
+import { TemplateZipButtons } from "@/components/template-zip-buttons";
+import type { ImportPlan } from "@/lib/template-zip";
 
 type Template = {
   id: string;
@@ -259,6 +261,44 @@ export default function AdminProjectTemplatesPage() {
     } catch (e) {
       toastError("Could not save", (e as Error).message);
       return false;
+    }
+  }
+
+  /** US-114.1: apply a confirmed zip import — the same writes `saveFile`
+   * makes, one per changed file. A failure names the file it stopped on;
+   * the template is reloaded either way so the tree shows what landed. */
+  async function applyImport(t: Template, plan: ImportPlan) {
+    try {
+      for (const f of [...plan.overwrite, ...plan.cleared]) {
+        const text = plan.cleared.includes(f) ? "" : f.text;
+        try {
+          if (f.key === AGENTS_KEY) {
+            await apiCall(`/api/v1/admin/project-templates/${t.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ agent_instructions: text }),
+            });
+          } else if (text === "") {
+            await apiCall(
+              `/api/v1/admin/project-templates/${t.id}/sections/worker_instruction/${f.key}`,
+              { method: "DELETE" },
+            );
+          } else {
+            await apiCall(
+              `/api/v1/admin/project-templates/${t.id}/sections/worker_instruction/${f.key}`,
+              {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title: "", content: text, sort_order: 0 }),
+              },
+            );
+          }
+        } catch (e) {
+          throw new Error(`${f.path}: ${(e as Error).message}`);
+        }
+      }
+    } finally {
+      await reload();
     }
   }
 
@@ -482,11 +522,18 @@ export default function AdminProjectTemplatesPage() {
                       </Button>
                     )}
                   </div>
-                  {!selected.is_default && (
-                    <Button variant="outline" size="sm" onClick={() => void deleteTemplate(selected)}>
-                      Delete
-                    </Button>
-                  )}
+                  <div className="flex gap-2">
+                    <TemplateZipButtons
+                      contents={contents}
+                      name={selected.key}
+                      onImport={(plan) => applyImport(selected, plan)}
+                    />
+                    {!selected.is_default && (
+                      <Button variant="outline" size="sm" onClick={() => void deleteTemplate(selected)}>
+                        Delete
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 {selected.description && (
                   <p className="mt-1 max-w-3xl text-sm text-muted-foreground">

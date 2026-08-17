@@ -105,7 +105,7 @@ export default async function GuidelinesRefreshReviewPage({
           <Button
             variant="ghost"
             size="sm"
-            render={<Link href={`/projects/${id}?tab=guidelines`} />}
+            render={<Link href={`/projects/${id}?tab=instructions&file=agents`} />}
           >
             <ArrowLeft className="size-4" />
             {project?.name ?? "Project"}
