@@ -14,7 +14,10 @@ import { strToU8, zipSync } from "fflate";
 import { KIND_FILES } from "./instruction-files.ts";
 import {
   buildTemplateZip,
+  defaultSelectedGroups,
   exportEntries,
+  filterPlan,
+  groupPlan,
   oversizeFile,
   planImport,
   readTemplateZip,
@@ -152,4 +155,39 @@ test("the archive is named after the template", () => {
 
 test("bytes that are not a zip throw rather than import nothing quietly", () => {
   assert.throws(() => readTemplateZip(strToU8("this is not a zip")));
+});
+
+test("the import confirmation groups files by phase, AGENTS.md first and unchecked by default", () => {
+  const plan = planImport(
+    { agentInstructions: "old doc", instructions: { plan: "old plan", test: "same" } },
+    [
+      { key: "agents", path: "AGENTS.md", text: "new doc" },
+      { key: "plan", path: ".buildmill/Plan.md", text: "new plan" },
+      { key: "bug_rca", path: ".buildmill/RCA.md", text: "rca" },
+      { key: "code", path: ".buildmill/Code.md", text: "code" },
+      { key: "test", path: ".buildmill/Test.md", text: "same" },
+      { key: "release", path: ".buildmill/Release_Prep.md", text: "" }, // absent today → unchanged
+    ],
+  );
+  const groups = groupPlan(plan);
+  assert.deepEqual(
+    groups.map((g) => g.key),
+    ["agents", "planning", "coding", "testing", "release"],
+  );
+  assert.deepEqual(groups[1].overwrite.map((f) => f.key), ["plan", "bug_rca"]);
+  assert.deepEqual(groups[3].unchanged.map((f) => f.key), ["test"]);
+
+  const selected = defaultSelectedGroups(groups);
+  assert.equal(selected.has("agents"), false);
+  assert.deepEqual([...selected].sort(), ["coding", "planning", "release", "testing"]);
+
+  const narrowed = filterPlan(plan, new Set(["coding"]));
+  assert.deepEqual(narrowed.overwrite.map((f) => f.key), ["code"]);
+  assert.deepEqual(narrowed.cleared, []);
+  assert.deepEqual(narrowed.unchanged, []);
+
+  // Ticking AGENTS.md brings the document in; nothing else moves.
+  selected.add("agents");
+  const withDoc = filterPlan(plan, selected);
+  assert.deepEqual(withDoc.overwrite.map((f) => f.key), ["agents", "plan", "bug_rca", "code"]);
 });

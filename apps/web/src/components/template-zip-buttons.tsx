@@ -1,33 +1,56 @@
 "use client";
 
-// US-114.1: Export and Import for a project template, shared by the
-// superadmin catalog (/admin/project-templates) and the org's copies
-// (/settings/project-templates), the same way `template-files-editor.tsx`
-// is. This component owns the browser half — building the download and
-// reading the picked file — and hands the page an ImportPlan to apply, so
-// the writes stay where the page already makes them (the admin api on one
-// side, Supabase under RLS on the other).
+// US-114.1: Export and Import for a set of instruction files, shared by the
+// superadmin catalog (/admin/project-templates), the org's copies
+// (/settings/project-templates) and a project's Instructions tab (us-114.3),
+// the same way `template-files-editor.tsx` is. This component owns the
+// browser half — building the download and reading the picked file — and
+// hands the page an ImportPlan to apply, so the writes stay where the page
+// already makes them (the admin api on one side, Supabase under RLS on the
+// others).
 //
-// Import is destructive to the selected template, so nothing is written
-// until the manager has seen the plan: per file, overwritten / cleared /
-// unchanged, plus what in the archive was ignored. Cancel writes nothing.
+// Import is destructive to whatever is selected, so nothing is written until
+// the manager has seen the plan and chosen what to take: one checkbox per
+// group — AGENTS.md, then the phase groups the tree draws — each naming the
+// files it would overwrite, clear, or leave. AGENTS.md starts unchecked:
+// it is the file most often tuned by hand, so replacing it is a choice.
+// Cancel writes nothing.
 
 import { useRef, useState } from "react";
 import { Download, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast, toastError, toastSuccess } from "@/components/ui/toast";
-import { confirmDialog } from "@/components/ui/confirm-dialog";
 import type { TemplateContents } from "@/lib/template-files";
 import {
   buildTemplateZip,
+  defaultSelectedGroups,
+  filterPlan,
+  groupPlan,
   oversizeFile,
   planImport,
   readTemplateZip,
   templateZipFilename,
+  type ImportGroup,
   type ImportPlan,
   type ZipFile,
 } from "@/lib/template-zip";
+
+type Pending = {
+  fileName: string;
+  plan: ImportPlan;
+  groups: ImportGroup[];
+  ignored: string[];
+};
 
 export function TemplateZipButtons({
   contents,
@@ -50,6 +73,8 @@ export function TemplateZipButtons({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   function exportZip() {
     if (!contents) return;
@@ -67,7 +92,7 @@ export function TemplateZipButtons({
     URL.revokeObjectURL(url);
   }
 
-  async function importZip(file: File) {
+  async function pickZip(file: File) {
     if (!contents) return;
     let files: ZipFile[];
     let ignored: string[];
@@ -97,41 +122,54 @@ export function TemplateZipButtons({
       return;
     }
     const plan = planImport(contents, files);
-    const changes = plan.overwrite.length + plan.cleared.length;
-    if (changes === 0) {
+    if (plan.overwrite.length + plan.cleared.length === 0) {
       toast({
         title: "Nothing to import",
         description:
-          `Every file in ${file.name} already matches this template` +
+          `Every file in ${file.name} already matches` +
           (ignored.length ? `; ${describeIgnored(ignored)} ignored.` : "."),
       });
       return;
     }
-    const ok = await confirmDialog({
-      title: `Import ${file.name} into ${name}?`,
-      description: <PlanSummary plan={plan} ignored={ignored} />,
-      confirmLabel: `Import ${changes} ${changes === 1 ? "file" : "files"}`,
-      destructive: true,
-    });
-    if (!ok) return;
+    const groups = groupPlan(plan);
+    setSelected(defaultSelectedGroups(groups));
+    setPending({ fileName: file.name, plan, groups, ignored });
+  }
+
+  const chosen = pending ? filterPlan(pending.plan, selected) : null;
+  const changes = chosen ? chosen.overwrite.length + chosen.cleared.length : 0;
+
+  async function confirmImport() {
+    if (!pending || !chosen) return;
     setBusy(true);
     try {
-      await onImport(plan);
+      await onImport(chosen);
       toastSuccess(
         "Imported",
         [
-          plan.overwrite.length ? `${plan.overwrite.length} overwritten` : null,
-          plan.cleared.length ? `${plan.cleared.length} cleared` : null,
-          plan.unchanged.length ? `${plan.unchanged.length} unchanged` : null,
+          chosen.overwrite.length ? `${chosen.overwrite.length} overwritten` : null,
+          chosen.cleared.length ? `${chosen.cleared.length} cleared` : null,
+          chosen.unchanged.length ? `${chosen.unchanged.length} unchanged` : null,
         ]
           .filter(Boolean)
           .join(", ") + ".",
       );
+      setPending(null);
     } catch (e) {
       toastError("Import stopped", (e as Error).message);
+      setPending(null);
     } finally {
       setBusy(false);
     }
+  }
+
+  function toggle(key: string, on: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(key);
+      else next.delete(key);
+      return next;
+    });
   }
 
   return (
@@ -167,9 +205,91 @@ export function TemplateZipButtons({
           const f = e.target.files?.[0];
           // Reset so picking the same file again re-fires onChange.
           e.target.value = "";
-          if (f) void importZip(f);
+          if (f) void pickZip(f);
         }}
       />
+
+      <Dialog
+        open={pending !== null}
+        onOpenChange={(open) => {
+          if (!open && !busy) setPending(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Import {pending?.fileName} into {name}?</DialogTitle>
+            <DialogDescription>
+              Choose what to take. Checked groups are overwritten from the zip;
+              unchecked groups and files not in the archive are left as they
+              are. Nothing is written until you confirm.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex max-h-80 flex-col gap-1.5 overflow-y-auto">
+            {pending?.groups.map((g) => {
+              const on = selected.has(g.key);
+              const touched = g.overwrite.length + g.cleared.length;
+              return (
+                <label
+                  key={g.key}
+                  className="flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2 text-sm hover:bg-muted/50"
+                >
+                  <Checkbox
+                    checked={on}
+                    disabled={busy}
+                    onCheckedChange={(c) => toggle(g.key, c)}
+                    aria-label={`Import ${g.label}`}
+                    className="mt-0.5"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-x-2">
+                      <span className={g.key === "agents" ? "font-mono font-medium" : "font-medium"}>
+                        {g.label}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {touched === 0
+                          ? "already matches"
+                          : [
+                              g.overwrite.length ? `${g.overwrite.length} overwritten` : null,
+                              g.cleared.length ? `${g.cleared.length} cleared` : null,
+                              g.unchanged.length ? `${g.unchanged.length} unchanged` : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                      </span>
+                    </span>
+                    <FileList label="Overwritten" files={g.overwrite} tone="text-foreground" />
+                    <FileList label="Cleared" files={g.cleared} tone="text-destructive" />
+                    <FileList label="Unchanged" files={g.unchanged} tone="text-muted-foreground" />
+                  </span>
+                </label>
+              );
+            })}
+            {pending && pending.ignored.length > 0 && (
+              <p className="px-1 pt-1 text-xs text-muted-foreground">
+                Ignored ({pending.ignored.length}):{" "}
+                <span className="font-mono">{describeIgnored(pending.ignored)}</span>
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => setPending(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={busy || changes === 0}
+              onClick={() => void confirmImport()}
+            >
+              {busy
+                ? "Importing…"
+                : changes === 0
+                  ? "Nothing selected"
+                  : `Import ${changes} ${changes === 1 ? "file" : "files"}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -180,47 +300,12 @@ function describeIgnored(ignored: string[]): string {
   return more > 0 ? `${shown} and ${more} more` : shown;
 }
 
-function PlanSummary({ plan, ignored }: { plan: ImportPlan; ignored: string[] }) {
-  return (
-    <span className="mt-2 block space-y-2 text-left">
-      <PlanGroup label="Overwritten" files={plan.overwrite} tone="text-foreground" />
-      <PlanGroup label="Cleared" files={plan.cleared} tone="text-destructive" />
-      <PlanGroup label="Unchanged" files={plan.unchanged} tone="text-muted-foreground" />
-      {ignored.length > 0 && (
-        <span className="block">
-          <span className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Ignored ({ignored.length})
-          </span>
-          <span className="block font-mono text-xs text-muted-foreground">
-            {describeIgnored(ignored)}
-          </span>
-        </span>
-      )}
-      <span className="block text-xs">
-        Files not in the archive are left as they are. Nothing is written until you confirm.
-      </span>
-    </span>
-  );
-}
-
-function PlanGroup({
-  label,
-  files,
-  tone,
-}: {
-  label: string;
-  files: ZipFile[];
-  tone: string;
-}) {
+function FileList({ label, files, tone }: { label: string; files: ZipFile[]; tone: string }) {
   if (files.length === 0) return null;
   return (
-    <span className="block">
-      <span className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {label} ({files.length})
-      </span>
-      <span className={`block font-mono text-xs ${tone}`}>
-        {files.map((f) => f.path).join(", ")}
-      </span>
+    <span className={`block font-mono text-[11px] ${tone}`}>
+      <span className="text-muted-foreground">{label}: </span>
+      {files.map((f) => f.path.replace(/^\.buildmill\//, "")).join(", ")}
     </span>
   );
 }
