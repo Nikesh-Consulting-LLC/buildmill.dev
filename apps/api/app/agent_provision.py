@@ -1512,18 +1512,23 @@ def upsert_pool_placement_request(
     worker_id: str,
     by: str = "",
     by_email: str = "",
+    desired_state: str = "paused",
 ) -> None:
+    """us-116.6: `desired_state` rides the queued request (migration 282), so a
+    placement that waited for the host's job lock lands in the state the
+    wizard asked for, not the bare default."""
     with _connect(settings) as conn:
         conn.execute(
             "insert into public.agent_pool_placement_requests"
-            " (org_id, pool_id, worker_id, requested_by, requested_by_email)"
-            " values (%s, %s, %s, %s, %s)"
+            " (org_id, pool_id, worker_id, requested_by, requested_by_email, desired_state)"
+            " values (%s, %s, %s, %s, %s, %s)"
             " on conflict (worker_id) do update set"
             "   pool_id = excluded.pool_id, status = 'pending', error = null,"
             "   requested_by = excluded.requested_by,"
             "   requested_by_email = excluded.requested_by_email,"
+            "   desired_state = excluded.desired_state,"
             "   created_at = now()",
-            (org_id, pool_id, worker_id, by or None, by_email),
+            (org_id, pool_id, worker_id, by or None, by_email, desired_state),
         )
         conn.commit()
 
@@ -1531,7 +1536,8 @@ def upsert_pool_placement_request(
 def due_pool_placements(settings: Settings, limit: int = 5) -> list[dict[str, Any]]:
     with _connect(settings) as conn:
         return conn.execute(
-            "select id, org_id, pool_id, worker_id, requested_by, requested_by_email"
+            "select id, org_id, pool_id, worker_id, requested_by, requested_by_email,"
+            " desired_state"
             " from public.agent_pool_placement_requests"
             " where status = 'pending'"
             " order by created_at limit %s",
@@ -1645,6 +1651,8 @@ async def pool_placement_sweep(settings: Settings) -> int:
                 "kind": "add_slot",
                 "slots": 1,
                 "adopt_worker_id": worker_id,
+                # us-116.6: the intent the wizard queued with the request.
+                "desired_state": str(req.get("desired_state") or "paused"),
             },
         )
         placed += 1
@@ -1863,17 +1871,28 @@ async def _create_and_start_slot(
     flush,
     *,
     adopt_worker_id: str | None = None,
+    desired_state: str = "paused",
 ) -> dict[str, Any]:
+    """us-116.6: `desired_state` is the caller's intent for the new slot.
+    The bare machine-page "Add agent" keeps `paused` (a slot with no grants
+    and no roles has nothing to claim anyway); the wizard asks for `enabled`,
+    because it has just collected which projects and roles — grants and roles
+    are the fail-closed gate, and a second gate that needs a second click on
+    another page buys nothing. Written BEFORE `systemctl enable --now`, so the
+    first hello can claim."""
     host_id = str(step.host["id"])
     org_id = str(step.host["org_id"])
     index = await asyncio.to_thread(next_slot_index, settings, host_id)
     base_name = re.sub(r"[^a-z0-9-]+", "-", (step.host["server_name"] or "agent").lower()).strip("-")
     name = f"{base_name}-{index}"
     workdir = step.host["workdir"]
+    start_paused = desired_state != "enabled"
 
     step.log(f"== slot {index} ==")
     if adopt_worker_id:
-        token = await asyncio.to_thread(adopt_worker_token, settings, adopt_worker_id)
+        token = await asyncio.to_thread(
+            reissue_worker_token, settings, adopt_worker_id, pause=start_paused
+        )
         identity = {"worker_id": adopt_worker_id, "principal_id": None, "token": token}
         with _connect(settings) as conn:
             row = conn.execute(
@@ -1897,6 +1916,8 @@ async def _create_and_start_slot(
             name=name,
             template=step.host.get("slot_template") or {},
         )
+        if not start_paused:
+            await asyncio.to_thread(set_paused, settings, str(identity["worker_id"]), False)
         step.log(f"[created agent {name}]")
 
     with _connect(settings) as conn:
@@ -1904,7 +1925,7 @@ async def _create_and_start_slot(
             "insert into public.agent_slots"
             " (org_id, agent_server_id, slot_index, name, worker_id, principal_id,"
             "  service_name, workspace_path, desired_state)"
-            " values (%s, %s, %s, %s, %s, %s, %s, %s, 'paused') returning *",
+            " values (%s, %s, %s, %s, %s, %s, %s, %s, %s) returning *",
             (
                 org_id,
                 host_id,
@@ -1914,6 +1935,7 @@ async def _create_and_start_slot(
                 identity["principal_id"],
                 f"buildmill-agent@{index}",
                 f"{workdir}/agents/{index}/workspace",
+                "paused" if start_paused else "enabled",
                 ),
         ).fetchone()
         conn.commit()
@@ -1941,8 +1963,10 @@ async def _create_and_start_slot(
     connected = await _wait_for_connect(settings, str(identity["worker_id"]), step.log)
     if not connected:
         step.log(connect_timeout_message(index, settings.api_base_url))
+    elif start_paused:
+        step.log(f"[slot {index} connected — paused, claiming nothing until you start it]")
     else:
-        step.log(f"[slot {index} connected — paused, claiming nothing until you enable it]")
+        step.log(f"[slot {index} connected — enabled, ready to claim]")
     return slot
 
 
@@ -1971,7 +1995,9 @@ async def _wait_for_connect(
 async def _job_add_slot(settings: Settings, step: StepCtx, ctx: dict[str, Any], flush) -> str:
     for _ in range(int(ctx.get("slots") or 1)):
         await _create_and_start_slot(
-            settings, step, flush, adopt_worker_id=ctx.get("adopt_worker_id")
+            settings, step, flush,
+            adopt_worker_id=ctx.get("adopt_worker_id"),
+            desired_state=str(ctx.get("desired_state") or "paused"),
         )
     await _probe_into_row(settings, step)
     return "succeeded"

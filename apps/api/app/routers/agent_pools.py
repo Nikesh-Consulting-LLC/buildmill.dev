@@ -67,6 +67,8 @@ async def _free_slots(settings: Settings, pool_id: str, capacity: int) -> int:
 
 class PlaceBody(BaseModel):
     worker_id: str
+    # us-116.6: the state the placed slot lands in — see AddSlotsBody.
+    desired_state: str = "paused"
 
 
 @router.post("/{pool_id}/place")
@@ -91,6 +93,10 @@ async def place(
         raise HTTPException(status_code=404, detail="That agent does not exist")
     worker = worker_rows[0]
     await _require_develop(str(worker["org_id"]), user, settings)
+    if body.desired_state not in ("enabled", "paused"):
+        raise HTTPException(
+            status_code=422, detail="desired_state must be 'enabled' or 'paused'"
+        )
 
     live = await postgrest_get(
         settings,
@@ -133,6 +139,7 @@ async def place(
             worker_id=body.worker_id,
             by=user.id,
             by_email=user.email,
+            desired_state=body.desired_state,
         )
         return JSONResponse(
             status_code=202,
@@ -146,6 +153,7 @@ async def place(
             "kind": "add_slot",
             "slots": 1,
             "adopt_worker_id": body.worker_id,
+            "desired_state": body.desired_state,
         },
     )
     return {"job_id": str(job["id"]), "pool_name": pool["pool_name"], "queued": False}

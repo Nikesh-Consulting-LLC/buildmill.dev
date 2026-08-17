@@ -712,6 +712,17 @@
     "mutating": false
   },
   {
+    "method": "GET",
+    "path": "/api/v1/agents/model-check",
+    "tag": "agents",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "model_check",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
     "method": "PATCH",
     "path": "/api/v1/agents/{principal_id}/name",
     "tag": "agents",

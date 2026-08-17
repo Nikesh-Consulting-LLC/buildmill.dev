@@ -19,7 +19,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .. import agent_provision, db
+from .. import agent_provision, db, model_resolution
 from ..auth import AuthUser, verify_token
 from ..config import Settings, get_settings
 from ..supabase import RpcError, postgrest_get, rpc
@@ -87,6 +87,44 @@ async def agent_idle_reasons(
         if row.get("principal_id"):
             by_principal[str(row["principal_id"])] = reason
     return {"reasons": out, "by_principal": by_principal}
+
+
+@router.get("/model-check")
+async def model_check(
+    org: str,
+    kinds: str = "",
+    user: AuthUser = Depends(verify_token),
+    settings: Settings = Depends(get_settings),
+):
+    """us-116.6: what a NEW agent with these roles would resolve — the same
+    resolver, asked before the agent exists, so the wizard can say "no model
+    will resolve for these roles" once, up front, instead of the manager
+    learning it from a failed run. `kinds` is a comma-separated list of run
+    kinds; empty means every kind (a never-saved agent is unrestricted).
+
+    A member read: it reveals nothing beyond the org's own presets and default
+    provider, which the caller can already see. RLS on the org's workers is
+    the gate — a non-member has no org to ask about, so the org must be one the
+    caller can see."""
+    rows = await postgrest_get(
+        settings, user.token, "organizations", {"select": "id", "id": f"eq.{org}", "limit": "1"}
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="organization not found")
+    wanted = [k.strip() for k in (kinds or "").split(",") if k.strip()]
+    config = {"enabled_kinds": wanted or None, "model_overrides": {}, "run_routes": {}, "model_routes": {}}
+    picked = await asyncio.to_thread(
+        lambda: model_resolution.resolve_session(
+            model_resolution.load_inputs(settings, org, config=config)
+        )
+    )
+    return {
+        "resolves": bool(picked.model),
+        "model": picked.model,
+        "kind": picked.kind,
+        "source": (picked.resolved.sources.get("model") if picked.resolved else None),
+        "tried": picked.tried,
+    }
 
 
 class RenameBody(BaseModel):

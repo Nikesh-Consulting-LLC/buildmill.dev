@@ -295,3 +295,79 @@ def test_an_invisible_slot_is_404(client, make_token, monkeypatch):
         headers=_auth(make_token),
     )
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# us-116.6: a new agent starts ready — placement carries the intent.
+# ---------------------------------------------------------------------------
+
+
+def test_placement_carries_desired_state_enabled_to_the_job(client, make_token, pool):
+    resp = client.post(
+        f"/api/v1/agent-pools/{POOL_ID}/place",
+        json={"worker_id": WORKER_ID, "desired_state": "enabled"},
+        headers=_auth(make_token),
+    )
+    assert resp.status_code == 200, resp.text
+    assert pool["launched"]["desired_state"] == "enabled"
+
+
+def test_placement_defaults_to_paused_when_absent(client, make_token, pool):
+    """The bare default is unchanged — only a caller that asks gets enabled."""
+    client.post(
+        f"/api/v1/agent-pools/{POOL_ID}/place",
+        json={"worker_id": WORKER_ID},
+        headers=_auth(make_token),
+    )
+    assert pool["launched"]["desired_state"] == "paused"
+
+
+def test_an_unknown_desired_state_is_422(client, make_token, pool):
+    resp = client.post(
+        f"/api/v1/agent-pools/{POOL_ID}/place",
+        json={"worker_id": WORKER_ID, "desired_state": "running"},
+        headers=_auth(make_token),
+    )
+    assert resp.status_code == 422
+
+
+def test_a_queued_placement_remembers_the_intent(client, make_token, pool, monkeypatch):
+    def busy(settings, **kwargs):
+        raise agent_provision.JobActive("This machine already has a job running.")
+
+    enqueued = {}
+    monkeypatch.setattr(agent_provision, "create_job", busy)
+    monkeypatch.setattr(agent_provision, "upsert_pool_placement_request",
+                        lambda settings, **kw: enqueued.update(kw))
+    resp = client.post(
+        f"/api/v1/agent-pools/{POOL_ID}/place",
+        json={"worker_id": WORKER_ID, "desired_state": "enabled"},
+        headers=_auth(make_token),
+    )
+    assert resp.status_code == 202
+    assert enqueued["desired_state"] == "enabled"
+
+
+def test_the_sweep_replays_the_queued_intent(monkeypatch):
+    """The request row carries desired_state (migration 282); the sweep hands
+    it to the add-slot job like an immediate placement would."""
+    import asyncio
+
+    launched = []
+    monkeypatch.setattr(agent_provision, "due_pool_placements", lambda s, limit=5: [
+        {"id": "req-1", "org_id": PLATFORM_ORG, "pool_id": POOL_ID, "worker_id": WORKER_ID,
+         "requested_by": "u", "requested_by_email": "u@x", "desired_state": "enabled"},
+    ])
+    monkeypatch.setattr(agent_provision, "_worker_already_placed", lambda s, w: False)
+    monkeypatch.setattr(agent_provision, "_placement_pool_row", lambda s, p: dict(POOL_ROW))
+    monkeypatch.setattr(agent_provision, "_placement_free_slots", lambda s, p, c: 3)
+    monkeypatch.setattr(agent_provision, "create_job", lambda s, **kw: {"id": "job-9", **kw})
+    monkeypatch.setattr(agent_provision, "delete_pool_placement", lambda s, r: None)
+    monkeypatch.setattr(agent_provision, "launch", lambda s, ctx: launched.append(ctx))
+
+    class S:
+        database_url = "postgresql://x"
+
+    asyncio.run(agent_provision.pool_placement_sweep(S()))
+    assert launched and launched[0]["desired_state"] == "enabled"
+    assert launched[0]["adopt_worker_id"] == WORKER_ID

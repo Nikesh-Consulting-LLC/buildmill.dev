@@ -46,7 +46,7 @@ fleet alarm (116.8).
 | 5 | [us-116.7](us-116.7-the-orgs-default-model-counts.md) | The org's default model counts | Testing |
 | 6 | [us-116.4](us-116.4-team-and-the-machine-page-say-the-same-thing.md) | Team and the machine page say the same thing | Testing |
 | 7 | [us-116.5](us-116.5-start-means-start.md) | Start means start | Testing |
-| 8 | [us-116.6](us-116.6-a-new-agent-starts-ready.md) | A new agent starts ready | New |
+| 8 | [us-116.6](us-116.6-a-new-agent-starts-ready.md) | A new agent starts ready | Testing |
 | 9 | [us-116.8](us-116.8-the-fleet-says-when-it-goes-dark.md) | The fleet says when it goes dark, and says a standing fault once | New |
 
 **Phase 116 — An agent says what it is missing, and starts when told**

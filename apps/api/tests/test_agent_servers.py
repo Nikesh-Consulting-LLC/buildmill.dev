@@ -703,3 +703,37 @@ def test_saving_unrelated_settings_never_needs_platform_admin(
         headers=_auth(make_token),
     )
     assert resp.status_code == 200, resp.text
+
+
+# --- us-116.6: a new agent starts ready ------------------------------------
+
+
+def test_add_slots_carries_desired_state_to_the_job(client, make_token, fleet, monkeypatch):
+    launched = []
+    monkeypatch.setattr(agent_provision, "launch", lambda settings, ctx: launched.append(ctx))
+    resp = client.post(
+        f"/api/v1/agent-servers/{HOST_ID}/slots",
+        json={"slots": 1, "confirm_capacity": True, "desired_state": "enabled"},
+        headers=_auth(make_token),
+    )
+    assert resp.status_code == 200, resp.text
+    assert launched[0]["kind"] == "add_slot"
+    assert launched[0]["desired_state"] == "enabled"
+
+
+def test_add_slots_defaults_to_paused_and_refuses_an_unknown_state(client, make_token, fleet, monkeypatch):
+    launched = []
+    monkeypatch.setattr(agent_provision, "launch", lambda settings, ctx: launched.append(ctx))
+    resp = client.post(
+        f"/api/v1/agent-servers/{HOST_ID}/slots",
+        json={"slots": 1, "confirm_capacity": True},
+        headers=_auth(make_token),
+    )
+    assert resp.status_code == 200
+    assert launched[0]["desired_state"] == "paused"
+    resp = client.post(
+        f"/api/v1/agent-servers/{HOST_ID}/slots",
+        json={"slots": 1, "confirm_capacity": True, "desired_state": "on"},
+        headers=_auth(make_token),
+    )
+    assert resp.status_code == 422
