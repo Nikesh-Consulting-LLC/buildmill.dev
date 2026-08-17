@@ -491,11 +491,22 @@ function RunnerConsole({
           <ul className="space-y-1 text-xs">
             {incidents.slice(0, 5).map((i) => {
               const fix = fixForIncident(principalId, i);
+              // us-116.8: a standing fault is one incident with an open-since
+              // and, once the probe finds the condition gone, a cleared-at —
+              // not a fresh row every hour.
+              const cleared = i.cleared_at ?? null;
               return (
-                <li key={i.id} className="text-red-700 dark:text-red-300">
-                  <span className="text-muted-foreground">{new Date(i.created_at).toLocaleString()}</span>{" "}
+                <li
+                  key={i.id}
+                  className={cleared ? "text-muted-foreground" : "text-red-700 dark:text-red-300"}
+                >
+                  <span className="text-muted-foreground">
+                    {cleared ? "open since " : ""}
+                    {new Date(i.created_at).toLocaleString()}
+                    {cleared ? ` · cleared ${new Date(cleared).toLocaleString()}` : ""}
+                  </span>{" "}
                   — {i.message ?? i.kind}
-                  {fix && (
+                  {fix && !cleared && (
                     <>
                       {" — "}
                       <Link

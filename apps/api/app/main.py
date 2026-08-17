@@ -156,6 +156,18 @@ async def lifespan(app: FastAPI):
                         stale,
                         db.PRESENCE_WINDOW_SECONDS,
                     )
+                # us-116.8: the fleet says when it goes dark — an org that had
+                # live agents and has had none for two minutes is told once
+                # (managers + a System issue), and the return is recorded.
+                from . import fleet_alarm
+
+                dark = await fleet_alarm.fleet_dark_sweep(get_settings())
+                if dark.get("opened") or dark.get("closed"):
+                    logger.warning(
+                        "Fleet-dark sweep: %d org(s) went dark, %d came back",
+                        dark.get("opened", 0),
+                        dark.get("closed", 0),
+                    )
                 # US-103.1: release prep's own lease sweep, same loop, same
                 # cadence discipline. Its lease is two hours, so this fires
                 # long after the agent died — us-103.3's Stop is what covers

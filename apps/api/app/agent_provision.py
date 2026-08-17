@@ -1441,15 +1441,24 @@ def raise_service_incident(
     message: str,
     kind: str = "agent-service",
 ) -> bool:
-    """Once per transition, not once per probe (US-26.7). True if raised."""
+    """Once per EPISODE (us-116.8), not once per hour. True if raised.
+
+    US-26.7 said "once per transition, not once per probe" and implemented
+    once per hour: a revoked worker left bound to its slot was re-alarmed on
+    the hour, every hour, with a notification each time — 429 `agent-token`
+    rows in fourteen days, 118 for one agent. Now an incident of a kind is
+    raised for a worker only when it has no OPEN one (`cleared_at is null`)
+    of that kind; the probe clears it when it finds the condition gone
+    (`clear_service_incidents`), and only then can it be raised again. The
+    state (us-116.4) shows the fault for as long as it lasts; the incident
+    marks when it started and when it stopped."""
     with _connect(settings) as conn:
-        recent = conn.execute(
+        open_one = conn.execute(
             "select 1 from public.runner_incidents"
-            " where worker_id = %s and kind = %s"
-            " and created_at > now() - interval '1 hour' limit 1",
+            " where worker_id = %s and kind = %s and cleared_at is null limit 1",
             (worker_id, kind),
         ).fetchone()
-        if recent:
+        if open_one:
             return False
         conn.execute(
             "insert into public.runner_incidents (org_id, worker_id, kind, message)"
@@ -1458,6 +1467,19 @@ def raise_service_incident(
         )
         conn.commit()
     return True
+
+
+def clear_service_incidents(settings: Settings, worker_id: str, kind: str) -> int:
+    """us-116.8: the probe found the standing condition gone — close the
+    episode, so the next occurrence is a new incident, not a duplicate."""
+    with _connect(settings) as conn:
+        rows = conn.execute(
+            "update public.runner_incidents set cleared_at = now()"
+            " where worker_id = %s and kind = %s and cleared_at is null returning id",
+            (worker_id, kind),
+        ).fetchall()
+        conn.commit()
+    return len(rows)
 
 
 def revoked_slot_workers(settings: Settings, host_id: str) -> list[dict[str, Any]]:
@@ -2388,6 +2410,12 @@ async def _probe_into_row(settings: Settings, step: StepCtx) -> None:
         await asyncio.to_thread(
             update_slot, settings, str(slot["id"]), slot_fields
         )
+        # us-116.8: an active unit ends the `agent-service` episode, so the
+        # next failure is a new incident rather than a suppressed duplicate.
+        if state == "active" and slot.get("worker_id"):
+            await asyncio.to_thread(
+                clear_service_incidents, settings, str(slot["worker_id"]), "agent-service"
+            )
         if slot["desired_state"] == "enabled" and state in {"failed", "inactive"}:
             step.log(
                 f"[slot {slot['slot_index']} should be running but its service is {state}]"
@@ -2404,7 +2432,14 @@ async def _probe_into_row(settings: Settings, step: StepCtx) -> None:
     # US-27.9: a revoked token is an alarm, not a state. The service is
     # running, the socket is connected, and the agent cannot take a single
     # item of work.
-    for revoked in await asyncio.to_thread(revoked_slot_workers, settings, host_id):
+    revoked_now = await asyncio.to_thread(revoked_slot_workers, settings, host_id)
+    revoked_ids = {str(r["worker_id"]) for r in revoked_now}
+    # us-116.8: a worker that is active again ends its `agent-token` episode.
+    for slot in slots:
+        wid = slot.get("worker_id")
+        if wid and str(wid) not in revoked_ids:
+            await asyncio.to_thread(clear_service_incidents, settings, str(wid), "agent-token")
+    for revoked in revoked_now:
         message = (
             f"{revoked['name']}: this agent's worker token has been revoked. "
             "Its service is running and its socket may be connected, but every "
