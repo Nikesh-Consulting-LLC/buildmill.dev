@@ -167,6 +167,134 @@ def write_model_config(
     return str(path) if has_model else None
 
 
+# US-78.5, one string (us-116.3): the run path and the session path used to
+# each carry their own copy of this refusal. Both raise this one now.
+NO_MODEL_REFUSAL = (
+    "this agent has no model to reason with. Set one on its settings page "
+    "under Model per role, give the org's default preset a model, or set a "
+    "default model on the org's default LLM provider (Settings → LLM "
+    "providers) — nothing was spent."
+)
+
+
+async def _mcp_section(
+    body: dict[str, Any], tool_timeout: Any, emit: Any
+) -> tuple[str, dict[str, str]]:
+    """The `[mcp_servers.*]` TOML for one description, and the env its
+    placeholders need — plus the proof.
+
+    The factory MCP is spoken to here, before the CLI exists, so "the tools
+    are missing" is a refusal costing nothing rather than a model discovering
+    it mid-turn and inventing a way around (us-115.1). `body` is the dict
+    `mcpconfig.build()` produces — the same one every other module writes as
+    `.factory-mcp.json`; a run reads it back from that file, a session builds
+    it directly and never writes it (us-116.3).
+    """
+    from .. import mcpconfig
+    from ..acp import AcpError
+
+    # A tool call may not outlive the work it belongs to; the CLI's own
+    # default is 6000s, which outlives every lease we hand out.
+    try:
+        timeout_sec = int(tool_timeout) if tool_timeout else None
+    except (TypeError, ValueError):
+        timeout_sec = None
+    toml_body, env = mcpconfig.to_grok_toml(
+        body, startup_timeout_sec=60, tool_timeout_sec=timeout_sec
+    )
+    if not toml_body:
+        raise AcpError(
+            "the factory's MCP servers could not be expressed in the agent's "
+            "config — nothing was spent."
+        )
+
+    factory = (body.get("mcpServers") or {}).get("factory") or {}
+    url = str(factory.get("url") or "").strip()
+    headers = {str(k): str(v) for k, v in (factory.get("headers") or {}).items()}
+    if not url:
+        raise AcpError("the factory's MCP config names no url — nothing was spent.")
+    try:
+        tools = await mcpconfig.probe(url, headers, timeout=30)
+    except Exception as e:  # noqa: BLE001 — every failure is the same refusal
+        raise AcpError(
+            f"the factory's MCP server did not answer, so this agent would "
+            f"have run without its tools: {e}. Nothing was spent."
+        ) from e
+    emit("step", f"factory MCP ready — {len(tools)} tools")
+    return toml_body, env
+
+
+async def open_agent_cli(
+    prim: Any,
+    cwd: str,
+    *,
+    argv: list[str],
+    mcp: dict[str, Any] | None,
+    tool_timeout: Any,
+    emit: Any,
+    on_update: Any = None,
+    on_permission: Any = None,
+    on_disconnect: Any = None,
+    resume_session_id: str | None = None,
+):
+    """The one door to this agent's CLI (us-116.3).
+
+    A dispatched run (`_run_cli`) and a CLI-window session
+    (`session_host._open`) both come through here, so what the CLI is told
+    cannot differ between them. In order: the tools rendered into the CLI's
+    own `config.toml` beside the model block (us-115.1) — proven against the
+    factory first; the model config written, with the US-78.5 refusal when
+    no model resolved; the child spawned with `MCP_INIT_STRATEGY=blocking`
+    and the credential its config names, through the shared ACP engine.
+
+    Before this existed the two owners each wrote the config and spawned the
+    CLI themselves, and drifted twice inside a week: US-89.1 moved the worker
+    token into the env and the session path kept a name that no longer
+    existed (`NameError` on every session from 2026-08-14), then us-115.1
+    moved the run's tools into `config.toml` and the session path kept
+    handing them to `session/new`. One routine, two callers, no third copy.
+    """
+    from ..acp import AcpError
+    from ..acp.engine import open_session
+
+    mcp_toml, mcp_env = "", {}
+    if mcp:
+        mcp_toml, mcp_env = await _mcp_section(mcp, tool_timeout, emit)
+
+    # US-78.5: written before the child starts, because the CLI reads its
+    # config at startup. `GROK_HOME` comes from the slot's env file (US-78.1),
+    # so each agent on a shared pool machine has its own.
+    gateway_env = getattr(prim, "env", {}) or {}
+    written = write_model_config(os.environ.get("GROK_HOME", ""), gateway_env, mcp_toml)
+    # US-78.5: a run with no model must not start. It used to proceed and let
+    # the CLI fall back to whatever it was configured with, which is how a
+    # missing model surfaced as an opaque 404 naming a model nobody chose.
+    # Same rule as the gateway mint: no credential, no run — a model is half
+    # of that credential.
+    if written is None and gateway_env.get("GROK_MODELS_BASE_URL"):
+        raise AcpError(NO_MODEL_REFUSAL)
+
+    # us-115.1: `mcp_config=None` on purpose — the servers are in the CLI's
+    # config now, and sending them a second time as a `session/new` parameter
+    # would be two descriptions that can disagree. What the child MUST carry
+    # is the strategy and the credential: `MCP_INIT_STRATEGY` is the first
+    # thing the CLI's own resolver checks, ahead of every hint, and `blocking`
+    # is what keeps the first LLM turn from starting while the factory is
+    # still handshaking.
+    return await open_session(
+        prim,
+        argv,
+        str(cwd),
+        mcp_config=None,
+        resume_session_id=resume_session_id,
+        emit=emit,
+        on_update=on_update,
+        on_permission=on_permission,
+        on_disconnect=on_disconnect,
+        env={**mcp_env, "MCP_INIT_STRATEGY": "blocking"},
+    )
+
+
 class LiveSession:
     """A running ACP session, addressable by run id (US-78.8).
 
@@ -342,60 +470,6 @@ class InteractiveModule(CLIModule):
         args = split_cmd(os.environ.get("RUNNER_INTERACTIVE_ARGS", ""))
         return [*cmd, *(extra or []), *ACP_ARGS, *args]
 
-    async def _grok_mcp_section(
-        self, mcp_config: str, timeout: Any, emit: Any
-    ) -> tuple[str, dict[str, str]]:
-        """The run's `[mcp_servers.*]` TOML and the env its placeholders need.
-
-        Also the run's proof: the factory MCP is spoken to here, before the CLI
-        exists, so "the tools are missing" is a refusal costing nothing rather
-        than a model discovering it mid-turn and inventing a way around. The
-        engine's old guard keyed on the ACP server list, which us-115.1 empties
-        by design; this replaces it with something stronger — the old one only
-        proved a config had been written.
-        """
-        from .. import mcpconfig
-        from ..acp import AcpError
-
-        try:
-            body = json.loads(Path(mcp_config).read_text(encoding="utf-8"))
-        except (OSError, ValueError) as e:
-            raise AcpError(
-                f"the factory's MCP config could not be read: {e} — nothing was spent."
-            ) from e
-
-        # A tool call may not outlive the work it belongs to; the CLI's own
-        # default is 6000s, which outlives every lease we hand out.
-        try:
-            tool_timeout = int(timeout) if timeout else None
-        except (TypeError, ValueError):
-            tool_timeout = None
-        toml_body, env = mcpconfig.to_grok_toml(
-            body, startup_timeout_sec=60, tool_timeout_sec=tool_timeout
-        )
-        if not toml_body:
-            raise AcpError(
-                "the factory's MCP servers could not be expressed in the agent's "
-                "config — nothing was spent."
-            )
-
-        factory = (body.get("mcpServers") or {}).get("factory") or {}
-        url = str(factory.get("url") or "").strip()
-        headers = {str(k): str(v) for k, v in (factory.get("headers") or {}).items()}
-        if not url:
-            raise AcpError(
-                "the factory's MCP config names no url — nothing was spent."
-            )
-        try:
-            tools = await mcpconfig.probe(url, headers, timeout=30)
-        except Exception as e:  # noqa: BLE001 — every failure is the same refusal
-            raise AcpError(
-                f"the factory's MCP server did not answer, so this agent would "
-                f"have run without its tools: {e}. Nothing was spent."
-            ) from e
-        emit("step", f"factory MCP ready — {len(tools)} tools")
-        return toml_body, env
-
     async def _run_cli(
         self,
         prim: Any,
@@ -418,7 +492,6 @@ class InteractiveModule(CLIModule):
         # where the ACP extra is not present — same reason mcpconfig is a local
         # import in cli_base.
         from ..acp import AcpError, describe_update
-        from ..acp.engine import open_session
         from ..acp.events import Coalescer, _content_text
 
         resolved = ctx_settings or {}
@@ -470,55 +543,31 @@ class InteractiveModule(CLIModule):
 
         opened = None
         try:
-            # us-115.1: the run's servers, in the CLI's own dialect. One
+            # us-115.1: the run's servers, in the CLI's own dialect — one
             # description (`mcpconfig.build()`, the same dict every other
-            # module writes as JSON), rendered into the file this CLI actually
-            # reads, with the credentials held back for the child's env.
-            mcp_toml, mcp_env = "", {}
+            # module writes as JSON, written by `execute()` beside the
+            # workspace), read back here and rendered by the shared door.
+            mcp_body: dict[str, Any] | None = None
             if mcp_config:
-                mcp_toml, mcp_env = await self._grok_mcp_section(
-                    mcp_config, timeout, emit
-                )
-
-            # US-78.5: written before the child starts, because the CLI reads
-            # its config at startup. `GROK_HOME` comes from the slot's env file
-            # (US-78.1), so each agent on a shared pool machine has its own.
-            gateway_env = getattr(prim, "env", {}) or {}
-            written = write_model_config(
-                os.environ.get("GROK_HOME", ""), gateway_env, mcp_toml
-            )
-            # US-78.5: a run with no model must not start. It used to proceed
-            # and let the CLI fall back to whatever it was configured with,
-            # which is how a missing model surfaced as an opaque 404 naming a
-            # model nobody chose. Same rule as the gateway mint: no credential,
-            # no run — a model is half of that credential.
-            if written is None and gateway_env.get("GROK_MODELS_BASE_URL"):
-                raise AcpError(
-                    "this agent has no model to reason with. Set one on its "
-                    "settings page under Model per role, or give the platform "
-                    "a default run model — nothing was spent."
-                )
-            # US-83.2: the open sequence — spawn, handshake, tools, resume —
-            # lives in the shared engine, the same one the session host uses.
-            #
-            # us-115.1: `mcp_config=None` on purpose — the servers are in the
-            # CLI's config now, and sending them a second time as a `session/new`
-            # parameter would be two descriptions that can disagree. What the
-            # child MUST carry is the strategy and the credential:
-            # `MCP_INIT_STRATEGY` is the first thing the CLI's own resolver
-            # checks, ahead of every hint, and `blocking` is what keeps the
-            # first LLM turn from starting while the factory is still
-            # handshaking (the whole defect this story fixes).
-            opened = await open_session(
+                try:
+                    mcp_body = json.loads(Path(mcp_config).read_text(encoding="utf-8"))
+                except (OSError, ValueError) as e:
+                    raise AcpError(
+                        f"the factory's MCP config could not be read: {e} — "
+                        "nothing was spent."
+                    ) from e
+            # us-116.3: config, refusal and spawn all live in `open_agent_cli`,
+            # the same routine `session_host._open` calls.
+            opened = await open_agent_cli(
                 prim,
-                argv,
                 str(cwd),
-                mcp_config=None,
-                resume_session_id=resume_session_id,
+                argv=argv,
+                mcp=mcp_body,
+                tool_timeout=timeout,
                 emit=emit,
                 on_update=on_update,
                 on_permission=on_permission,
-                env={**mcp_env, "MCP_INIT_STRATEGY": "blocking"},
+                resume_session_id=resume_session_id,
             )
             session_id = opened.session_id
             self._last_session_id = session_id

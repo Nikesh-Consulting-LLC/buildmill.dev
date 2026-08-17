@@ -172,6 +172,14 @@ def test_zero_grants_reads_as_no_grants_not_idle(monkeypatch):
         return FakeCursor(None, rows=[])
 
     _conn(monkeypatch, script)
+    # us-116.2: configuration is checked ahead of the queue tier; this agent
+    # has a model, so the reason it cannot work is its grants.
+    from app import model_resolution as mr
+
+    monkeypatch.setattr(
+        mr, "resolve_session",
+        lambda inputs: mr.SessionModel(model="grok-4.5", kind="code", resolved=None, tried=["code"]),
+    )
     out = db.worker_idle_reason(object(), WORKER_ID)
     assert out["reason"] == "no-grants"
     assert "no project access at all" in out["detail"]

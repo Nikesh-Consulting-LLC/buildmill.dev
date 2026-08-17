@@ -1951,10 +1951,11 @@ async def _wait_for_connect(
     deadline = time.monotonic() + CONNECT_WAIT_SECONDS
 
     def connected() -> bool:
+        # us-116.4: the one presence predicate (a heartbeat inside the window).
         with _connect(settings) as conn:
             row = conn.execute(
-                "select 1 from public.runner_sessions"
-                " where worker_id = %s and disconnected_at is null limit 1",
+                "select 1 from public.live_runner_sessions"
+                " where worker_id = %s limit 1",
                 (worker_id,),
             ).fetchone()
         return row is not None

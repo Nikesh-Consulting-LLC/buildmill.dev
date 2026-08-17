@@ -23,6 +23,7 @@ import {
   type AgentRole,
   type AgentRoleKey,
 } from "@/lib/agent-roles";
+import { inheritLine } from "@/lib/idle-reasons";
 import { AgentRename } from "@/components/agent-rename";
 import { RoleIcon } from "@/components/role-icon";
 import { cn } from "@/lib/utils";
@@ -54,8 +55,14 @@ export default function AgentSettingsPage() {
     sessions,
     declarations,
     orgModels,
+    presets,
     reload,
   } = useAgentRunner(principalId, { activity: false });
+  // us-116.2: what "Inherit the org default" actually resolves to. The
+  // promise on the Model per role block was unbacked — nothing on the page
+  // showed the inherited value or the preset's name.
+  const defaultPreset =
+    presets.find((p) => (p as { is_default?: boolean }).is_default) ?? null;
 
   // us-109.1: removing the agent moved here off the Team row, so this page
   // needs the one capability the roster already had. The database re-checks it
@@ -162,6 +169,11 @@ export default function AgentSettingsPage() {
               online={sessions.some((s) => s.worker_id === worker.id)}
               declarations={declarations}
               orgModels={orgModels}
+              defaultPreset={
+                defaultPreset
+                  ? { name: defaultPreset.name, model: defaultPreset.model ?? null }
+                  : null
+              }
               onSaved={reload}
             />
           </div>
@@ -239,6 +251,7 @@ function ConfigEditor({
   online,
   declarations,
   orgModels,
+  defaultPreset,
   onSaved,
 }: {
   worker: Worker;
@@ -247,6 +260,9 @@ function ConfigEditor({
   online: boolean;
   declarations: ModuleDeclaration[];
   orgModels: string[];
+  /** us-116.2: the org's default preset (name + model), or null when the org
+   *  has none — what a blank Model per role row inherits. */
+  defaultPreset: { name: string; model: string | null } | null;
   onSaved: () => Promise<void>;
 }) {
   // US-66.2: read-only here — set once, in the Add Agent wizard.
@@ -528,6 +544,21 @@ function ConfigEditor({
                     )}
                   </select>
                 </div>
+                {!picked.value && (
+                  // us-116.2: the promise, made checkable — the name of the
+                  // preset it inherits and what that preset resolves to.
+                  <p
+                    className={cn(
+                      "col-start-2 text-xs",
+                      defaultPreset?.model
+                        ? "text-muted-foreground"
+                        : "text-amber-700 dark:text-amber-400",
+                    )}
+                    data-testid={`inherit-${role.key}`}
+                  >
+                    {inheritLine(defaultPreset)}
+                  </p>
+                )}
                 {picked.mixed && (
                   <p className="col-start-2 text-xs text-muted-foreground">
                     This role&apos;s kinds were pinned to different models

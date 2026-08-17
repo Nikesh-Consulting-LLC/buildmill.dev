@@ -76,7 +76,10 @@ async def agent_idle_reasons(
     by_principal: dict[str, Any] = {}
     for row in rows:
         worker_id = str(row["id"])
-        reason = await asyncio.to_thread(db.worker_idle_reason, settings, worker_id)
+        # us-116.4: the one status — presence in front of the idle reason. The
+        # answer carries `state` (what every surface renders) and `reason`
+        # (the idle-reason word, kept for existing readers).
+        reason = await asyncio.to_thread(db.agent_status, settings, worker_id)
         out[worker_id] = reason
         # Team addresses agents by principal; the dashboard addresses them by
         # worker. Both keys, one computation — rather than each caller

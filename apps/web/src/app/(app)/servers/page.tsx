@@ -122,14 +122,13 @@ export default async function MachinesPage() {
   }[]) {
     const mine = slotsByHost.get(h.id) ?? [];
     agentsByServer.set(h.server_id, {
+      // us-116.4: the card asks the host-scoped status route for "N agents
+      // not ready" — the same statuses the slot cards render — instead of
+      // counting the probe's service_state on its own.
+      hostId: h.id,
       status: h.status,
       agentCount: mine.length,
       enabledCount: mine.filter((s) => s.desired_state === "enabled").length,
-      deadCount: mine.filter(
-        (s) =>
-          s.desired_state === "enabled" &&
-          (s.service_state === "failed" || s.service_state === "inactive")
-      ).length,
       drifted: !!current && !!h.bundle_hash && h.bundle_hash !== current,
       lastProbeAt: h.last_probe_at,
       probeError: h.probe_error,

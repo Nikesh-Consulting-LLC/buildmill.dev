@@ -7,9 +7,13 @@ handshake trace line and the tools-refusal, the session path had neither. The
 whole stretch from spawn to a usable session id now lives here, once, and a
 fix to it is a fix to both owners.
 
-What stays with the owners, deliberately: the model-config write (each owner
-sources its gateway env differently), prompting, outcome scoring, and LIVE
-registration — those are what MAKE one a run and the other a conversation.
+What stays with the owners: prompting, outcome scoring, and LIVE registration —
+those are what MAKE one a run and the other a conversation. The model-config
+write used to stay with them too ("each owner sources its gateway env
+differently"), and that is exactly where they drifted again — twice in the week
+of 2026-08-13 — so us-116.3 moved it, with the tools rendering and the no-model
+refusal, one layer up into `modules.interactive.open_agent_cli`, which both
+owners call and which calls this.
 """
 
 from __future__ import annotations

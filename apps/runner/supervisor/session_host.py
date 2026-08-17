@@ -30,11 +30,10 @@ import os
 import time
 from typing import Any
 
-from . import gitwork, mcpconfig
-from .acp import AcpError, describe_update
-from .acp.engine import open_session
+from . import gitwork, mcpconfig, modules
+from .acp import describe_update
 from .acp.events import Coalescer
-from .modules.interactive import LIVE, LiveSession, write_model_config
+from .modules.interactive import LIVE, LiveSession, open_agent_cli
 from .primitives import LocalPrimitives
 
 logger = logging.getLogger("supervisor.session_host")
@@ -181,24 +180,19 @@ async def _open(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
         project_id=project_id,
     )
 
-    written = write_model_config(os.environ.get("GROK_HOME", ""), model_env)
-    if written is None and model_env.get("GROK_MODELS_BASE_URL"):
-        raise AcpError(
-            "this agent has no model to reason with — set one on its settings "
-            "page before opening a session"
-        )
+    # us-116.3: the tools are the same description a run writes for itself
+    # (`mcpconfig.build`) — built here and never written to disk, because a
+    # session has no `execute()` to remove the file afterwards and the CLI
+    # reads its servers from its own config anyway (us-115.1). The token comes
+    # from this process's env, exactly where the git helper reads it (US-89.1).
+    api_url = os.environ.get("FACTORY_API_URL", "")
+    worker_token = os.environ.get("FACTORY_WORKER_TOKEN", "")
+    mcp = mcpconfig.build(api_url, worker_token, project_id, []) if api_url and worker_token else None
+    if mcp is None:
+        logger.warning("session %s opens without factory tools: no api url or token", session_id)
 
-    mcp_written = mcpconfig.write(
-        workdir, os.environ.get("FACTORY_API_URL", ""), token, project_id, []
-    )
-
-    from .modules.interactive import ACP_ARGS, DEFAULT_CMD
-    from .modules.cli_base import split_cmd
-
-    argv = [
-        *split_cmd(os.environ.get("RUNNER_INTERACTIVE_CMD", DEFAULT_CMD)),
-        *ACP_ARGS,
-    ]
+    # The same argv a run is spawned with, from the module that owns it.
+    argv = modules.get("interactive").build_argv("", "session")
 
     narrator = _Narrator(connection, session_id)
     coalescer = Coalescer()
@@ -222,19 +216,21 @@ async def _open(connection: Any, params: dict[str, Any]) -> dict[str, Any]:
         asyncio.ensure_future(_reap(connection, session_id))
 
     try:
-        # US-83.2: the exact open sequence a run uses — handshake trace line,
-        # tools translation, the refusal when the factory's tools cannot be
-        # expressed, resume-or-new. One engine, two owners.
-        opened = await open_session(
+        # US-83.2 / us-116.3: the exact open sequence a run uses — the tools
+        # rendered into the CLI's config and proven, the model config and the
+        # no-model refusal, the handshake trace line, resume-or-new. One door,
+        # two owners.
+        opened = await open_agent_cli(
             prim,
-            argv,
             str(workdir),
-            mcp_config=str(mcp_written) if mcp_written else None,
-            resume_session_id=str(resume) if resume else None,
+            argv=argv,
+            mcp=mcp,
+            tool_timeout=None,
             emit=narrator.emit,
             on_update=on_update,
             on_permission=on_permission,
             on_disconnect=on_disconnect,
+            resume_session_id=str(resume) if resume else None,
         )
     except Exception:
         # The queued lines are the diagnostic — send them before reporting.

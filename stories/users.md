@@ -27,12 +27,92 @@ seed-publishes-files and section preview, 99.7's accept/decline, 100.1's
 retired-unbuilt-do-not-re-propose list — is in
 [APPLICATION.md → Delivery history](../APPLICATION.md#delivery-history).
 
-One story is open: Phase 115's move of the interactive agent's tool configuration
-into the CLI's own `config.toml` (requested 2026-08-17).
+Nine stories are open: Phase 115's move of the interactive agent's tool
+configuration into the CLI's own `config.toml` (built 2026-08-17, released, UAT
+outstanding), and Phase 116's eight on agent stability — why an agent that has
+a model is refused a session, why every session has died on the machine since
+2026-08-14, why Team and the machine page disagree about the same agent, and
+why "start" never quite starts (requested 2026-08-17, two investigations the
+same day). Build order is the hotfix first (us-116.3), then the model side
+(116.1, 116.2, 116.7), then status and start (116.4, 116.5, 116.6), then the
+fleet alarm (116.8).
 
 | Order | Story | Title | Status |
 |---|---|---|---|
 | 1 | [us-115.1](us-115.1-the-agent-reads-its-own-config.md) | The interactive agent's tools come from its own config | Testing |
+| 2 | [us-116.3](us-116.3-a-session-opens-through-the-runs-own-door.md) | A session opens through the run's own door | Testing |
+| 3 | [us-116.1](us-116.1-a-session-picks-a-model-the-agent-has.md) | A session picks a model the agent actually has | Testing |
+| 4 | [us-116.2](us-116.2-an-agent-shows-what-it-is-missing.md) | An agent shows what it is missing | Testing |
+| 5 | [us-116.7](us-116.7-the-orgs-default-model-counts.md) | The org's default model counts | Testing |
+| 6 | [us-116.4](us-116.4-team-and-the-machine-page-say-the-same-thing.md) | Team and the machine page say the same thing | Testing |
+| 7 | [us-116.5](us-116.5-start-means-start.md) | Start means start | New |
+| 8 | [us-116.6](us-116.6-a-new-agent-starts-ready.md) | A new agent starts ready | New |
+| 9 | [us-116.8](us-116.8-the-fleet-says-when-it-goes-dark.md) | The fleet says when it goes dark, and says a standing fault once | New |
+
+**Phase 116 — An agent says what it is missing, and starts when told**
+(requested 2026-08-17; the manager's direction was *reliability over
+complexity* — collapse the ways an agent can be "sort of on", do not add
+more). Two investigations the same day found the same shape from two ends.
+
+*The model side.* A CLI session resolves its model from `db.session_model`,
+two lines that read `model_overrides.code` and stop — skipping
+`run_settings.resolve`, the one server-side resolver whose own docstring warns
+that a second implementation of the precedence rules "would disagree". It also
+hard-codes the `code` kind, so an **Architect** with all six of its roles
+pinned to `grok-4.5` is refused a conversation for lacking a model for work it
+is configured never to do — and the settings page renders a model picker only
+for roles the agent claims, so the Code dropdown the refusal names is not on
+the page. Of six active interactive agents on prod, only Programmer passes
+that gate — and Programmer's session then dies on the machine anyway:
+`session_host._open` still passes a `token` name that US-89.1 removed
+(`NameError` on every session since 2026-08-14), and us-115.1 moved the run's
+tool config into `config.toml` without touching the session path, so run and
+session open the CLI two different ways. **us-116.3** (first, a hotfix) makes
+run and session share one open routine and ships it to Pod-001. **us-116.1**
+makes a session resolve through the same resolver a run uses, for a kind the
+agent actually claims, and makes the remaining refusal name the roles it tried
+and both places a model can come from. **us-116.2** puts the answer on the
+Team page *before* the click: the roster's State column gains `no-model` and
+`no-roles` above the queue-state reasons (today an agent with no roles, no
+model and no grants renders identically to a working one — it says `Idle`),
+the Start session button is disabled with its reason instead of failing after
+the click, and the Model per role block shows what "Inherit the org default"
+actually resolves to — on prod that default is "Balanced" with `model: null`,
+so blank currently inherits nothing. **us-116.7** gives the resolver a floor:
+the org's default LLM provider's `default_model` — chosen by the manager on
+Settings → LLM providers and already what the gateway falls back to — so
+"no model" is only ever true when nothing was chosen anywhere, runs are
+refused at claim instead of on the machine, and the Phase 78 gap ("a
+wizard-created agent resolves a model from nowhere") closes without a
+platform-wide model.
+
+*The status and start side.* Team says `online` (a live socket) while the
+machine page says `Paused` (the wizard's landing state) or "N enabled agents
+are not running" (a five-minute-old SSH probe) — different questions,
+overlapping words — and presence itself has no expiry: `disconnected_at` is
+written only on graceful close or reconnect, `last_seen_at` is heartbeated
+every 30 s and read by nothing, the reaper migration 099 promised was never
+written, so a hard-killed API leaves every agent "online" for good.
+**us-116.4** defines one status (`offline · revoked · stopped · no-roles ·
+no-model · no-grants · queue-held · working · ready`, presence = a heartbeat
+inside 90 s, one sweep, one view) and makes the roster, the runner page, the
+machine page and the superadmin card render that one word. "Start" is three
+buttons none of which starts: the roster's ▶/⏸ on an agent row is membership
+Suspend/Reactivate, which revokes the token (429 `agent-token` incidents in
+14 days; it killed the Sandy fleet on 2026-08-09); Enable flips a flag and
+never touches a dead service; Restart is host-authorized so a pool tenant
+gets a 404 the runner page swallows in `catch {}`. **us-116.5** gives the
+agent one `start` (enable, and restart the service if it is not live) and one
+`stop`, authorized on the slot's org, on the roster and every page, with
+errors shown, and takes the membership control off agent rows. **us-116.6**
+makes the wizard land an agent Ready — placement carries `enabled`, the
+config PATCH stops naming `run_routes` (which 403s every non-platform-admin
+org today), the Done step shows the roster's status. **us-116.8** adds the two
+alarms that were missing on 2026-08-17 when migration 279 took all six agents
+down for 68 minutes and 8,023 crash reports told nobody: fleet-dark once,
+after two minutes; standing faults once per episode instead of once an hour.
+Deliberately not in the phase: zero-downtime deploys, a per-agent readiness
+panel, a platform-wide default model, a second presence channel.
 
 **Phase 115 — The interactive agent's tools come from its own config**
 (requested 2026-08-17). The interactive agent gets the factory's MCP server as a

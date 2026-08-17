@@ -408,14 +408,12 @@ export function useAgentRunner(
 
     const [c, s] = await Promise.all([
       supabase.from("runner_config").select("*").in("worker_id", ids),
-      supabase
-        .from("runner_sessions")
-        .select("*")
-        .in("worker_id", ids)
-        .is("disconnected_at", null),
+      // us-116.4: presence is the `live_runner_sessions` view — connected AND
+      // heartbeated inside the window — never the table's own column.
+      supabase.from("live_runner_sessions").select("*").in("worker_id", ids),
     ]);
     setConfigs(c.data ?? []);
-    setSessions(s.data ?? []);
+    setSessions((s.data ?? []) as unknown as Session[]);
 
     // US-32.4: the declarations come off the most recent session, connected or
     // not — a module's knobs are knowable while its machine is down, and a
