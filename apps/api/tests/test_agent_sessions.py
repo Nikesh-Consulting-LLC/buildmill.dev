@@ -66,6 +66,13 @@ def wired(monkeypatch):
         "org_default_preset",
         lambda *a, **k: state["org_default"],
     )
+    # us-116.7: the org's default provider model — the floor. None by default
+    # so every case above still exercises the layers above it.
+    monkeypatch.setattr(
+        agent_sessions.model_resolution.db,
+        "org_default_provider_model",
+        lambda *a, **k: state.get("floor"),
+    )
     monkeypatch.setattr(
         agent_sessions.db,
         "record_session_model",
@@ -414,3 +421,29 @@ def test_the_session_and_the_claim_build_the_resolver_arguments_in_one_place():
 
     assert "model_resolution.resolve_for_kind(" in Path(worker.__file__).read_text(encoding="utf-8")
     assert "model_resolution.resolve_session(" in Path(agent_sessions.__file__).read_text(encoding="utf-8")
+
+
+def test_the_org_default_provider_model_reaches_a_session(client, make_token, wired):
+    """us-116.7 AC2: DevOps — no pins, org default preset with no model, org
+    default provider names grok-4.6 — opens on grok-4.6."""
+    wired["worker"] = {"id": "w-1", "name": "DevOps", "org_id": "org-1"}
+    wired["config"] = {"enabled_kinds": ["test", "release", "deploy"], "model_overrides": {}}
+    wired["org_default"] = {"id": "p-bal", "name": "Balanced", "model": None,
+                            "settings": {}, "version": 3, "tool_grants": []}
+    wired["floor"] = "grok-4.6"
+    res = _open(client, make_token())
+    assert res.status_code == 200, res.text
+    assert wired["minted"][0]["model"] == "grok-4.6"
+    assert wired["recorded"] == [("sess-1", "grok-4.6", "test")]
+
+
+def test_the_session_refusal_names_the_third_place(client, make_token, wired):
+    wired["worker"] = {"id": "w-1", "name": "DevOps", "org_id": "org-1"}
+    wired["config"] = {"enabled_kinds": ["release", "deploy"], "model_overrides": {}}
+    wired["org_default"] = None
+    wired["floor"] = None
+    res = _open(client, make_token())
+    assert res.status_code == 409
+    detail = res.json()["detail"]
+    assert "(Deployment)" in detail
+    assert "Settings → LLM providers" in detail

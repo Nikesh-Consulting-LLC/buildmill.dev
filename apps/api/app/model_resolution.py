@@ -57,6 +57,9 @@ class ResolverInputs:
     config: dict[str, Any] = field(default_factory=dict)
     presets_by_id: dict[str, dict[str, Any]] = field(default_factory=dict)
     org_default: dict[str, Any] | None = None
+    # us-116.7: the floor — the org's default LLM provider's default model, or
+    # None when the org has none (the "nobody chose" case).
+    org_default_model: str | None = None
 
 
 def load_inputs(
@@ -75,6 +78,7 @@ def load_inputs(
         config=config or {},
         presets_by_id=db.presets_by_id(settings, str(org_id)),
         org_default=db.org_default_preset(settings, str(org_id)),
+        org_default_model=db.org_default_provider_model(settings, str(org_id)),
     )
 
 
@@ -98,6 +102,8 @@ def resolve_for_kind(
         agent_model_override=(config.get("model_overrides") or {}).get(kind),
         supervisor_override=supervisor_override,
         manager_override=manager_override,
+        # us-116.7: the floor.
+        org_default_model=inputs.org_default_model,
     )
 
 
@@ -163,11 +169,21 @@ def roles_of(kinds: list[str]) -> list[str]:
     return seen
 
 
+# us-116.7: the third place a model can come from, named in every refusal.
+DEFAULT_PROVIDER_HINT = (
+    "or set a default model on the org's default LLM provider "
+    "(Settings → LLM providers)"
+)
+
+
 def no_model_refusal(agent_name: str, tried: list[str], org_default: dict[str, Any] | None) -> str:
     """The sentence a manager reads when nothing resolved. It names the agent,
     the roles actually tried, and every place a model can be set — and it says
     plainly when the org's default preset carries no model, so the manager is
-    not left assuming the tier will cover it."""
+    not left assuming the tier will cover it. us-116.7: with the org's default
+    provider model as the resolver's floor, reaching this sentence means the
+    org has no default provider model either, so it is named as the third
+    place."""
     roles = roles_of(tried)
     claims = ", ".join(roles) if roles else "no role"
     who = agent_name or "This agent"
@@ -178,14 +194,15 @@ def no_model_refusal(agent_name: str, tried: list[str], org_default: dict[str, A
     preset = (org_default or {}).get("name")
     if org_default is None:
         tail = (
-            "Set one under Model per role on its settings page, or give the org "
-            "a default preset with a model."
+            "Set one under Model per role on its settings page, give the org "
+            f"a default preset with a model, {DEFAULT_PROVIDER_HINT}."
         )
     elif not (org_default.get("model") or "").strip():
         tail = (
-            "Set one under Model per role on its settings page, or give the org's "
-            f"default preset ({preset}) a model — it has none today."
+            "Set one under Model per role on its settings page, give the org's "
+            f"default preset ({preset}) a model — it has none today — "
+            f"{DEFAULT_PROVIDER_HINT}."
         )
     else:
-        tail = "Set one under Model per role on its settings page."
+        tail = f"Set one under Model per role on its settings page, {DEFAULT_PROVIDER_HINT}."
     return f"{head} {tail}"

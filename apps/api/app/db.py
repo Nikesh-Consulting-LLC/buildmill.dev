@@ -4878,8 +4878,9 @@ def worker_idle_reason(settings: Settings, worker_id: str) -> dict[str, Any]:
             "reason": "no-model",
             "detail": (
                 f"no model resolves for any role this agent claims ({roles}) — "
-                "set one under Model per role on its settings page, or give the "
-                "org's default preset a model"
+                "set one under Model per role on its settings page, give the "
+                "org's default preset a model, or set a default model on the "
+                "org's default LLM provider (Settings → LLM providers)"
             ),
         }
 
@@ -8399,6 +8400,26 @@ def get_org_llm_config(
             (org_id,),
         ).fetchall()
     return list(providers), {r["function_key"]: dict(r) for r in routes}
+
+
+def org_default_provider_model(settings: Settings, org_id: str) -> str | None:
+    """us-116.7: the model on the org's default LLM provider — the manager's
+    chosen default (Settings → LLM providers), already what the gateway falls
+    back to when a key carries no model (`llm_gateway`, US-27.8). The run
+    resolver's floor: an agent that pins nothing and whose default preset
+    names nothing reasons with this rather than refusing to run. None when
+    the org has no default provider, or its default provider names no model
+    — the "nobody chose" case US-78.5's refusal is for."""
+    if not _valid_uuid(org_id):
+        return None
+    with _connect(settings) as conn:
+        row = conn.execute(
+            "select default_model from public.llm_providers "
+            "where org_id = %s and is_default limit 1",
+            (org_id,),
+        ).fetchone()
+    model = str((row or {}).get("default_model") or "").strip()
+    return model or None
 
 
 def get_project_learnings_content(settings: Settings, project_id: str) -> str:

@@ -171,8 +171,9 @@ def write_model_config(
 # each carry their own copy of this refusal. Both raise this one now.
 NO_MODEL_REFUSAL = (
     "this agent has no model to reason with. Set one on its settings page "
-    "under Model per role, or give the platform a default run model — nothing "
-    "was spent."
+    "under Model per role, give the org's default preset a model, or set a "
+    "default model on the org's default LLM provider (Settings → LLM "
+    "providers) — nothing was spent."
 )
 
 
