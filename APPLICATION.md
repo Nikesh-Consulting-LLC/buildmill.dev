@@ -964,4 +964,8 @@ index the Supabase advisor reports (only migration 252 followed the rule, for it
 tables); **us-87.8** retention — nothing is ever deleted, `api_request_log` was 585k
 rows / 106 MB and `runs` 33 MB with diffs in the row, and there is no `pg_cron`
 schedule in any migration; **us-87.10** a page-load budget read from `api_request_log`
-and `client_perf_events` as a gate.
+and `client_perf_events` as a gate; **us-89.3** the Grok CLI configured through its
+vendor's managed scope (`$GROK_HOME/.grok/managed_config.toml`, `requirements.toml`,
+`grok inspect` as the probe) instead of the factory writing `.grok/config.toml` into the
+workspace — the layer us-83.1 hardened and that once carried a token into a project repo;
+still the right shape if the Grok interactive agent comes back into use.

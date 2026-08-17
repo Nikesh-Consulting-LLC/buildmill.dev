@@ -141,12 +141,21 @@ class ScriptedAgent:
 
 
 class FakePrimitives:
+    # The gateway env, as `LocalPrimitives` exposes it. A CLASS attribute, so a
+    # subclass can override it declaratively (and so `__init__` does not shadow
+    # one that does).
+    env: dict = {}
+
     def __init__(self, agent):
         self.agent = agent
         self.sessions: list[list[str]] = []
+        # us-115.1: the child's environment carries the MCP strategy and the
+        # credential its config names, so the tests can see both.
+        self.session_env: list[dict] = []
 
     async def run_session(self, argv, cwd=None, env=None):
         self.sessions.append(argv)
+        self.session_env.append(dict(env or {}))
         return self.agent
 
     async def run_shell(self, argv, cwd=None, timeout=None, on_line=None):
@@ -329,49 +338,138 @@ def test_effort_and_max_turns_reach_the_command_line_before_the_subcommand():
     assert argv[agent_at : agent_at + 2] == ["agent", "stdio"]
 
 
-def test_mcp_servers_are_passed_into_session_new(tmp_path: Path):
-    """US-78.4: a parameter of the session, not a config file and a hope."""
+def _mcp_config(tmp_path: Path, **servers) -> str:
     config = tmp_path / "mcp.json"
-    config.write_text(
-        json.dumps(
-            {
-                "mcpServers": {
-                    "factory": {
-                        "type": "http",
-                        "url": "https://api.example/mcp",
-                        "headers": {"X-Worker-Token": "tok"},
-                    }
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
+    body = servers or {
+        "factory": {
+            "type": "http",
+            "url": "https://api.example/mcp/",
+            # Distinctive on purpose: a short value like "tok" is a substring of
+            # `bearer_token_env_var` and would make the no-secret assertion pass
+            # for the wrong reason.
+            "headers": {"X-Worker-Token": "sfw_secret_value_115"},
+        }
+    }
+    config.write_text(json.dumps({"mcpServers": body}), encoding="utf-8")
+    return str(config)
+
+
+@pytest.fixture
+def factory_answers(monkeypatch):
+    """The preflight succeeds; the calls it made are recorded."""
+    from supervisor import mcpconfig
+
+    calls: list[tuple[str, dict]] = []
+
+    async def probe(url, headers, timeout=30):
+        calls.append((url, headers))
+        return ["get_work_context", "submit_changeset"]
+
+    monkeypatch.setattr(mcpconfig, "probe", probe)
+    return calls
+
+
+def test_the_servers_go_into_the_clis_own_config_not_session_new(
+    tmp_path: Path, monkeypatch, factory_answers
+):
+    """us-115.1 AC1/AC3/AC4: the CLI reads its servers from its own
+    `config.toml`, `session/new` carries none, and the child is spawned with the
+    strategy that makes the first turn wait for the handshake.
+
+    This replaces US-78.4's "a parameter of the session, not a config file and a
+    hope" — the hand-off worked, but nothing told the CLI the session was
+    headless, so it resolved Progressive and started reasoning while the factory
+    was still connecting. The config file is not a hope when the run has already
+    spoken to the server itself (AC5).
+    """
+    home = tmp_path / "grok-home"
+    monkeypatch.setenv("GROK_HOME", str(home))
     agent = ScriptedAgent(http_mcp=True)
+    prim = FakePrimitives(agent)
     module = InteractiveModule()
-    res = _run(module, FakePrimitives(agent), mcp_config=str(config))
+
+    res = _run(module, prim, mcp_config=_mcp_config(tmp_path))
     assert res.exit_code == 0
-    servers = agent.session_new_params["mcpServers"]
-    assert servers[0]["name"] == "factory"
-    assert servers[0]["url"] == "https://api.example/mcp"
-    assert {"name": "X-Worker-Token", "value": "tok"} in servers[0]["headers"]
+
+    # Nothing over ACP: one description of the tool surface, not two.
+    assert agent.session_new_params["mcpServers"] == []
+
+    config = (home / "config.toml").read_text(encoding="utf-8")
+    assert '[mcp_servers."factory"]' in config
+    assert 'url = "https://api.example/mcp/"' in config
+    assert 'bearer_token_env_var = "FACTORY_MCP_KEY"' in config
+    # US-83.1's hardening survives the new section.
+    assert "auto_update = false" in config and "[compat.claude]" in config
+    # AC2: the credential is not in the file.
+    assert "sfw_secret_value_115" not in config
+
+    env = prim.session_env[0]
+    assert env["MCP_INIT_STRATEGY"] == "blocking"
+    assert env["FACTORY_MCP_KEY"] == "sfw_secret_value_115"
+
+    # AC5: the server answered before the CLI existed.
+    assert factory_answers[0][0] == "https://api.example/mcp/"
 
 
-def test_an_agent_without_http_mcp_fails_the_run_before_prompting(tmp_path: Path):
-    """US-78.4 AC5: starting without tools burns a model budget to discover it
-    cannot do the job."""
-    config = tmp_path / "mcp.json"
-    config.write_text(
-        json.dumps(
-            {"mcpServers": {"factory": {"type": "http", "url": "https://x/mcp"}}}
-        ),
-        encoding="utf-8",
-    )
-    agent = ScriptedAgent(http_mcp=False)
-    module = InteractiveModule()
-    res = _run(module, FakePrimitives(agent), mcp_config=str(config))
+def test_the_model_block_and_the_servers_share_one_file(
+    tmp_path: Path, monkeypatch, factory_answers
+):
+    """The model block used to REPLACE the body rather than join it, which
+    would have dropped the servers the moment a model resolved."""
+    home = tmp_path / "grok-home"
+    monkeypatch.setenv("GROK_HOME", str(home))
+    prim = FakePrimitives(ScriptedAgent(http_mcp=True))
+    prim.env = {
+        "GROK_MODELS_BASE_URL": "https://gw.example/v1",
+        "GROK_MODEL": "grok-4.5",
+    }
+    res = _run(InteractiveModule(), prim, mcp_config=_mcp_config(tmp_path))
+    assert res.exit_code == 0
+
+    config = (home / "config.toml").read_text(encoding="utf-8")
+    assert '[model."grok-4.5"]' in config
+    assert '[mcp_servers."factory"]' in config
+    assert "auto_update = false" in config
+
+
+def test_a_factory_that_does_not_answer_refuses_before_the_cli_is_spawned(
+    tmp_path: Path, monkeypatch
+):
+    """us-115.1 AC5, replacing US-78.4 AC5's check on the ACP list: an agent
+    that starts without its tools burns a model budget to discover it cannot do
+    the job — and, on six measured runs, invents a way around instead."""
+    from supervisor import mcpconfig
+
+    async def probe(url, headers, timeout=30):
+        raise RuntimeError("HTTP 401: invalid or revoked worker token")
+
+    monkeypatch.setattr(mcpconfig, "probe", probe)
+    monkeypatch.setenv("GROK_HOME", str(tmp_path / "grok-home"))
+
+    agent = ScriptedAgent(http_mcp=True)
+    prim = FakePrimitives(agent)
+    res = _run(InteractiveModule(), prim, mcp_config=_mcp_config(tmp_path))
+
     assert res.exit_code == 1
-    assert "MCP" in res.stdout or "tools" in res.stdout
+    assert "401" in res.stdout
+    assert "Nothing was spent" in res.stdout
+    assert prim.sessions == []  # the CLI was never started
     assert not any(m.get("method") == "session/prompt" for m in agent.sent)
+
+
+def test_the_config_json_is_written_beside_the_workspace_never_inside_it():
+    """us-115.1 AC4: the file the six bypassing runs read out of their own
+    checkout does not live there any more."""
+    module = InteractiveModule()
+    workdir = Path("/w/project-628de3f7")
+    target = module.mcp_config_dir(workdir)
+    assert target != workdir
+    assert workdir not in target.parents and target.parent == workdir.parent
+
+    # Every other module keeps writing it into the checkout.
+    from supervisor.modules import get as get_module
+
+    assert get_module("claude").mcp_config_dir(workdir) == workdir
 
 
 def test_resume_loads_the_prior_session_and_does_not_retrace_the_replay():
