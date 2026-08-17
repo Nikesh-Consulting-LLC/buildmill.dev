@@ -50,6 +50,7 @@ import paramiko
 import psycopg
 
 from . import db, deploy, ssh
+from .db import _valid_uuid
 from .config import Settings
 from .pool import pool_for
 
@@ -1440,15 +1441,24 @@ def raise_service_incident(
     message: str,
     kind: str = "agent-service",
 ) -> bool:
-    """Once per transition, not once per probe (US-26.7). True if raised."""
+    """Once per EPISODE (us-116.8), not once per hour. True if raised.
+
+    US-26.7 said "once per transition, not once per probe" and implemented
+    once per hour: a revoked worker left bound to its slot was re-alarmed on
+    the hour, every hour, with a notification each time — 429 `agent-token`
+    rows in fourteen days, 118 for one agent. Now an incident of a kind is
+    raised for a worker only when it has no OPEN one (`cleared_at is null`)
+    of that kind; the probe clears it when it finds the condition gone
+    (`clear_service_incidents`), and only then can it be raised again. The
+    state (us-116.4) shows the fault for as long as it lasts; the incident
+    marks when it started and when it stopped."""
     with _connect(settings) as conn:
-        recent = conn.execute(
+        open_one = conn.execute(
             "select 1 from public.runner_incidents"
-            " where worker_id = %s and kind = %s"
-            " and created_at > now() - interval '1 hour' limit 1",
+            " where worker_id = %s and kind = %s and cleared_at is null limit 1",
             (worker_id, kind),
         ).fetchone()
-        if recent:
+        if open_one:
             return False
         conn.execute(
             "insert into public.runner_incidents (org_id, worker_id, kind, message)"
@@ -1457,6 +1467,19 @@ def raise_service_incident(
         )
         conn.commit()
     return True
+
+
+def clear_service_incidents(settings: Settings, worker_id: str, kind: str) -> int:
+    """us-116.8: the probe found the standing condition gone — close the
+    episode, so the next occurrence is a new incident, not a duplicate."""
+    with _connect(settings) as conn:
+        rows = conn.execute(
+            "update public.runner_incidents set cleared_at = now()"
+            " where worker_id = %s and kind = %s and cleared_at is null returning id",
+            (worker_id, kind),
+        ).fetchall()
+        conn.commit()
+    return len(rows)
 
 
 def revoked_slot_workers(settings: Settings, host_id: str) -> list[dict[str, Any]]:
@@ -1511,18 +1534,23 @@ def upsert_pool_placement_request(
     worker_id: str,
     by: str = "",
     by_email: str = "",
+    desired_state: str = "paused",
 ) -> None:
+    """us-116.6: `desired_state` rides the queued request (migration 282), so a
+    placement that waited for the host's job lock lands in the state the
+    wizard asked for, not the bare default."""
     with _connect(settings) as conn:
         conn.execute(
             "insert into public.agent_pool_placement_requests"
-            " (org_id, pool_id, worker_id, requested_by, requested_by_email)"
-            " values (%s, %s, %s, %s, %s)"
+            " (org_id, pool_id, worker_id, requested_by, requested_by_email, desired_state)"
+            " values (%s, %s, %s, %s, %s, %s)"
             " on conflict (worker_id) do update set"
             "   pool_id = excluded.pool_id, status = 'pending', error = null,"
             "   requested_by = excluded.requested_by,"
             "   requested_by_email = excluded.requested_by_email,"
+            "   desired_state = excluded.desired_state,"
             "   created_at = now()",
-            (org_id, pool_id, worker_id, by or None, by_email),
+            (org_id, pool_id, worker_id, by or None, by_email, desired_state),
         )
         conn.commit()
 
@@ -1530,7 +1558,8 @@ def upsert_pool_placement_request(
 def due_pool_placements(settings: Settings, limit: int = 5) -> list[dict[str, Any]]:
     with _connect(settings) as conn:
         return conn.execute(
-            "select id, org_id, pool_id, worker_id, requested_by, requested_by_email"
+            "select id, org_id, pool_id, worker_id, requested_by, requested_by_email,"
+            " desired_state"
             " from public.agent_pool_placement_requests"
             " where status = 'pending'"
             " order by created_at limit %s",
@@ -1644,6 +1673,8 @@ async def pool_placement_sweep(settings: Settings) -> int:
                 "kind": "add_slot",
                 "slots": 1,
                 "adopt_worker_id": worker_id,
+                # us-116.6: the intent the wizard queued with the request.
+                "desired_state": str(req.get("desired_state") or "paused"),
             },
         )
         placed += 1
@@ -1862,17 +1893,28 @@ async def _create_and_start_slot(
     flush,
     *,
     adopt_worker_id: str | None = None,
+    desired_state: str = "paused",
 ) -> dict[str, Any]:
+    """us-116.6: `desired_state` is the caller's intent for the new slot.
+    The bare machine-page "Add agent" keeps `paused` (a slot with no grants
+    and no roles has nothing to claim anyway); the wizard asks for `enabled`,
+    because it has just collected which projects and roles — grants and roles
+    are the fail-closed gate, and a second gate that needs a second click on
+    another page buys nothing. Written BEFORE `systemctl enable --now`, so the
+    first hello can claim."""
     host_id = str(step.host["id"])
     org_id = str(step.host["org_id"])
     index = await asyncio.to_thread(next_slot_index, settings, host_id)
     base_name = re.sub(r"[^a-z0-9-]+", "-", (step.host["server_name"] or "agent").lower()).strip("-")
     name = f"{base_name}-{index}"
     workdir = step.host["workdir"]
+    start_paused = desired_state != "enabled"
 
     step.log(f"== slot {index} ==")
     if adopt_worker_id:
-        token = await asyncio.to_thread(adopt_worker_token, settings, adopt_worker_id)
+        token = await asyncio.to_thread(
+            reissue_worker_token, settings, adopt_worker_id, pause=start_paused
+        )
         identity = {"worker_id": adopt_worker_id, "principal_id": None, "token": token}
         with _connect(settings) as conn:
             row = conn.execute(
@@ -1896,6 +1938,8 @@ async def _create_and_start_slot(
             name=name,
             template=step.host.get("slot_template") or {},
         )
+        if not start_paused:
+            await asyncio.to_thread(set_paused, settings, str(identity["worker_id"]), False)
         step.log(f"[created agent {name}]")
 
     with _connect(settings) as conn:
@@ -1903,7 +1947,7 @@ async def _create_and_start_slot(
             "insert into public.agent_slots"
             " (org_id, agent_server_id, slot_index, name, worker_id, principal_id,"
             "  service_name, workspace_path, desired_state)"
-            " values (%s, %s, %s, %s, %s, %s, %s, %s, 'paused') returning *",
+            " values (%s, %s, %s, %s, %s, %s, %s, %s, %s) returning *",
             (
                 org_id,
                 host_id,
@@ -1913,6 +1957,7 @@ async def _create_and_start_slot(
                 identity["principal_id"],
                 f"buildmill-agent@{index}",
                 f"{workdir}/agents/{index}/workspace",
+                "paused" if start_paused else "enabled",
                 ),
         ).fetchone()
         conn.commit()
@@ -1940,8 +1985,10 @@ async def _create_and_start_slot(
     connected = await _wait_for_connect(settings, str(identity["worker_id"]), step.log)
     if not connected:
         step.log(connect_timeout_message(index, settings.api_base_url))
+    elif start_paused:
+        step.log(f"[slot {index} connected — paused, claiming nothing until you start it]")
     else:
-        step.log(f"[slot {index} connected — paused, claiming nothing until you enable it]")
+        step.log(f"[slot {index} connected — enabled, ready to claim]")
     return slot
 
 
@@ -1970,7 +2017,9 @@ async def _wait_for_connect(
 async def _job_add_slot(settings: Settings, step: StepCtx, ctx: dict[str, Any], flush) -> str:
     for _ in range(int(ctx.get("slots") or 1)):
         await _create_and_start_slot(
-            settings, step, flush, adopt_worker_id=ctx.get("adopt_worker_id")
+            settings, step, flush,
+            adopt_worker_id=ctx.get("adopt_worker_id"),
+            desired_state=str(ctx.get("desired_state") or "paused"),
         )
     await _probe_into_row(settings, step)
     return "succeeded"
@@ -2188,6 +2237,26 @@ def _get_slot(settings: Settings, slot_id: str) -> dict[str, Any] | None:
         ).fetchone()
 
 
+def slot_for_principal(settings: Settings, principal_id: str) -> dict[str, Any] | None:
+    """us-116.5: the live slot an agent (a principal) occupies, with the host
+    it sits on — the one lookup Start/Stop need. Service-role on purpose: a
+    tenant's slot on a shared pool sits on a host row the tenant cannot read
+    (`agent_servers` is member-only), and the caller has already been
+    authorized on the SLOT's org, which is the tenant's own."""
+    if not _valid_uuid(principal_id):
+        return None
+    with _connect(settings) as conn:
+        return conn.execute(
+            "select s.*, a.org_id as host_org_id, a.status as host_status,"
+            " a.shared as host_shared"
+            " from public.agent_slots s"
+            " join public.agent_servers a on a.id = s.agent_server_id"
+            " where s.principal_id = %s and s.status = 'active'"
+            " limit 1",
+            (principal_id,),
+        ).fetchone()
+
+
 async def _remove_one_slot(
     settings: Settings,
     step: StepCtx,
@@ -2341,6 +2410,12 @@ async def _probe_into_row(settings: Settings, step: StepCtx) -> None:
         await asyncio.to_thread(
             update_slot, settings, str(slot["id"]), slot_fields
         )
+        # us-116.8: an active unit ends the `agent-service` episode, so the
+        # next failure is a new incident rather than a suppressed duplicate.
+        if state == "active" and slot.get("worker_id"):
+            await asyncio.to_thread(
+                clear_service_incidents, settings, str(slot["worker_id"]), "agent-service"
+            )
         if slot["desired_state"] == "enabled" and state in {"failed", "inactive"}:
             step.log(
                 f"[slot {slot['slot_index']} should be running but its service is {state}]"
@@ -2357,7 +2432,14 @@ async def _probe_into_row(settings: Settings, step: StepCtx) -> None:
     # US-27.9: a revoked token is an alarm, not a state. The service is
     # running, the socket is connected, and the agent cannot take a single
     # item of work.
-    for revoked in await asyncio.to_thread(revoked_slot_workers, settings, host_id):
+    revoked_now = await asyncio.to_thread(revoked_slot_workers, settings, host_id)
+    revoked_ids = {str(r["worker_id"]) for r in revoked_now}
+    # us-116.8: a worker that is active again ends its `agent-token` episode.
+    for slot in slots:
+        wid = slot.get("worker_id")
+        if wid and str(wid) not in revoked_ids:
+            await asyncio.to_thread(clear_service_incidents, settings, str(wid), "agent-token")
+    for revoked in revoked_now:
         message = (
             f"{revoked['name']}: this agent's worker token has been revoked. "
             "Its service is running and its socket may be connected, but every "

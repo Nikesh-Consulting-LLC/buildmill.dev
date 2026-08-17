@@ -718,26 +718,24 @@ function AgentsTab({
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  {/* us-116.5: Start means start — the agent's own endpoint,
+                      authorized on the slot's org: enable, and restart the
+                      service if it is not live. Stop is today's pause. */}
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={!!busy}
+                    disabled={!!busy || !slot.principal_id}
+                    data-testid={slot.paused ? "agent-start" : "agent-stop"}
                     onClick={() =>
                       act(
-                        slot.paused ? "Enable" : "Pause",
-                        `/api/v1/agent-servers/${host.id}/slots/${slot.id}`,
-                        {
-                          method: "PATCH",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
-                            desired_state: slot.paused ? "enabled" : "paused",
-                          }),
-                        }
+                        slot.paused ? "Start" : "Stop",
+                        `/api/v1/agents/${slot.principal_id}/${slot.paused ? "start" : "stop"}`,
+                        { method: "POST" }
                       )
                     }
                   >
                     {slot.paused ? <Play className="size-4" /> : <CircleStop className="size-4" />}
-                    {slot.paused ? "Enable" : "Pause"}
+                    {slot.paused ? "Start" : "Stop"}
                   </Button>
                   {/* US-27.9: the repair. Un-revoking is not offered — a
                       revoked credential stays revoked; this delivers a new

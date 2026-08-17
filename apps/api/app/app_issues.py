@@ -374,3 +374,55 @@ def ingest_report(
         ).fetchone()
         conn.commit()
     return {"id": str(row["id"]), "deduped": bool(row["deduped"])}
+
+
+# ---------------------------------------------------------------------------
+# us-116.8: the fleet-dark System issue.
+# ---------------------------------------------------------------------------
+
+
+def report_fleet_dark(
+    settings: Settings,
+    org_id: str,
+    org_name: str,
+    message: str,
+    context: dict[str, Any] | None = None,
+) -> str | None:
+    """File ONE System issue for a fleet-wide outage in an org, against the
+    self-monitoring deployment (the same inbox the crash reports use). The
+    message carries the outage's start time, so each episode is its own row
+    rather than an occurrence count on the last one. None when self-reporting
+    is not configured — the manager notification still goes."""
+    deployment = _self_deployment(settings)
+    if not deployment:
+        return None
+    result = ingest_report(
+        settings,
+        deployment,
+        {
+            "source": "automated",
+            "error_type": "FleetDark",
+            "title": f"FleetDark: {org_name} — every agent offline",
+            "message": message,
+            "context": scrub({"org_id": org_id, "org_name": org_name, **(context or {})}),
+        },
+    )
+    return str(result["id"])
+
+
+def note_returned(settings: Settings, issue_id: str, at: Any) -> None:
+    """The fleet came back: record when, on the same issue, and never a second
+    notification."""
+    if not _valid_uuid(issue_id):
+        return
+    with _connect(settings) as conn:
+        conn.execute(
+            """
+            update public.app_issues
+            set context = coalesce(context, '{}'::jsonb)
+                          || jsonb_build_object('returned_at', %s::text)
+            where id = %s
+            """,
+            (at.isoformat() if hasattr(at, "isoformat") else str(at), issue_id),
+        )
+        conn.commit()

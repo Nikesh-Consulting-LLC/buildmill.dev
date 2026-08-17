@@ -28,6 +28,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   STATUS_LABELS,
+  idleFixHref,
   stateFor,
   statusTextClass,
   type AgentStatus,
@@ -134,6 +135,35 @@ export function AddAgentWizard({
   // kinds — the roles expand on save. us-111.1: asked on step 1 beside the
   // name, because what an agent is for shapes everything asked after it.
   const [roles, setRoles] = useState<AgentRoleKey[]>([...ALL_ROLE_KEYS]);
+  // us-116.6: would a new agent with these roles have a model? Asked of the
+  // API's resolver (no pins, this org) whenever the roles change.
+  const [modelCheck, setModelCheck] = useState<{
+    resolves: boolean;
+    model: string | null;
+    source: string | null;
+  } | null>(null);
+  useEffect(() => {
+    // Nothing to ask with no roles; the render condition hides a stale
+    // answer, so no state write is needed here.
+    if (!open || roles.length === 0) return;
+    let cancelled = false;
+    const kinds = kindsForRoles(roles).join(",");
+    apiCall(`/api/v1/agents/model-check?org=${orgId}&kinds=${encodeURIComponent(kinds)}`)
+      .then((r) => {
+        if (!cancelled)
+          setModelCheck({
+            resolves: !!r?.resolves,
+            model: r?.model ?? null,
+            source: r?.source ?? null,
+          });
+      })
+      .catch(() => {
+        // the warning is context; a failed check must not block the wizard
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, orgId, roles]);
 
   // Step 2 — what it runs, and where.
   // US-66.2: an agent runs exactly one module — two enabled at once left the
@@ -306,12 +336,12 @@ export function AddAgentWizard({
   }
 
   // US-61.2: the wizard no longer offers a preset/model choice — every
-  // agent it creates inherits the org default, exactly what an empty
-  // run_routes already means. Per-kind tuning still lives on the settings
-  // page, unchanged.
-  function buildRunRoutes(): Record<string, unknown> {
-    return {};
-  }
+  // agent it creates inherits the org default. Per-kind tuning still lives
+  // on the settings page, unchanged. us-116.6: `run_routes` is no longer SENT
+  // at all — it is one of the six platform-owned fields, and the guard fires
+  // on presence, not value (`{}` is not `None`), so naming it 403'd every
+  // org owner who was not also a platform admin, leaving a half-created
+  // agent. The settings page already omits it for the same reason.
 
   /** The creation sequence, all at the end so cancel is clean before it:
    *  1. `create_worker` — the identity (a principal like any team member).
@@ -401,7 +431,6 @@ export function AddAgentWizard({
           body: JSON.stringify({
             enabled_modules: [activeModule],
             enabled_kinds: kindsForRoles(roles),
-            run_routes: buildRunRoutes(),
             // US-77.2: neither branch fires for an agent created today —
             // claude and buildmill are no longer offered — but they are the
             // correct bodies if either is re-offered, which is one flag in
@@ -435,6 +464,10 @@ export function AddAgentWizard({
               slots: 1,
               adopt_worker_id: who.workerId,
               confirm_capacity: confirmCapacity,
+              // us-116.6: the wizard just collected grants and roles — the
+              // fail-closed gate — so the slot lands enabled and the agent is
+              // Ready when its runner says hello. No second click elsewhere.
+              desired_state: "enabled",
             }),
           });
           who = { ...who, jobId: (res?.job_id as string | null) ?? null };
@@ -480,7 +513,7 @@ export function AddAgentWizard({
           const res = await apiCall(`/api/v1/agent-pools/${poolId}/place`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ worker_id: who.workerId }),
+            body: JSON.stringify({ worker_id: who.workerId, desired_state: "enabled" }),
           });
           // US-57.3 follow-on: a busy host answers 202 "queued" rather than
           // a 409 — the placement is accepted, not failed, so the wizard
@@ -774,6 +807,31 @@ export function AddAgentWizard({
                   <p className="text-xs text-amber-700 dark:text-amber-400">
                     Nothing checked means a benched agent: it will connect
                     and claim no work at all.
+                  </p>
+                )}
+                {/* us-116.6: told once, before the agent exists — the same
+                    resolver a run and a session use, asked about these roles
+                    with no pins. It does not block creation. */}
+                {roles.length > 0 && modelCheck && !modelCheck.resolves && (
+                  <p
+                    className="text-xs text-amber-700 dark:text-amber-400"
+                    data-testid="no-model-warning"
+                  >
+                    No model will resolve for these roles — this agent will not
+                    run until one is set under Model per role on its settings
+                    page, or a default model is set on the org&apos;s default
+                    LLM provider (Settings → LLM providers).
+                  </p>
+                )}
+                {roles.length > 0 && modelCheck?.resolves && modelCheck.model && (
+                  <p className="text-xs text-muted-foreground">
+                    Reasons with <span className="font-mono">{modelCheck.model}</span>
+                    {modelCheck.source === "org-default-provider"
+                      ? " — the org's default provider model"
+                      : modelCheck.source === "org-default"
+                        ? " — the org's default preset"
+                        : ""}
+                    .
                   </p>
                 )}
               </div>
@@ -1291,19 +1349,14 @@ function DoneStep({
   // the tenant-scoped endpoint (US-57.4) — the host-scoped one 403s a
   // tenant, since it authorizes on the platform org, not the slot's own.
   async function enable() {
-    if (!slot || (placement === "machine" && !machine)) return;
+    if (!slot || !created.principalId) return;
     setEnabling(true);
     setEnableError(null);
     try {
-      const path =
-        placement === "pool"
-          ? `/api/v1/agent-pools/slots/${slot.id}`
-          : `/api/v1/agent-servers/${machine!.hostId}/slots/${slot.id}`;
-      await apiCall(path, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ desired_state: "enabled" }),
-      });
+      // us-116.5: Start means start — the agent's own endpoint (authorized on
+      // the slot's org, so a pool tenant can use it), which also restarts the
+      // service if the agent is not live.
+      await apiCall(`/api/v1/agents/${created.principalId}/start`, { method: "POST" });
       setSlot({ ...slot, desired_state: "enabled" });
       onChanged();
     } catch (e) {
@@ -1339,6 +1392,26 @@ function DoneStep({
               {status.detail ? (
                 <span className="text-muted-foreground"> — {status.detail}</span>
               ) : null}
+              {/* us-116.6: the same fix link the roster offers. */}
+              {created.principalId &&
+                (() => {
+                  const fix = idleFixHref(
+                    created.principalId,
+                    status.reason ?? stateFor(online, status),
+                  );
+                  return fix ? (
+                    <>
+                      {" — "}
+                      <Link
+                        href={fix.href}
+                        className="underline underline-offset-4"
+                        onClick={onClose}
+                      >
+                        {fix.label}
+                      </Link>
+                    </>
+                  ) : null;
+                })()}
             </p>
           )}
           {Array.isArray(reportedModules) && (
@@ -1360,17 +1433,16 @@ function DoneStep({
               workerId={created.workerId}
             />
           )}
+          {/* us-116.6: the agent lands enabled (placement carried the
+              intent), so there is nothing to click here in the normal case.
+              Start appears only when the state is Stopped — something paused
+              it after placement — and it is us-116.5's Start. */}
           {(placement === "machine" || placement === "pool") &&
             slot &&
-            (slot.desired_state === "enabled" ? (
-              <p className="text-xs text-muted-foreground">
-                Enabled — it can claim work now.
-              </p>
-            ) : (
+            stateFor(online, status) === "stopped" && (
               <div className="grid gap-1">
                 <p className="text-xs text-muted-foreground">
-                  It starts paused, so a fresh install claims nothing by
-                  accident. Enable it to start claiming:
+                  It is stopped — start it to let it claim work:
                 </p>
                 <Button
                   variant="outline"
@@ -1379,13 +1451,13 @@ function DoneStep({
                   onClick={() => void enable()}
                 >
                   {enabling && <Loader2 className="size-4 animate-spin" />}
-                  Enable the agent
+                  Start the agent
                 </Button>
                 {enableError && (
                   <p className="text-xs text-destructive">{enableError}</p>
                 )}
               </div>
-            ))}
+            )}
         </div>
       ) : (
         <div className="grid gap-1.5">
