@@ -18,6 +18,7 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 
 import { INSTRUCTION_ROOT, KIND_FILES } from "./instruction-files.ts";
+import { INSTRUCTION_GROUPS } from "./instruction-kinds.ts";
 import {
   AGENTS_FILE,
   AGENTS_KEY,
@@ -179,6 +180,71 @@ export function planImport(current: TemplateContents, files: ZipFile[]): ImportP
     }
   }
   return plan;
+}
+
+/** The import confirmation offers one checkbox per group — the document, then
+ * the phase groups the tree draws — so a manager can take a zip's Coding files
+ * and leave its AGENTS.md alone. `agents` is the document's group key. */
+export type ImportGroup = {
+  key: string;
+  label: string;
+  /** Files from the plan that fall in this group, in plan order. */
+  overwrite: ZipFile[];
+  cleared: ZipFile[];
+  unchanged: ZipFile[];
+};
+
+export const AGENTS_GROUP_KEY = AGENTS_KEY;
+
+/** Which group a file key belongs to: `agents` for the document, otherwise the
+ * phase group that lists its kind. */
+export function groupKeyFor(fileKey: string): string | null {
+  if (fileKey === AGENTS_KEY) return AGENTS_GROUP_KEY;
+  const g = INSTRUCTION_GROUPS.find((grp) => grp.kinds.includes(fileKey));
+  return g?.key ?? null;
+}
+
+/** Split a plan into the groups it touches — only groups with at least one
+ * file in the plan, document first, then in tree order. */
+export function groupPlan(plan: ImportPlan): ImportGroup[] {
+  const groups: ImportGroup[] = [
+    { key: AGENTS_GROUP_KEY, label: "AGENTS.md", overwrite: [], cleared: [], unchanged: [] },
+    ...INSTRUCTION_GROUPS.map((g) => ({
+      key: g.key,
+      label: g.label,
+      overwrite: [],
+      cleared: [],
+      unchanged: [],
+    })),
+  ];
+  const byKey = new Map(groups.map((g) => [g.key, g]));
+  for (const bucket of ["overwrite", "cleared", "unchanged"] as const) {
+    for (const f of plan[bucket]) {
+      const gk = groupKeyFor(f.key);
+      if (gk) byKey.get(gk)![bucket].push(f);
+    }
+  }
+  return groups.filter((g) => g.overwrite.length + g.cleared.length + g.unchanged.length > 0);
+}
+
+/** The groups checked when the confirmation opens: every phase group, but not
+ * the document — a project's AGENTS.md is the one file most often tuned by
+ * hand, so overwriting it must be a choice, not a default. */
+export function defaultSelectedGroups(groups: ImportGroup[]): Set<string> {
+  return new Set(groups.map((g) => g.key).filter((k) => k !== AGENTS_GROUP_KEY));
+}
+
+/** Narrow a plan to the selected groups. */
+export function filterPlan(plan: ImportPlan, selected: Set<string>): ImportPlan {
+  const keep = (f: ZipFile) => {
+    const gk = groupKeyFor(f.key);
+    return gk !== null && selected.has(gk);
+  };
+  return {
+    overwrite: plan.overwrite.filter(keep),
+    cleared: plan.cleared.filter(keep),
+    unchanged: plan.unchanged.filter(keep),
+  };
 }
 
 /** The admin api caps a per-task file at 20,000 characters and the document
