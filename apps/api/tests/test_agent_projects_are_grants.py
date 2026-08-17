@@ -128,3 +128,37 @@ def test_the_migration_drops_the_column_and_its_setter():
     assert "drop function if exists public.set_worker_project" in sql
     # create_worker comes back four-argument; nothing may recreate the fifth.
     assert "p_project" not in sql.split("as $$")[0].split("create or replace")[-1]
+
+
+def test_no_sql_in_the_api_selects_workers_project_id():
+    """The column is gone (279), so any `select … project_id … from
+    public.workers` is a live UndefinedColumn — and get_worker_by_token was
+    exactly that: the single auth path for every /worker/* call and the git
+    remote, missed by the story, so every worker auth on prod failed the
+    moment the migration landed (2026-08-17 12:34 UTC). Every query on the
+    workers table is checked here so the next reader cannot slip past.
+
+    Only bare `from public.workers` and aliased `from public.workers w` are
+    read: the join queries alias other tables' project_id columns, which are
+    theirs to keep."""
+    import re
+
+    offenders: list[str] = []
+    for path in sorted(SRC.rglob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        # The column list is everything between this select and its own
+        # `from` — a bare lazy `.*?` would run from an earlier select in the
+        # file to the next workers query and flag other tables' columns.
+        for m in re.finditer(
+            r"select\s+((?:(?!\bfrom\b).)*?)\s+from\s+public\.workers\b(\s+w\b)?",
+            text,
+            re.S | re.I,
+        ):
+            cols, alias = m.group(1), m.group(2)
+            # An aliased select may legitimately mention p.project_id etc.;
+            # only the workers alias (or no alias) counts.
+            pattern = r"\bw\.project_id\b" if alias else r"\bproject_id\b"
+            if re.search(pattern, cols):
+                line = text[: m.start()].count("\n") + 1
+                offenders.append(f"{path.relative_to(SRC)}:{line}")
+    assert offenders == [], f"workers.project_id is selected at {offenders}"

@@ -1810,14 +1810,19 @@ def get_worker_by_token(settings: Settings, token: str) -> dict[str, Any] | None
     call (US-3.2) and the git remote (US-3.8).
 
     US-87.7: this READS. Presence is recorded separately and throttled; see
-    `_touch_worker_last_seen` above for why that is safe."""
+    `_touch_worker_last_seen` above for why that is safe.
+
+    us-110.1 dropped `workers.project_id` (migration 279) and this select was
+    the one reader it missed — every worker auth on prod answered
+    `UndefinedColumn` the moment the migration landed (2026-08-17 12:34 UTC).
+    Nothing consumed the column here; it is simply gone from the list."""
     if not token:
         return None
     token_hash = hashlib.sha256(token.encode()).hexdigest()
     with _connect(settings) as conn:
         row = conn.execute(
             """
-            select id, org_id, name, type, status, principal_id, project_id,
+            select id, org_id, name, type, status, principal_id,
                    no_claim_checkout
             from public.workers
             where token_hash = %s and status = 'active'
