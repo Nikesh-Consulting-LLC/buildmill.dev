@@ -215,12 +215,17 @@ AUDIT_LABELS = REPO / "apps/web/src/app/(app)/projects/[id]/content-audit-sectio
 
 
 def test_the_tabs_are_named_for_what_they_hold():
-    """The reported defect: the tab labelled "Agent Instructions" held the
-    per-TASK instructions, so the one place a manager would look for their
-    project's instructions showed a list of run-kind editors."""
+    """The reported defect (us-100.3): the tab labelled "Agent Instructions"
+    held the per-TASK instructions, so the one place a manager would look for
+    their project's instructions showed a list of run-kind editors.
+
+    us-114.2 folded the two tabs into one — **Instructions** — drawn with the
+    templates' tree + editor, so the pin is now: one tab, named for the folder
+    it holds, and neither of the old labels survives as a tab."""
     src = PROJECT_PAGE.read_text(encoding="utf-8")
-    assert '<TabsTrigger value="guidelines">Agent Instructions</TabsTrigger>' in src
-    assert "Task Instructions" in src
+    assert '<TabsTrigger value="instructions">Instructions</TabsTrigger>' in src
+    assert "<TabsTrigger" in src and ">Agent Instructions</TabsTrigger>" not in src
+    assert ">Task Instructions</TabsTrigger>" not in src
 
 
 def test_no_surface_still_calls_the_document_guidelines():
@@ -240,10 +245,14 @@ def test_the_audit_trail_uses_the_same_two_names():
 
 def test_the_deep_link_value_is_unchanged():
     """us-100.3 AC4: ?tab=guidelines must keep resolving — it is in
-    notifications and bookmarks."""
+    notifications and bookmarks. us-114.2 (AC6) keeps that promise by
+    mapping the old values onto the Instructions tab in the page itself,
+    rather than by keeping the old TabsTrigger."""
     src = PROJECT_PAGE.read_text(encoding="utf-8")
-    assert 'value="guidelines"' in src
-    assert "?tab=guidelines" in src
+    assert 'rawTab === "guidelines" || rawTab === "worker-instructions"' in src
+    assert '? "instructions"' in src
+    # …and the readiness card now links to the new tab, file selected.
+    assert "?tab=instructions&file=agents" in src
 
 
 # --- us-100.4: a template carries the document, and loses nothing -----------

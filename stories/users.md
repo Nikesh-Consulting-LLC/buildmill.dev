@@ -15,9 +15,9 @@ The 2026-08-09 backlog close confirmed everything built to that point (62 phases
 479 stories); Phases 73–75 followed on 2026-08-10, Phases 76–78 (22 stories) were
 confirmed and collapsed on 2026-08-11, Phases 79–90 (41 stories) on 2026-08-13, and
 Phases 91–96 (42 stories) were closed on 2026-08-15, Phases 98–102 (27 stories) on
-2026-08-16, and **Phases 103–112 (20 stories) on 2026-08-17** — all built and
-released to production, with the manager testing on live rather than through
-per-story UAT sittings. The condensed record —
+2026-08-16, and **Phases 103–112 (20 stories) and Phase 114 (3 stories) on
+2026-08-17** — all built and released to production, with the manager testing on
+live rather than through per-story UAT sittings. The condensed record —
 including what those phases did *not* prove, the manager actions each left open
 (96.10's routing table, 96.11's worker-token rotation), the five acceptance criteria
 that closed unbuilt (98.6's structured review table, 99.4's publish audit, 99.6's
@@ -26,42 +26,22 @@ seed-publishes-files and section preview, 99.7's accept/decline, 100.1's
 retired-unbuilt-do-not-re-propose list — is in
 [APPLICATION.md → Delivery history](../APPLICATION.md#delivery-history).
 
-Eleven stories are open: Phase 114's template zip export/import and the project
-Instructions tab that matches the templates (built 2026-08-17, awaiting UAT), Phase
-113's release-prep crash (found 2026-08-17, blocking every release since Phase 101
-shipped), Phase 108's production crash inbox (drafted 2026-08-16, two of its six
-defects breaking live paths today), Phase 97's GitHub linkage repair (requested
-2026-08-15, costing live runs today), and the residue carried out of Phases 85–89:
+Eight stories are open: Phase 113's release-prep crash (found 2026-08-17, blocking
+every release since Phase 101 shipped), Phase 108's production crash inbox (drafted
+2026-08-16, two of its six defects breaking live paths today), Phase 97's GitHub
+linkage repair (requested 2026-08-15, costing live runs today), and the residue
+carried out of Phases 85–89:
 
 | Order | Story | Title | Status |
 |---|---|---|---|
 | 1 | [us-113.1](us-113.1-release-notes-can-be-submitted.md) | Release notes can be submitted | New |
-| 2 | [us-114.1](us-114.1-a-template-travels-as-a-zip.md) | A template travels as a zip | Testing |
-| 3 | [us-114.2](us-114.2-a-project-edits-its-files-like-a-template.md) | A project edits its files like a template | Testing |
-| 4 | [us-114.3](us-114.3-a-project-knows-its-template.md) | A project knows its template, and can change it | Testing |
-| 5 | [us-108.1](us-108.1-the-crash-inbox-goes-to-zero.md) | The crash inbox goes to zero | New |
-| 6 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
-| 7 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
-| 8 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
-| 9 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
-| 10 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
-| 11 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
-
-**Phase 114 — A template travels as a zip** (requested 2026-08-17). A project
-template is seventeen files — the `AGENTS.md` body and one `.buildmill/*.md` per
-task kind (us-100.4) — and the only way to move a tuned set between the catalog,
-an org, or a laptop is to paste them one at a time. **us-114.1** adds Export and
-Import to both template pages: Export downloads the template as a zip in exactly
-the layout a project publishes, and Import overwrites the selected template's
-files from such a zip — never creating a template — after a confirmation that
-names what will be overwritten, cleared, left alone, and ignored. Superadmin on
-the catalog; Owner/Admin (`manage_project`) on the org's copies, with RLS as the
-boundary. **us-114.2** folds the project's *Agent Instructions* and *Task
-Instructions* tabs into one **Instructions** tab drawn with the templates' own
-tree + editor, so a template and the project it seeded look the same. **us-114.3**
-puts a template banner on that tab — which template, how many files differ,
-Reset to template per file, the same Export/Import, and Change template, which
-replaces every file's content and re-links the project.
+| 2 | [us-108.1](us-108.1-the-crash-inbox-goes-to-zero.md) | The crash inbox goes to zero | New |
+| 3 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
+| 4 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
+| 5 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
+| 6 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
+| 7 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
+| 8 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
 
 **Phase 113 — Release notes can be submitted** (found 2026-08-17). Every
 release prep has crashed since Phase 101 shipped: us-101.4 added `notes_doc` to

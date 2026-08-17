@@ -863,6 +863,66 @@ because `apiFetch` adds the bearer but not the type and FastAPI answers 422 with
 `project_id` key, fixed before commit, and confirmed the 40 database-less failures there
 are identical on `HEAD~1`.
 
+**Phase 114** (3 stories, closed 2026-08-17 — built and released to production the same
+day; the manager tested on live) — a project template travels as a zip, and a project
+edits its files the way a template does.
+
+- **A template travels as a zip** (114.1) — Export and Import on both template pages
+  (the superadmin catalog over the admin api, the org's copies over Supabase under
+  `manage_project` RLS) and, via us-114.3, on a project. The zip *is* the published
+  layout — `AGENTS.md` at the root and `.buildmill/<File>.md` per kind from `KIND_FILES`,
+  filled files only, no manifest — built and read in the browser with `fflate` (the
+  web app's first zip library; neither page needed the api to touch files it can already
+  read and write). Import overwrites the **selected** template and never creates one; a
+  file present in the zip is overwritten, an empty file **clears** its section (deleted,
+  the editor's own rule — a stored empty string would beat the factory default at
+  seeding), an absent file is untouched, a common top-level folder is stripped and
+  `__MACOSX`/`.DS_Store` dropped, a zip with no recognisable file is refused, and an
+  oversize file (20,000 / 200,000 characters, the admin api's caps) is refused before
+  the first write. The confirmation is a **checkbox picker**: one box per group present
+  in the zip — `AGENTS.md`, then the seven phase groups the tree draws — each naming its
+  files as overwritten / cleared / unchanged; phase groups start checked, `AGENTS.md`
+  starts **unchecked** because it is the file most often tuned by hand. The pure part
+  (`template-zip.ts`: entries, parse, plan, grouping, filter) is pinned by ten tests.
+- **A project edits its files like a template** (114.2) — the project's *Agent
+  Instructions* and *Task Instructions* tabs become one **Instructions** tab drawn with
+  the templates' own `TemplateFileTree` + `TemplateFileEditor`: *Task processing* (a
+  settings row, not a file) above the seventeen-file grouped tree on the left, one
+  editor on the right with who last edited the file (or *factory default*), and both
+  mark-ready stamps, the publish bar, a History link that follows the active file's
+  audit surface, and the refresh dialog above. Writes are unchanged underneath —
+  `projects.agent_instructions`, the `worker_instructions` row (upsert on
+  `project_id,run_kind`; blank stays blank, there is no fallback to clear to).
+  `?tab=guidelines` and `?tab=worker-instructions` still resolve, and the three
+  superseded tab files are gone.
+- **A project knows its template, and can change it** (114.3) — a banner names the org
+  template the project came from (`projects.org_template_id`, written once at creation
+  and, until now, surfaced only as a line on Overview) and counts the files that
+  **differ** from it, computed at load against the template's document and
+  `worker_instruction` sections; a kind the template holds no file for is not compared
+  (the seed gave it `default_worker_instruction`) and the editor says so. The editor
+  offers **Reset to template** for a differing file (or *Reset to factory default* where
+  the template has none), the banner carries the same Export/Import
+  (`<slug>-instructions.zip`), and **Change template** lists the org's available
+  templates with a plan of overwritten / cleared / unchanged, replaces every file the way
+  the seed would (section, else factory default; the document from the template's), and
+  re-links `org_template_id`. No migration: drift is computed, and Change template
+  reuses the existing columns and rows.
+
+**What Phase 114 recorded as not proven.** 114.1 was verified end-to-end on the org page
+(import → stored → export byte-identical; clear, root-file, folder-prefix and unchanged
+cases; the checkbox picker writing only checked groups) but the **superadmin page was
+never driven** — the dev session's active org is not the platform-admin org, so
+`/admin/project-templates` redirects; it renders the same component and its
+`applyImport` makes the calls `saveFile` already makes. 114.2 and 114.3 were verified
+from the **server-rendered HTML** of the Demo project's tab (the tab strip, the
+seventeen-row tree, "6 files differ from template", the Reset / Export / Import / Change
+template buttons) and not by clicking: the project page reveals its Suspense boundary
+with a React view transition that waits on `requestAnimationFrame`, and the embedded
+browser pane was hidden for the whole session, so save, Reset, Change template and the
+viewer-role hiding were reasoned from code, not observed. Both went to production at the
+manager's direction and were tested on live.
+
 **Retired unbuilt — do not re-propose without a fresh ask** (2026-08-09 sweep): the
 `mcp_tool_calls` stall detector (us-69.1) and the `git clean -fd` workspace hygiene fix
 (us-69.2 — a shared project workspace still carries untracked sibling-story files between
