@@ -814,14 +814,19 @@ work item, a Workbench that acts on a draft, and a Team page rebuilt from the ro
   panel `bg-muted/50` because the manager reported the panel "blends with UI".
 
 **What Phases 103–112 recorded as not proven, and what is left to the manager.** Two
-things are owed at this close, not merely unproven: **migration 279 is applied to
-`build-mill-dev` but not to `Software-Factory`** — deliberately deferred to "the release
-that carries the code", which shipped on 2026-08-17 without it, so prod still has
-`workers.project_id`, `set_worker_project` and the five-argument `create_worker` (whose
-`p_project` default is the only reason the deployed code works); apply it with the next
-release. And **109.3's backfill has not been run** — `recompute_run_metrics` was never
-executed, so production still reports the +1.8M vendored lines and the 72,841-hour tile;
-AC6/AC7 stay unmet until someone runs it dry, then `--apply`. The dominant gap
+things were owed at this close, not merely unproven — both settled the same day.
+**Migration 279** was applied to `Software-Factory` on 2026-08-17 (12:20 UTC by the
+ledger), and it found the reader us-110.1 had missed: `get_worker_by_token` — the auth
+path for every `/worker/*` call and the git remote — still selected `workers.project_id`
+without using it, so from 11:49 to 12:57 UTC every worker authentication answered
+`UndefinedColumn` (~8,000 failed polls, two crash-inbox reports) until hotfix `cd24e18`
+dropped the column from the select and added a guard test that scans every `select …
+from public.workers` in the api for it. And **109.3's backfill** — run on 2026-08-17 13:49 UTC through the
+`Ops — recompute run metrics` workflow (added that day: the script needs `DATABASE_URL`,
+which lives only on the VM, so the workflow SSHes in with the deploy key, dry by default,
+`apply` a checkbox): two runs moved (`60af1e2a` +1,788,138 → +2,772 lines, 7,999 → 29
+files; `f878c53b` +7,203 → +2,965) and two `agent_effort_daily` rows were repaired; the
+succeeded runs' summed `lines_added` went from 1,813,644 to 24,055. AC6/AC7 met. The dominant gap
 otherwise is the checkout these were built in: no `apps/web/.env.local`, no
 `apps/api/.env`, no `DATABASE_URL`, so almost nothing visual was rendered before it
 shipped. **103.1**'s `test_release_prep_reaper_sql.py` (10 tests) was not run, the AC1
@@ -923,6 +928,22 @@ browser pane was hidden for the whole session, so save, Reset, Change template a
 viewer-role hiding were reasoned from code, not observed. Both went to production at the
 manager's direction and were tested on live.
 
+**Phase 113** (1 story, closed 2026-08-17 — built 2026-08-16, released the same night,
+proven on live) — **a release prep can hand its notes back** (113.1). Every
+`submit_release_notes` had crashed since Phase 101 shipped: us-101.4 put `notes_doc`
+into `update_release`'s patch as a raw dict, psycopg 3 has no dumper for `dict`, so
+the write raised `cannot adapt type 'dict'` client-side before any SQL was sent — which
+is why Postgres logged nothing, and why the agent, reading a server 500 as bad input,
+rewrote its notes and retried sixty-one times (138 duplicate `test_cases` rows, $2.21,
+no notes) until the CLI wall-clock cap killed it. The value is now `json.dumps`-encoded
+like every other jsonb write in `db.py`, `update_release` refuses to hand psycopg a raw
+dict, and `test_release_notes_adaptable.py` asserts in-process — no database — that
+every value the submit path writes has a dumper, because every existing test of that
+path monkeypatched `update_release` and so the failing write had no coverage. Release
+2026.08.16.4 was retried and reached `released` with notes at 02:37 UTC (AC5). The two
+writes (`attach_release_test_cases`, then `update_release`) are still not one
+transaction — that atomicity hole is deliberately left for a later story.
+
 **Retired unbuilt — do not re-propose without a fresh ask** (2026-08-09 sweep): the
 `mcp_tool_calls` stall detector (us-69.1) and the `git clean -fd` workspace hygiene fix
 (us-69.2 — a shared project workspace still carries untracked sibling-story files between
@@ -931,4 +952,16 @@ role/suspend and machine-side controls (us-55.2/55.3 — but Reactivate restorin
 suspension-revoked tokens DID ship, migration 232); per-slot port ranges (us-57.11 — two
 agents on one host can still collide on dev-server ports); work-item cost display (us-46.1);
 cache-prefix determinism (us-38.2); hub filter unification, the Agent Runs tab, and the
-grouped roster (us-58.2–58.4).
+grouped roster (us-58.2–58.4). **2026-08-17 sweep** (the manager's call after the Phase 114 close — the problems are
+real, the stories are not being carried): **us-108.1** the crash-inbox-to-zero pass
+(the inbox reached 22 fixed / 1 ignored / 1 new by hand; the eight promoted-but-`draft`
+work items it named still sit in `draft`); **us-97.1** a moved GitHub repository
+relinking itself or asking (the REST client still does not follow a 301 — git does — so
+a rename strands a run at hand-back until `repo_full_name` is fixed by hand, as on
+2026-08-15); **us-85.3** classing a broken pool machine as a machine fault rather than
+a work fault; **us-87.9** the 117 unindexed foreign keys, 27 unused and 1 duplicate
+index the Supabase advisor reports (only migration 252 followed the rule, for its own
+tables); **us-87.8** retention — nothing is ever deleted, `api_request_log` was 585k
+rows / 106 MB and `runs` 33 MB with diffs in the row, and there is no `pg_cron`
+schedule in any migration; **us-87.10** a page-load budget read from `api_request_log`
+and `client_perf_events` as a gate.

@@ -15,9 +15,10 @@ The 2026-08-09 backlog close confirmed everything built to that point (62 phases
 479 stories); Phases 73–75 followed on 2026-08-10, Phases 76–78 (22 stories) were
 confirmed and collapsed on 2026-08-11, Phases 79–90 (41 stories) on 2026-08-13, and
 Phases 91–96 (42 stories) were closed on 2026-08-15, Phases 98–102 (27 stories) on
-2026-08-16, and **Phases 103–112 (20 stories) and Phase 114 (3 stories) on
-2026-08-17** — all built and released to production, with the manager testing on
-live rather than through per-story UAT sittings. The condensed record —
+2026-08-16, and **Phases 103–114 (24 stories) on 2026-08-17** — all built and
+released to production, with the manager testing on live rather than through
+per-story UAT sittings. The same day's sweep retired six unbuilt stories
+(us-108.1, 97.1, 85.3, 87.8, 87.9, 87.10) into the do-not-re-propose list. The condensed record —
 including what those phases did *not* prove, the manager actions each left open
 (96.10's routing table, 96.11's worker-token rotation), the five acceptance criteria
 that closed unbuilt (98.6's structured review table, 99.4's publish audit, 99.6's
@@ -26,111 +27,11 @@ seed-publishes-files and section preview, 99.7's accept/decline, 100.1's
 retired-unbuilt-do-not-re-propose list — is in
 [APPLICATION.md → Delivery history](../APPLICATION.md#delivery-history).
 
-Eight stories are open: Phase 113's release-prep crash (found 2026-08-17, blocking
-every release since Phase 101 shipped), Phase 108's production crash inbox (drafted
-2026-08-16, two of its six defects breaking live paths today), Phase 97's GitHub
-linkage repair (requested 2026-08-15, costing live runs today), and the residue
-carried out of Phases 85–89:
+One story is open — the residue of Phase 89's zero-secret workspace:
 
 | Order | Story | Title | Status |
 |---|---|---|---|
-| 1 | [us-113.1](us-113.1-release-notes-can-be-submitted.md) | Release notes can be submitted | New |
-| 2 | [us-108.1](us-108.1-the-crash-inbox-goes-to-zero.md) | The crash inbox goes to zero | New |
-| 3 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
-| 4 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
-| 5 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
-| 6 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
-| 7 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
-| 8 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
-
-**Phase 113 — Release notes can be submitted** (found 2026-08-17). Every
-release prep has crashed since Phase 101 shipped: us-101.4 added `notes_doc` to
-the update patch as a raw dict, and psycopg has no dumper for `dict`, so
-`update_release` raises client-side before any SQL is sent — which is why
-Postgres logged nothing and the agent read a server 500 as bad input and
-retried sixty-one times. **us-113.1** encodes the value the way every other
-jsonb write in `db.py` already does, guards `update_release` so a dict can
-never again reach psycopg raw, and adds the regression test the existing
-suite could not have: every test of this path monkeypatches `update_release`,
-so the adaptation that fails never ran.
-
-**Phase 108 — The crash inbox goes to zero** (drafted 2026-08-16, from an
-audit of production `app_issues`). The hub held 23 reports; eight had been
-promoted to work items and **all eight were still `draft`**, never planned,
-never coded — while six of them had in fact been fixed weeks earlier by hand
-under US-79.2–79.5 and `f8d488e`. `promoted` records that somebody looked, not
-that anything changed, so telling fixed from unfixed meant reading every crash
-site in the tree against every stack trace. That audit found **six real,
-unfixed defects**, and **us-108.1** closes them: a `dict` handed to a `jsonb`
-column in `db.update_release`, which is breaking release-notes submission in
-production right now; an unbound `token` in the runner's `session_host._open`
-that kills every interactive session reaching it, arriving in the inbox
-disguised as an API 502; a NUL byte in command output killing the runner
-socket dispatch; the git proxy and llm gateway having no `except httpx.`
-anywhere, so an upstream blip becomes a naked 500 — the exact shape US-79.5
-solved for Supabase and nowhere else; a deliberate authorisation 404 reaching
-a manager as "repository not found" about a project created two minutes
-earlier; and a transient `GitRPC::BadObjectState` costing a Save for want of
-one retry. Three further reports (15 + 2 + 1 occurrences) share one root cause
-that **us-97.1 already owns and has not built** — a `301` from a renamed repo
-parsed as payload — and are deliberately left to it rather than fixed twice.
-The story also closes the eight stale work items and the reports behind them,
-so the hub's open list becomes the six fixed here plus us-97.1's three.
-
-**Phase 97 — GitHub linkage stays true** (drafted 2026-08-15, from the
-run-`ff9ef2be` incident). A repository rename/transfer on GitHub answers
-REST calls with `301 Moved Permanently`; the factory's client neither
-follows nor names it, so every MCP hand-back tool on the Demo project failed
-with stringified `KeyError`s (`'sha'`, `'commit'`) while the git proxy —
-git follows redirects — pushed fine, and the worker parked on a
-clarification with finished work in hand. us-97.1 makes the REST client
-redirect-aware through one shared helper, stops broken payloads from
-leaking as riddles, and closes the loop the manager asked for: a detected
-move **relinks the project automatically** when the GitHub App can see the
-repo at its new path (audited, org notified), and **asks** — a named
-broken-link state on the project page, plain words in every tool answer —
-when it can't. The Edit dialog also stops pretending a stale path is
-selectable when the installation no longer offers it.
-
-**Phase 85 residue — us-85.3** (drafted 2026-08-12) closes the loop on the incident
-that motivated us-85.1's workspace verification. A run that fails on a broken bench —
-no usable shell, an unreachable or token-rejecting factory MCP, a corrupt workspace —
-must be recorded `machine-fault`, **proven by re-running us-85.1's environment checks
-after the failure**, not by grepping the transcript. That label matters to three
-consumers: escalation (US-33.4, migration 161) climbs the preset only on work-fault,
-precisely because a broken box is not answered by thinking harder; the US-68.3
-auto-repair ladder needs the slot flagged even while its process is up; and a story's
-failure history should blame the story only when the story deserves it. The defining
-case is the US-2.8.1 plan run of 2026-08-12 (pool machine 9), a pure environment
-failure later proven by us-85.1's own checks and fixed by a machine Update — yet
-`runs.fault_class` recorded **work-fault**, and every consumer drew the wrong
-conclusion.
-
-**Phase 87 residue — the database layer** (drafted 2026-08-12, from
-[docs/performance-analysis-2026-08-12.md](../docs/performance-analysis-2026-08-12.md)).
-The application-side work shipped; what is left is underneath it, and it is the cheap,
-mechanical kind that compounds quietly as the workspace grows.
-
-- **us-87.9** — Supabase's performance advisor returns **169 findings** against prod:
-  117 unindexed foreign keys (worst on `documents`, `app_issues`, `clarifications`,
-  `guideline_refreshes`, `issue_comments`, `runs`, `test_cases`), 27 unused indexes,
-  1 duplicate (`projects_id_org_key` vs `projects_id_org_unique`), 12 unwrapped
-  `auth.*()` calls across 135 policies re-evaluating per row, and 20
-  multiple-permissive-policy cases.
-- **us-87.8** — nothing in this database is ever deleted. There is no retention logic
-  in the API and **no `pg_cron` schedule in any migration**. Measured on prod:
-  `api_request_log` 584,934 rows / **106 MB** (growing ~585k rows per six weeks),
-  `content_audit` 36 MB, `runs` 185 rows / **33 MB** (one `diff` row is 30 MB).
-  `client_perf_events` takes a browser-side insert on every page load and has the
-  same shape.
-- **us-87.10** — the budget, and the reason this phase does not decay the way the last
-  one did. Performance decayed invisibly for months and every regression was introduced
-  by a reasonable change: a badge that needed a count, a filter that needed a body, a
-  subscription that needed to be live. Nothing failed; it just got slower and nobody
-  was holding a number. The instrumentation already exists — `api_request_log`
-  (US-62.8) and `client_perf_events` — and nothing reads it as a gate. This seeds a
-  100-project / 5,000-item fixture and puts a budget on each surface. It depends on
-  87.1–87.9 because it measures what they fix.
+| 1 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
 
 **Phase 89 residue — us-89.3** (drafted 2026-08-13) finishes the zero-secret workspace
 at the config layer: the factory configures the interactive agent's CLI the way its
