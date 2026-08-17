@@ -12,3 +12,6 @@ dist/
 __pycache__/
 .venv/
 scripts/.migrate.env
+
+# Claude Code personal permissions (never commit)
+.claude/settings.local.json
