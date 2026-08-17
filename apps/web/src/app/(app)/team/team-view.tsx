@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "@/lib/router-with-progress";
 import Link from "next/link";
 import {
@@ -33,6 +33,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ProvisionMemberDialog,
@@ -542,413 +550,534 @@ function MemberList({
     );
   }
 
+  /** us-112.1: every cell's contents, computed once per member.
+   *
+   *  The roster renders in two shells — a table at `sm` and up, and the
+   *  stacked card below it. US-68.6 introduced that card to fix the name
+   *  being the only thing willing to give up width against a cluster of
+   *  never-shrinking buttons, and a table at phone width would recreate
+   *  exactly that. Two shells, but ONE source for what goes in them: a second
+   *  copy of this logic is how the two would drift apart. */
+  function cellsFor(m: MemberRow) {
+    const isAgent = m.principals?.kind === "agent";
+    const suspended = m.status === "suspended";
+    const mine = workersByPrincipal.get(m.principal_id) ?? [];
+    const tokenCount = mine.filter((w) => w.status === "active").length;
+    const claim = mine.map((w) => claimByWorker.get(w.id)).find(Boolean);
+    const idle = idleReasons[m.principal_id];
+    const seat = hostByPrincipal[m.principal_id];
+    const status = runnerStatus[m.principal_id];
+    const assigned = assignedByPrincipal[m.principal_id] ?? 0;
+    const revoked = mine.length > 0 && mine.every((w) => w.status === "revoked");
+    const lastSeen = mine
+      .map((w) => w.last_seen_at)
+      .filter(Boolean)
+      .sort()
+      .pop() as string | undefined;
+    const moduleKeys = moduleByPrincipal[m.principal_id] ?? [];
+    const moduleLabel =
+      MODULES.find((mod) => mod.key === moduleKeys[0])?.label ?? null;
+    const effort = effortByPrincipal[m.principal_id] ?? null;
+    const expanded = expandedId === m.principal_id;
+    const toggle = () =>
+      setExpandedId((cur) => (cur === m.principal_id ? null : m.principal_id));
+
+    // US-32.2: two agents may share a name, so the seat that distinguishes
+    // them gets a column of its own rather than being a suffix on a subline
+    // that started at a different x-position on every row.
+    const seatText = seat
+      ? `${seat.hostName} slot ${seat.slotIndex}`
+      : isAgent && mine.length > 0
+        ? "self-hosted"
+        : null;
+
+    const identity = (
+      <button
+        type="button"
+        onClick={toggle}
+        className="flex min-w-0 items-center gap-2 text-left hover:opacity-80"
+      >
+        {isAgent ? (
+          <Bot
+            className={cn(
+              "size-4 shrink-0",
+              // Busy work is the whole point of an orange agent — a glance at
+              // the icon should say so before reading any text.
+              claim
+                ? "text-orange-500 dark:text-orange-400"
+                : "text-muted-foreground",
+            )}
+          />
+        ) : (
+          <User className="size-4 shrink-0 text-muted-foreground" />
+        )}
+        <span className="flex min-w-0 flex-col">
+          <span className="flex items-center gap-1.5">
+            <span className="truncate font-medium">{principalName(m)}</span>
+            {isAgent && (
+              <span className="shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium uppercase text-muted-foreground">
+                agent
+              </span>
+            )}
+            {suspended && (
+              <span className="shrink-0 rounded-full border border-amber-500/50 px-1.5 py-0.5 text-[10px] font-medium uppercase text-amber-600 dark:text-amber-400">
+                suspended
+              </span>
+            )}
+          </span>
+          {/* A person has no seat, so their address rides under the name
+              rather than leaving the Seat column carrying an email. */}
+          {!isAgent && m.principals?.email && (
+            <span className="truncate text-xs text-muted-foreground">
+              {m.principals.email}
+            </span>
+          )}
+        </span>
+      </button>
+    );
+
+    const does = isAgent ? (
+      <span className="flex items-center gap-1">
+{/* us-107.3: all four capabilities, greyed where the
+            agent lacks one. Always four — "what can it not do"
+            is usually the thing being looked for, and a filtered
+            list silently answers only half the question. */}
+        {isAgent && (
+          <RoleCapabilities
+            kinds={kindsByPrincipal[m.principal_id]}
+            iconClassName="size-3.5"
+          />
+        )}
+      </span>
+    ) : null;
+
+    const presence =
+      isAgent && status ? (
+        <span className="flex items-center gap-1.5">
+{isAgent && status && (
+        <>
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+              status.online
+                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+                : "bg-muted text-muted-foreground",
+            )}
+          >
+            <span
+              className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                status.online ? "bg-emerald-500" : "bg-muted-foreground",
+              )}
+            />
+            {status.online ? "online" : "offline"}
+          </span>
+          {status.health !== "healthy" && (
+            <span
+              className={cn(
+                "rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                status.health === "unhealthy"
+                  ? "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300"
+                  : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+              )}
+            >
+              {status.health}
+            </span>
+          )}
+        </>
+      )}
+        </span>
+      ) : null;
+
+    const stateCell = (
+      <span className="flex flex-wrap items-center gap-2">
+{/* Live status: what an agent is doing right now, or what a
+            person has on their plate. */}
+        {claim ? (
+          <>
+            <StatusBadge status="running" />
+            <span className="flex min-w-0 flex-col items-end">
+              <Link
+                href={claim.run_id ? `/runs/${claim.run_id}` : "#"}
+                className="max-w-64 truncate text-xs font-medium hover:underline"
+              >
+                {claim.kind} · {claim.title}
+              </Link>
+              <span className="text-[11px] text-muted-foreground">
+                {claim.project ? `${claim.project} · ` : ""}
+                {elapsedSince(claim.claimed_at, now) ?? "running"}
+              </span>
+            </span>
+          </>
+        ) : isAgent ? (
+          <span className="flex min-w-0 flex-col items-end">
+            <span
+              className={cn(
+                "text-xs font-medium",
+                idleTone(idle?.reason ?? (status?.online ? "idle" : "unknown")),
+              )}
+            >
+              {status && !status.online
+                ? "Offline"
+                : (IDLE_LABELS[idle?.reason ?? "idle"] ?? "Idle")}
+            </span>
+            <span className="max-w-56 truncate text-[11px] text-muted-foreground">
+              {status && !status.online
+                ? `last seen ${formatLastSeen(lastSeen ?? null)}`
+                : revoked
+                  ? "its token has been revoked"
+                  : (idle?.detail ?? "")}
+            </span>
+          </span>
+        ) : assigned > 0 ? (
+          <Link
+            href="/issues"
+            className="text-xs text-muted-foreground hover:underline"
+          >
+            {assigned} open {assigned === 1 ? "item" : "items"}
+          </Link>
+        ) : (
+          <span className="text-xs text-muted-foreground">Nothing assigned</span>
+        )}
+      </span>
+    );
+
+    const roleCell = (
+      <span className="flex items-center">
+{/* US-61.1: role never gated an agent's own behavior — it
+            authenticates over a worker token, never auth.uid(), so
+            role-based capability checks are structurally
+            unreachable for it. A fixed, non-editable "Agent" badge
+            replaces the picker rather than offering a choice that
+            was always decorative. */}
+        {isAgent ? (
+          <span className="rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+            Agent
+          </span>
+        ) : canManage ? (
+          <Select
+            items={ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] }))}
+            value={m.role}
+            onValueChange={(v) => {
+              if (typeof v === "string" && v !== m.role)
+                mutate(m.principal_id, { role: v as Role });
+            }}
+            disabled={busyId === m.principal_id}
+          >
+            <SelectTrigger className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ROLES.map((r) => (
+                <SelectItem key={r} value={r}>
+                  {ROLE_LABELS[r]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <span className="rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+            {ROLE_LABELS[m.role] ?? m.role}
+          </span>
+        )}
+      </span>
+    );
+
+    const actions = (
+      <span className="flex shrink-0 items-center justify-end gap-1">
+{canManage && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              title={suspended ? "Reactivate" : "Suspend"}
+              disabled={busyId === m.principal_id}
+              onClick={() =>
+                mutate(m.principal_id, {
+                  status: suspended ? "active" : "suspended",
+                })
+              }
+            >
+              {suspended ? <Play className="size-4" /> : <Pause className="size-4" />}
+            </Button>
+            {!isAgent && m.user_id && m.principals?.email && (
+              <Button
+                variant="outline"
+                size="sm"
+                title="Reset password"
+                disabled={busyId === m.principal_id}
+                onClick={() => resetPassword(m.user_id!, m.principals!.email!)}
+              >
+                <KeyRound className="size-4" />
+              </Button>
+            )}
+            {/* us-109.1: Remove is gone from this cluster. It was
+                the one irreversible action here, wearing the same
+                outline button as Suspend and sitting next to it —
+                an agent's now lives on its settings page, a
+                person's inside their expand panel. */}
+          </>
+        )}
+        {isAgent && (
+          <>
+            {/* us-109.1: the runner console button is gone too. The
+                console is still a page (`/team/{id}/runner`) and
+                the Console tab on the settings page reaches it —
+                it did not need a second door on every row. */}
+            {/* US-78.11: the interactive agent's CLI window, reachable
+                whether or not it is working. Every other way in
+                (Activity → a run) requires a run to exist, so an idle
+                agent had no door at all. Glows while it is working —
+                the same claim rows the "working on" line reads, so the
+                two can never disagree. */}
+            {(moduleByPrincipal[m.principal_id] ?? []).includes(
+              "interactive",
+            ) && (
+              <Button
+                variant="outline"
+                size="sm"
+                title={
+                  runningRunByPrincipal[m.principal_id]
+                    ? "Open CLI window — working now"
+                    : "Open CLI window"
+                }
+                className={cn(
+                  runningRunByPrincipal[m.principal_id] &&
+                    "border-emerald-500 text-emerald-600 shadow-[0_0_0_2px_rgba(16,185,129,0.25)] animate-pulse dark:text-emerald-400",
+                )}
+                onClick={() =>
+                  router.push(`/team/${m.principal_id}/console`)
+                }
+              >
+                <TerminalSquare className="size-4" />
+              </Button>
+            )}
+            {/* US-32.1: settings are a sibling page, not a section of
+                the console. */}
+            <Button
+              variant="outline"
+              size="sm"
+              title="Agent settings"
+              onClick={() => router.push(`/team/${m.principal_id}/settings`)}
+            >
+              <SlidersHorizontal className="size-4" />
+            </Button>
+            {/* US-55.6: same gate as the agent's own Machine section —
+                subscription-billed and manage_org only — but
+                available right from the row, no page visit first. */}
+            {canManageOrg &&
+              claudeBillingByPrincipal[m.principal_id] === "subscription" &&
+              hostByPrincipal[m.principal_id]?.serverId &&
+              hostByPrincipal[m.principal_id]?.slotId && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  title="Claude Terminal"
+                  onClick={() =>
+                    openClaudeTerminal(
+                      hostByPrincipal[m.principal_id].serverId as string,
+                      hostByPrincipal[m.principal_id].slotId as string,
+                    )
+                  }
+                >
+                  <SquareTerminal className="size-4" />
+                </Button>
+              )}
+          </>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          title={expanded ? "Hide details" : "Show details"}
+          onClick={toggle}
+        >
+          <ChevronDown
+            className={cn("size-4 transition-transform", expanded && "rotate-180")}
+          />
+        </Button>
+      </span>
+    );
+
+    const detail = (
+      <>
+        {/* The caller renders this only when `expanded`, so the guard that
+            used to wrap it here would just be the same test twice. */}
+        <div className="border-t bg-muted/20 p-4">
+          <Tabs defaultValue="details">
+            <TabsList>
+              <TabsTrigger value="details">Details</TabsTrigger>
+              <TabsTrigger value="connect">Connect</TabsTrigger>
+            </TabsList>
+            <TabsContent value="details" className="pt-3">
+              <MemberDetail
+                orgId={orgId}
+                member={m}
+                workers={mine}
+                projects={projects}
+                slot={seat ?? null}
+                embedded
+                // us-109.1: what the row stopped showing.
+                moduleLabel={moduleLabel}
+                tokenCount={tokenCount}
+                effort={effortByPrincipal[m.principal_id] ?? null}
+                effortWindowDays={effortWindowDays}
+                canManage={canManage}
+                onRemoved={() => router.refresh()}
+              />
+            </TabsContent>
+            <TabsContent value="connect" className="grid gap-5 pt-3">
+              {/* US-63.x: the token card lives here, not on Details —
+                  a router token is a connect credential, and burying
+                  it a tab away from "how do I plug this in" never
+                  made sense. */}
+              <RouterTokenPanel
+                orgId={orgId}
+                member={m}
+                workers={mine}
+                canManageTokens={myPrincipalId === m.principal_id || canManage}
+                slot={seat ?? null}
+              />
+              <ConnectPanel
+                principals={principals.filter((p) => p.principalId === m.principal_id)}
+                projects={projects}
+                orgShortname={orgShortname}
+                initialPrincipalId={m.principal_id}
+              />
+            </TabsContent>
+          </Tabs>
+        </div>
+      </>
+    );
+
+    return {
+      isAgent,
+      expanded,
+      identity,
+      does,
+      presence,
+      seatText,
+      // us-112.1: two right-aligned numeric columns, not one prose string.
+      // "4h 52m worked · 6 completed" cannot be compared down a list, and
+      // comparing agents is the whole reason those figures are on the row.
+      worked: effort ? formatWorkSeconds(effort.workSeconds) : null,
+      done: effort ? String(effort.issuesCompleted) : null,
+      stateCell,
+      roleCell,
+      actions,
+      detail,
+    };
+  }
+
+  const COLUMNS = [
+    "Member",
+    "Does",
+    "Status",
+    "Seat",
+    "Worked",
+    "Done",
+    "State",
+    "Role",
+    "",
+  ];
+
   return (
     <div className="grid gap-4">
-      <ul className="grid gap-2">
+      {/* ---- sm and up: a real table, so every field can be read down a
+           column instead of hunted at a different x-position per row. ---- */}
+      <Table className="hidden sm:table">
+        <TableHeader>
+          <TableRow>
+            {COLUMNS.map((c, i) => (
+              <TableHead
+                key={c || `actions-${i}`}
+                className={cn(
+                  "whitespace-nowrap",
+                  (c === "Worked" || c === "Done") && "text-right",
+                )}
+              >
+                {c}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {members.map((m) => {
+            const c = cellsFor(m);
+            return (
+              <Fragment key={m.principal_id}>
+                <TableRow id={`member-${m.principal_id}`}>
+                  {/* max-w-0 makes this the column that gives up width — the
+                      inverse of the US-68.6 bug, where the name was the only
+                      thing that would. Everything else is whitespace-nowrap. */}
+                  <TableCell className="max-w-0">{c.identity}</TableCell>
+                  <TableCell className="whitespace-nowrap">{c.does}</TableCell>
+                  <TableCell className="whitespace-nowrap">{c.presence}</TableCell>
+                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                    {c.seatText}
+                  </TableCell>
+                  {/* A person shows nothing in these two rather than a line of
+                      zeroes — us-91.11 AC6: user_activity_sessions measures
+                      something else and must not be rendered as if it were
+                      the same measurement. */}
+                  <TableCell className="whitespace-nowrap text-right tabular-nums">
+                    {c.worked}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-right tabular-nums">
+                    {c.done}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">{c.stateCell}</TableCell>
+                  <TableCell className="whitespace-nowrap">{c.roleCell}</TableCell>
+                  <TableCell className="whitespace-nowrap">{c.actions}</TableCell>
+                </TableRow>
+                {c.expanded && (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={COLUMNS.length} className="p-0">
+                      {c.detail}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </Fragment>
+            );
+          })}
+        </TableBody>
+      </Table>
+
+      {/* ---- below sm: the US-68.6 stacked card, same cell contents ---- */}
+      <ul className="grid gap-2 sm:hidden">
         {members.map((m) => {
-          const isAgent = m.principals?.kind === "agent";
-          const suspended = m.status === "suspended";
-          const mine = workersByPrincipal.get(m.principal_id) ?? [];
-          const tokenCount = mine.filter((w) => w.status === "active").length;
-          const claim = mine.map((w) => claimByWorker.get(w.id)).find(Boolean);
-          const idle = idleReasons[m.principal_id];
-          const seat = hostByPrincipal[m.principal_id];
-          const status = runnerStatus[m.principal_id];
-          const assigned = assignedByPrincipal[m.principal_id] ?? 0;
-          const revoked = mine.length > 0 && mine.every((w) => w.status === "revoked");
-          const lastSeen = mine
-            .map((w) => w.last_seen_at)
-            .filter(Boolean)
-            .sort()
-            .pop() as string | undefined;
-          const moduleKeys = moduleByPrincipal[m.principal_id] ?? [];
-          const moduleLabel =
-            MODULES.find((mod) => mod.key === moduleKeys[0])?.label ?? null;
-          // us-109.1: who this is and where it runs. US-32.2: two agents may
-          // share a name, so the seat that distinguishes them stays on the row
-          // — it is the one fact here that is not a lookup.
-          const subline = [
-            m.principals?.email,
-            seat
-              ? `${seat.hostName} slot ${seat.slotIndex}`
-              : isAgent && mine.length > 0
-                ? "self-hosted"
-                : null,
-          ]
-            .filter(Boolean)
-            .join(" · ");
-          const expanded = expandedId === m.principal_id;
-          const toggle = () =>
-            setExpandedId((cur) => (cur === m.principal_id ? null : m.principal_id));
-
+          const c = cellsFor(m);
           return (
-            <li key={m.principal_id} id={`member-${m.principal_id}`} className="rounded-md border">
-              {/* US-68.6: the same shrink-0-cluster-squeezes-the-name bug
-                  page-header.tsx had (us-68.5) — a role select plus up to six
-                  icon buttons never shrink, so on a phone the name button was
-                  the only side willing to give up width. Stacked below `sm`;
-                  unchanged above it. */}
-              <div className="flex flex-col gap-3 px-3 py-2 text-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-                <button
-                  type="button"
-                  onClick={toggle}
-                  className="flex min-w-0 flex-1 items-center gap-3 text-left hover:opacity-80"
-                >
-                  {isAgent ? (
-                    <Bot
-                      className={cn(
-                        "size-4 shrink-0",
-                        // Busy work is the whole point of an orange agent —
-                        // a glance at the icon should say so before reading
-                        // any text.
-                        claim
-                          ? "text-orange-500 dark:text-orange-400"
-                          : "text-muted-foreground",
-                      )}
-                    />
-                  ) : (
-                    <User className="size-4 shrink-0 text-muted-foreground" />
-                  )}
-                  <span className="flex min-w-0 flex-col">
-                    <span className="flex flex-wrap items-center gap-1.5 truncate font-medium">
-                      {principalName(m)}
-                      {isAgent && (
-                        <span className="rounded-full border px-1.5 py-0.5 text-[10px] font-medium uppercase text-muted-foreground">
-                          agent
-                        </span>
-                      )}
-                      {/* us-107.3: all four capabilities, greyed where the
-                          agent lacks one. Always four — "what can it not do"
-                          is usually the thing being looked for, and a filtered
-                          list silently answers only half the question. */}
-                      {isAgent && (
-                        <RoleCapabilities
-                          kinds={kindsByPrincipal[m.principal_id]}
-                          iconClassName="size-3.5"
-                        />
-                      )}
-                      {/* us-109.1: the module ("Buildmill Interactive
-                          Agent") moved into the expand panel. It never
-                          changes and it is the longest thing on the line —
-                          it was pushing the status pills off a narrow row to
-                          say something a manager reads once. */}
-                      {isAgent && status && (
-                        <>
-                          <span
-                            className={cn(
-                              "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-                              status.online
-                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-                                : "bg-muted text-muted-foreground",
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                "h-1.5 w-1.5 rounded-full",
-                                status.online ? "bg-emerald-500" : "bg-muted-foreground",
-                              )}
-                            />
-                            {status.online ? "online" : "offline"}
-                          </span>
-                          {status.health !== "healthy" && (
-                            <span
-                              className={cn(
-                                "rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-                                status.health === "unhealthy"
-                                  ? "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300"
-                                  : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
-                              )}
-                            >
-                              {status.health}
-                            </span>
-                          )}
-                        </>
-                      )}
-                      {suspended && (
-                        <span className="rounded-full border border-amber-500/50 px-1.5 py-0.5 text-[10px] font-medium uppercase text-amber-600 dark:text-amber-400">
-                          suspended
-                        </span>
-                      )}
-                    </span>
-                    {/* us-109.1: identity and where it sits — nothing else.
-                        The token count and the join date are facts a manager
-                        looks up once, not scans, so they moved into the
-                        expand panel and left the line readable. */}
-                    {subline && (
-                      <span className="truncate text-xs text-muted-foreground">
-                        {subline}
-                      </span>
-                    )}
-                    {/* US-91.12: what this agent actually did. A person's row
-                        shows nothing here rather than a line of zeroes —
-                        `user_activity_sessions` measures something else
-                        (us-91.11 AC6) and must not be shown as the same.
-                        us-109.1: output — lines, tokens, cost — is in the
-                        expand panel; the row keeps only the two figures that
-                        say whether this agent is earning its seat. */}
-                    {isAgent && effortByPrincipal[m.principal_id] && (
-                      <span className="truncate text-[11px] text-muted-foreground">
-                        {(() => {
-                          const e = effortByPrincipal[m.principal_id];
-                          return [
-                            `${formatWorkSeconds(e.workSeconds)} worked`,
-                            `${e.issuesCompleted} completed`,
-                          ].join(" · ");
-                        })()}
-                      </span>
-                    )}
+            <li
+              key={m.principal_id}
+              id={`member-sm-${m.principal_id}`}
+              className="rounded-md border"
+            >
+              <div className="flex flex-col gap-3 px-3 py-2 text-sm">
+                <span className="flex flex-wrap items-center gap-1.5">
+                  {c.identity}
+                  {c.does}
+                  {c.presence}
+                </span>
+                {c.seatText && (
+                  <span className="text-xs text-muted-foreground">{c.seatText}</span>
+                )}
+                {c.worked && (
+                  <span className="text-[11px] text-muted-foreground">
+                    {c.worked} worked · {c.done} completed
                   </span>
-                </button>
-
-                <span className="flex shrink-0 flex-wrap items-center gap-2">
-                  {/* Live status: what an agent is doing right now, or what a
-                      person has on their plate. */}
-                  {claim ? (
-                    <>
-                      <StatusBadge status="running" />
-                      <span className="flex min-w-0 flex-col items-end">
-                        <Link
-                          href={claim.run_id ? `/runs/${claim.run_id}` : "#"}
-                          className="max-w-64 truncate text-xs font-medium hover:underline"
-                        >
-                          {claim.kind} · {claim.title}
-                        </Link>
-                        <span className="text-[11px] text-muted-foreground">
-                          {claim.project ? `${claim.project} · ` : ""}
-                          {elapsedSince(claim.claimed_at, now) ?? "running"}
-                        </span>
-                      </span>
-                    </>
-                  ) : isAgent ? (
-                    <span className="flex min-w-0 flex-col items-end">
-                      <span
-                        className={cn(
-                          "text-xs font-medium",
-                          idleTone(idle?.reason ?? (status?.online ? "idle" : "unknown")),
-                        )}
-                      >
-                        {status && !status.online
-                          ? "Offline"
-                          : (IDLE_LABELS[idle?.reason ?? "idle"] ?? "Idle")}
-                      </span>
-                      <span className="max-w-56 truncate text-[11px] text-muted-foreground">
-                        {status && !status.online
-                          ? `last seen ${formatLastSeen(lastSeen ?? null)}`
-                          : revoked
-                            ? "its token has been revoked"
-                            : (idle?.detail ?? "")}
-                      </span>
-                    </span>
-                  ) : assigned > 0 ? (
-                    <Link
-                      href="/issues"
-                      className="text-xs text-muted-foreground hover:underline"
-                    >
-                      {assigned} open {assigned === 1 ? "item" : "items"}
-                    </Link>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">Nothing assigned</span>
-                  )}
-
-                  {/* US-61.1: role never gated an agent's own behavior — it
-                      authenticates over a worker token, never auth.uid(), so
-                      role-based capability checks are structurally
-                      unreachable for it. A fixed, non-editable "Agent" badge
-                      replaces the picker rather than offering a choice that
-                      was always decorative. */}
-                  {isAgent ? (
-                    <span className="rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                      Agent
-                    </span>
-                  ) : canManage ? (
-                    <Select
-                      items={ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] }))}
-                      value={m.role}
-                      onValueChange={(v) => {
-                        if (typeof v === "string" && v !== m.role)
-                          mutate(m.principal_id, { role: v as Role });
-                      }}
-                      disabled={busyId === m.principal_id}
-                    >
-                      <SelectTrigger className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ROLES.map((r) => (
-                          <SelectItem key={r} value={r}>
-                            {ROLE_LABELS[r]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <span className="rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                      {ROLE_LABELS[m.role] ?? m.role}
-                    </span>
-                  )}
-                  {canManage && (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        title={suspended ? "Reactivate" : "Suspend"}
-                        disabled={busyId === m.principal_id}
-                        onClick={() =>
-                          mutate(m.principal_id, {
-                            status: suspended ? "active" : "suspended",
-                          })
-                        }
-                      >
-                        {suspended ? <Play className="size-4" /> : <Pause className="size-4" />}
-                      </Button>
-                      {!isAgent && m.user_id && m.principals?.email && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          title="Reset password"
-                          disabled={busyId === m.principal_id}
-                          onClick={() => resetPassword(m.user_id!, m.principals!.email!)}
-                        >
-                          <KeyRound className="size-4" />
-                        </Button>
-                      )}
-                      {/* us-109.1: Remove is gone from this cluster. It was
-                          the one irreversible action here, wearing the same
-                          outline button as Suspend and sitting next to it —
-                          an agent's now lives on its settings page, a
-                          person's inside their expand panel. */}
-                    </>
-                  )}
-                  {isAgent && (
-                    <>
-                      {/* us-109.1: the runner console button is gone too. The
-                          console is still a page (`/team/{id}/runner`) and
-                          the Console tab on the settings page reaches it —
-                          it did not need a second door on every row. */}
-                      {/* US-78.11: the interactive agent's CLI window, reachable
-                          whether or not it is working. Every other way in
-                          (Activity → a run) requires a run to exist, so an idle
-                          agent had no door at all. Glows while it is working —
-                          the same claim rows the "working on" line reads, so the
-                          two can never disagree. */}
-                      {(moduleByPrincipal[m.principal_id] ?? []).includes(
-                        "interactive",
-                      ) && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          title={
-                            runningRunByPrincipal[m.principal_id]
-                              ? "Open CLI window — working now"
-                              : "Open CLI window"
-                          }
-                          className={cn(
-                            runningRunByPrincipal[m.principal_id] &&
-                              "border-emerald-500 text-emerald-600 shadow-[0_0_0_2px_rgba(16,185,129,0.25)] animate-pulse dark:text-emerald-400",
-                          )}
-                          onClick={() =>
-                            router.push(`/team/${m.principal_id}/console`)
-                          }
-                        >
-                          <TerminalSquare className="size-4" />
-                        </Button>
-                      )}
-                      {/* US-32.1: settings are a sibling page, not a section of
-                          the console. */}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        title="Agent settings"
-                        onClick={() => router.push(`/team/${m.principal_id}/settings`)}
-                      >
-                        <SlidersHorizontal className="size-4" />
-                      </Button>
-                      {/* US-55.6: same gate as the agent's own Machine section —
-                          subscription-billed and manage_org only — but
-                          available right from the row, no page visit first. */}
-                      {canManageOrg &&
-                        claudeBillingByPrincipal[m.principal_id] === "subscription" &&
-                        hostByPrincipal[m.principal_id]?.serverId &&
-                        hostByPrincipal[m.principal_id]?.slotId && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            title="Claude Terminal"
-                            onClick={() =>
-                              openClaudeTerminal(
-                                hostByPrincipal[m.principal_id].serverId as string,
-                                hostByPrincipal[m.principal_id].slotId as string,
-                              )
-                            }
-                          >
-                            <SquareTerminal className="size-4" />
-                          </Button>
-                        )}
-                    </>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    title={expanded ? "Hide details" : "Show details"}
-                    onClick={toggle}
-                  >
-                    <ChevronDown
-                      className={cn("size-4 transition-transform", expanded && "rotate-180")}
-                    />
-                  </Button>
+                )}
+                {c.stateCell}
+                <span className="flex flex-wrap items-center gap-2">
+                  {c.roleCell}
+                  {c.actions}
                 </span>
               </div>
-
-              {expanded && (
-                <div className="border-t bg-muted/20 p-4">
-                  <Tabs defaultValue="details">
-                    <TabsList>
-                      <TabsTrigger value="details">Details</TabsTrigger>
-                      <TabsTrigger value="connect">Connect</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="details" className="pt-3">
-                      <MemberDetail
-                        orgId={orgId}
-                        member={m}
-                        workers={mine}
-                        projects={projects}
-                        slot={seat ?? null}
-                        embedded
-                        // us-109.1: what the row stopped showing.
-                        moduleLabel={moduleLabel}
-                        tokenCount={tokenCount}
-                        effort={effortByPrincipal[m.principal_id] ?? null}
-                        effortWindowDays={effortWindowDays}
-                        canManage={canManage}
-                        onRemoved={() => router.refresh()}
-                      />
-                    </TabsContent>
-                    <TabsContent value="connect" className="grid gap-5 pt-3">
-                      {/* US-63.x: the token card lives here, not on Details —
-                          a router token is a connect credential, and burying
-                          it a tab away from "how do I plug this in" never
-                          made sense. */}
-                      <RouterTokenPanel
-                        orgId={orgId}
-                        member={m}
-                        workers={mine}
-                        canManageTokens={myPrincipalId === m.principal_id || canManage}
-                        slot={seat ?? null}
-                      />
-                      <ConnectPanel
-                        principals={principals.filter((p) => p.principalId === m.principal_id)}
-                        projects={projects}
-                        orgShortname={orgShortname}
-                        initialPrincipalId={m.principal_id}
-                      />
-                    </TabsContent>
-                  </Tabs>
-                </div>
-              )}
+              {c.expanded && c.detail}
             </li>
           );
         })}
       </ul>
+
 
       {resetReveal && (
         <PasswordReveal email={resetReveal.email} password={resetReveal.password} />

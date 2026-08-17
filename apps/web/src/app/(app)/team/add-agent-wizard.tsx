@@ -26,6 +26,12 @@ import {
   type AgentRoleKey,
 } from "@/lib/agent-roles";
 import { cn } from "@/lib/utils";
+import {
+  modulePlaceable,
+  resolveActiveModule,
+  stepValid as stepIsValid,
+  wizardSteps,
+} from "@/lib/agent-wizard-steps";
 import { RoleIcon } from "@/components/role-icon";
 import {
   poolAvailability,
@@ -116,23 +122,28 @@ export function AddAgentWizard({
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<Step>("who");
 
-  // Step 1 — who.
+  // Step 1 — who it is, and what it does.
   const [name, setName] = useState("");
+  // US-77.1: four roles, all on by default. `enabled_kinds` still stores run
+  // kinds — the roles expand on save. us-111.1: asked on step 1 beside the
+  // name, because what an agent is for shapes everything asked after it.
+  const [roles, setRoles] = useState<AgentRoleKey[]>([...ALL_ROLE_KEYS]);
 
-  // Step 2 — where.
+  // Step 2 — what it runs, and where.
+  // US-66.2: an agent runs exactly one module — two enabled at once left the
+  // runner guessing which CLI a run should use.
+  // us-111.1: the type moved here from step 3, above the placement it
+  // constrains (a pool-only type has no owned-machine option), and Buildmill
+  // Interactive Agent is the default. It is pool-only, so `activeModule` falls
+  // back to the first type that has somewhere to run when the org has no pool
+  // with room — the default must never be a dead end.
+  const [moduleKey, setModuleKey] = useState("interactive");
   const [placement, setPlacement] = useState<Placement | null>(null);
   const [machineId, setMachineId] = useState("");
   const [pools, setPools] = useState<PoolOption[]>([]);
   const [poolId, setPoolId] = useState("");
 
-  // Step 3 — what.
-  // US-66.2: an agent runs exactly one module — two enabled at once left the
-  // runner guessing which CLI a run should use. OpenCode is the default now
-  // that it's the module most new test agents want.
-  const [moduleKey, setModuleKey] = useState("opencode");
-  // US-77.1: four roles, all on by default. `enabled_kinds` still stores run
-  // kinds — the roles expand on save.
-  const [roles, setRoles] = useState<AgentRoleKey[]>([...ALL_ROLE_KEYS]);
+  // Step 3 — which projects.
   // US-55.1: which projects it may access — all checked by default, because
   // the gate is fail-closed and an agent with zero access rows claims
   // nothing. The wizard used to create exactly that agent.
@@ -173,13 +184,22 @@ export function AddAgentWizard({
   const offeredModules = OFFERED_MODULES.filter(
     (m) => availableModuleKeys === null || availableModuleKeys.has(m.key),
   );
-  /** The selection, corrected for a catalog that does not contain it. Derived
-   *  rather than pushed into state by an effect, so the form can never render
-   *  a moment where nothing is selected and Next is refused for a reason the
+  /** us-111.1: a pool-only type has nowhere to run when the org has no pool
+   *  with room. Interactive is the default now, so this is the difference
+   *  between opening on a sensible choice and opening on a dead Next button. */
+  const hasSelectablePool = selectablePools(pools).length > 0;
+  const placeable = (m: { poolOnly?: boolean }) =>
+    modulePlaceable(m, hasSelectablePool);
+  /** The selection, corrected for a catalog that does not contain it — and
+   *  (us-111.1) for a type that has no placement available. Derived rather
+   *  than pushed into state by an effect, so the form can never render a
+   *  moment where nothing is selected and Next is refused for a reason the
    *  manager cannot see. Empty only when the catalog offers nothing at all. */
-  const activeModule = offeredModules.some((m) => m.key === moduleKey)
-    ? moduleKey
-    : (offeredModules[0]?.key ?? "");
+  const activeModule = resolveActiveModule(
+    moduleKey,
+    offeredModules,
+    hasSelectablePool,
+  );
   /** US-78.6: the Buildmill Interactive Agent runs on a platform pool only —
    *  it holds a live session the platform provisions, patches and can reach.
    *  Derived from the same MODULES table the radios render from, so the rule
@@ -188,16 +208,17 @@ export function AddAgentWizard({
   const poolOnly =
     MODULES.find((m) => m.key === activeModule)?.poolOnly === true;
 
-  // US-78.6: the type is chosen on step 3, the placement on step 2 — so going
-  // back and switching to a pool-only type can leave a machine selected under
-  // an option that is no longer rendered. Snap it back, or Next would proceed
-  // with a placement the manager can no longer see or change.
+  // US-78.6 → us-111.1: the type and the placement are chosen on the same step
+  // now, so switching to a pool-only type retracts the machine option in the
+  // same interaction rather than a page later. The snap-back stays anyway: the
+  // manager can still pick a machine first and change the type second, on the
+  // one page, and Next must not proceed with a placement no longer rendered.
   useEffect(() => {
     if (poolOnly && placement === "machine") {
-      setPlacement(selectablePools(pools).length > 0 ? "pool" : null);
+      setPlacement(hasSelectablePool ? "pool" : null);
       setMachineId("");
     }
-  }, [poolOnly, placement, pools]);
+  }, [poolOnly, placement, hasSelectablePool]);
 
   useEffect(() => {
     if (!open) return;
@@ -268,9 +289,9 @@ export function AddAgentWizard({
     setPlacement(null);
     setMachineId("");
     setPoolId("");
-    // US-66.2: OpenCode is the default module now, not Claude — this mirrors
-    // the initial useState below, which reset() had drifted from.
-    setModuleKey("opencode");
+    // us-111.1 (was US-66.2's OpenCode): mirrors the initial useState above,
+    // which reset() had drifted from once already.
+    setModuleKey("interactive");
     setRoles([...ALL_ROLE_KEYS]);
     setAccessIds(projects.map((p) => p.id));
     setBilling("api");
@@ -509,28 +530,20 @@ export function AddAgentWizard({
   // Built inline rather than memoized: four literals cost nothing, and the
   // React Compiler refuses to optimize a component whose useMemo depends on a
   // derived value like `activeModule` (us-77.2).
-  const steps: { id: Step; label: string }[] = [
-    { id: "who", label: "Who" },
-    { id: "where", label: "Where" },
-    { id: "what", label: "What" },
-    ...(activeModule === "claude"
-      ? [{ id: "billing" as Step, label: "Billing" }]
-      : []),
-    { id: "done", label: "Done" },
-  ];
+  const steps: { id: Step; label: string }[] = wizardSteps(activeModule);
   const stepIndex = steps.findIndex((s) => s.id === step);
   const lastInputStep = steps[steps.length - 2].id;
 
-  const stepValid =
-    step === "who"
-      ? name.trim().length > 0
-      : step === "where"
-        ? placement === "self" ||
-          (placement === "machine" && !!machineId) ||
-          (placement === "pool" && !!poolId)
-        : step === "what"
-          ? !!activeModule
-          : true;
+  // us-111.1: the type gates Where now (it is chosen there, and it decides
+  // which placements exist); Projects is unconditional — every project is
+  // checked by default and an unchecked-all agent is warned about, not blocked.
+  const stepValid = stepIsValid(step, {
+    name,
+    activeModule,
+    placement,
+    machineId,
+    poolId,
+  });
 
   function next() {
     if (steps[stepIndex + 1]) setStep(steps[stepIndex + 1].id);
@@ -698,11 +711,145 @@ export function AddAgentWizard({
                     shows on the roster and can be assigned work.
                   </p>
                 </div>
+
+              {/* US-61.2 → US-77.1: four roles, not ten pipeline kinds. The
+                  model each role talks to is tuned on the agent's settings
+                  page afterwards. */}
+              <div className="grid gap-1.5 text-sm">
+                <span className="text-muted-foreground">
+                  What this agent does
+                </span>
+                <div className="grid gap-1.5 sm:grid-cols-2">
+                  {AGENT_ROLES.map((role) => (
+                    <label
+                      key={role.key}
+                      className="flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 hover:border-ring/60"
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={roles.includes(role.key)}
+                        onChange={(e) =>
+                          setRoles(
+                            e.target.checked
+                              ? [...roles, role.key]
+                              : roles.filter((r) => r !== role.key),
+                          )
+                        }
+                      />
+                      {/* us-107.3: the same glyph the roster and the
+                          routing buttons use, so a capability is picked
+                          here wearing the icon it will wear everywhere. */}
+                      <RoleIcon
+                        role={role.key}
+                        className={cn(
+                          "mt-0.5 shrink-0",
+                          roles.includes(role.key)
+                            ? "text-foreground"
+                            : "text-muted-foreground/40",
+                        )}
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-xs font-medium">
+                          {role.label}
+                        </span>
+                        <span className="block text-xs text-muted-foreground">
+                          {role.help}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Unchecked roles are never claimed by this agent — the work
+                  stays in the pool for one that does them.
+                </p>
+                {roles.length === 0 && (
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    Nothing checked means a benched agent: it will connect
+                    and claim no work at all.
+                  </p>
+                )}
+              </div>
               </div>
             )}
 
             {step === "where" && (
               <div className="grid gap-3">
+                {/* us-111.1: the type sits above the placement it
+                    constrains. A pool-only type retracts the
+                    owned-machine option below in the same interaction,
+                    rather than un-choosing it a page later. */}
+              <div className="grid gap-1.5 text-sm">
+                <span className="text-muted-foreground">Agent Type</span>
+                {/* US-66.2 → US-77.2: one module per agent, not a checklist
+                    — two enabled modules left the runner guessing which CLI
+                    a run should use. Radios show every option and the one
+                    chosen at once, which a closed dropdown cannot. */}
+                {offeredModules.length === 0 ? (
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    No agent type is available — the superadmin has hidden
+                    every one. Ask for one to be enabled before creating an
+                    agent.
+                  </p>
+                ) : (
+                  <div className="grid gap-1.5 sm:grid-cols-2">
+                    {offeredModules.map((m) => {
+                      // US-53.2: only modules the chosen machine can
+                      // actually run — the probe's word, checked where the
+                      // choice is made, not at first dispatch.
+                      // us-111.1: and a pool-only type with no pool that has
+                      // room. Disabled and said out loud here, rather than
+                      // selectable-then-stuck at the placement below it.
+                      const noPlacement = !placeable(m);
+                      const unavailable =
+                        noPlacement ||
+                        (machineModules !== null &&
+                          !machineModules.includes(m.key));
+                      return (
+                        <label
+                          key={m.key}
+                          className={cn(
+                            "flex items-start gap-2 rounded-md border px-3 py-2",
+                            unavailable
+                              ? "cursor-not-allowed opacity-60"
+                              : "cursor-pointer hover:border-ring/60",
+                            activeModule === m.key && "border-ring bg-muted/40",
+                          )}
+                        >
+                          <input
+                            type="radio"
+                            name="wizard-module"
+                            className="mt-0.5"
+                            value={m.key}
+                            checked={activeModule === m.key}
+                            disabled={unavailable}
+                            onChange={() => setModuleKey(m.key)}
+                          />
+                          <span className="min-w-0">
+                            <span className="block text-xs font-medium">
+                              {m.label}
+                            </span>
+                            <span className="block text-xs text-muted-foreground">
+                              {noPlacement
+                                ? "Runs on a Build Mill pool only, and no pool has room — free a slot or resize one to pick this."
+                                : unavailable
+                                  ? `Not installed on ${machine?.name ?? "the machine"} — its probe did not report it.`
+                                  : m.help}
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                {placement === "self" && (
+                  <p className="text-xs text-muted-foreground">
+                    Install the matching CLI on the machine you run it on —
+                    the runner drives it.
+                  </p>
+                )}
+              </div>
                 {(() => {
                   // US-57.10: an empty list used to mean three different
                   // things and got one sentence — which told a manager to
@@ -859,129 +1006,6 @@ export function AddAgentWizard({
 
             {step === "what" && (
               <div className="grid gap-4">
-                <div className="grid gap-1.5 text-sm">
-                  <span className="text-muted-foreground">Agent Type</span>
-                  {/* US-66.2 → US-77.2: one module per agent, not a checklist
-                      — two enabled modules left the runner guessing which CLI
-                      a run should use. Radios show every option and the one
-                      chosen at once, which a closed dropdown cannot. */}
-                  {offeredModules.length === 0 ? (
-                    <p className="text-xs text-amber-700 dark:text-amber-400">
-                      No agent type is available — the superadmin has hidden
-                      every one. Ask for one to be enabled before creating an
-                      agent.
-                    </p>
-                  ) : (
-                    <div className="grid gap-1.5 sm:grid-cols-2">
-                      {offeredModules.map((m) => {
-                        // US-53.2: only modules the chosen machine can
-                        // actually run — the probe's word, checked where the
-                        // choice is made, not at first dispatch.
-                        const unavailable =
-                          machineModules !== null &&
-                          !machineModules.includes(m.key);
-                        return (
-                          <label
-                            key={m.key}
-                            className={cn(
-                              "flex items-start gap-2 rounded-md border px-3 py-2",
-                              unavailable
-                                ? "cursor-not-allowed opacity-60"
-                                : "cursor-pointer hover:border-ring/60",
-                              activeModule === m.key && "border-ring bg-muted/40",
-                            )}
-                          >
-                            <input
-                              type="radio"
-                              name="wizard-module"
-                              className="mt-0.5"
-                              value={m.key}
-                              checked={activeModule === m.key}
-                              disabled={unavailable}
-                              onChange={() => setModuleKey(m.key)}
-                            />
-                            <span className="min-w-0">
-                              <span className="block text-xs font-medium">
-                                {m.label}
-                              </span>
-                              <span className="block text-xs text-muted-foreground">
-                                {unavailable
-                                  ? `Not installed on ${machine?.name ?? "the machine"} — its probe did not report it.`
-                                  : m.help}
-                              </span>
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {placement === "self" && (
-                    <p className="text-xs text-muted-foreground">
-                      Install the matching CLI on the machine you run it on —
-                      the runner drives it.
-                    </p>
-                  )}
-                </div>
-
-                {/* US-61.2 → US-77.1: four roles, not ten pipeline kinds. The
-                    model each role talks to is tuned on the agent's settings
-                    page afterwards. */}
-                <div className="grid gap-1.5 text-sm">
-                  <span className="text-muted-foreground">
-                    What this agent does
-                  </span>
-                  <div className="grid gap-1.5 sm:grid-cols-2">
-                    {AGENT_ROLES.map((role) => (
-                      <label
-                        key={role.key}
-                        className="flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 hover:border-ring/60"
-                      >
-                        <input
-                          type="checkbox"
-                          className="mt-0.5"
-                          checked={roles.includes(role.key)}
-                          onChange={(e) =>
-                            setRoles(
-                              e.target.checked
-                                ? [...roles, role.key]
-                                : roles.filter((r) => r !== role.key),
-                            )
-                          }
-                        />
-                        {/* us-107.3: the same glyph the roster and the
-                            routing buttons use, so a capability is picked
-                            here wearing the icon it will wear everywhere. */}
-                        <RoleIcon
-                          role={role.key}
-                          className={cn(
-                            "mt-0.5 shrink-0",
-                            roles.includes(role.key)
-                              ? "text-foreground"
-                              : "text-muted-foreground/40",
-                          )}
-                        />
-                        <span className="min-w-0">
-                          <span className="block text-xs font-medium">
-                            {role.label}
-                          </span>
-                          <span className="block text-xs text-muted-foreground">
-                            {role.help}
-                          </span>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Unchecked roles are never claimed by this agent — the work
-                    stays in the pool for one that does them.
-                  </p>
-                  {roles.length === 0 && (
-                    <p className="text-xs text-amber-700 dark:text-amber-400">
-                      Nothing checked means a benched agent: it will connect
-                      and claim no work at all.
-                    </p>
-                  )}
-                </div>
 
                 {/* US-55.1: project access, all checked by default — the gate
                     is fail-closed, so an agent created with none can claim

@@ -41,8 +41,8 @@ today), and the residue carried out of Phases 85–89:
 
 | Order | Story | Title | Status |
 |---|---|---|---|
-| 1 | [us-112.1](us-112.1-the-team-roster-is-a-table.md) | The Team roster is a table | New |
-| 2 | [us-111.1](us-111.1-the-wizard-asks-in-the-right-order.md) | The Add agent wizard asks in the right order | New |
+| 1 | [us-112.1](us-112.1-the-team-roster-is-a-table.md) | The Team roster is a table | Testing |
+| 2 | [us-111.1](us-111.1-the-wizard-asks-in-the-right-order.md) | The Add agent wizard asks in the right order | Testing |
 | 3 | [us-110.1](us-110.1-an-agents-projects-are-the-ones-you-checked.md) | An agent's projects are the ones you checked | Testing |
 | 4 | [us-109.1](us-109.1-the-team-row-says-who-not-how-much.md) | The Team row says who, not how much | Testing |
 | 5 | [us-109.2](us-109.2-the-team-kpis-price-the-work.md) | The team's KPI row prices the work | Testing |

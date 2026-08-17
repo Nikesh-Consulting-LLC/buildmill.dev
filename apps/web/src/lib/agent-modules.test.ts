@@ -33,12 +33,17 @@ function modules(): { key: string; offered: boolean; poolOnly: boolean }[] {
   }));
 }
 
-test("three agent types are on offer, and interactive is one of them", () => {
+test("three agent types are on offer, and interactive is listed first", () => {
+  // us-111.1: the order is the render order in the wizard's Agent Type radios,
+  // so this is not incidental — Buildmill Interactive Agent leads because it
+  // is the default. Changing the array reorders four other screens too
+  // (register-agent-dialog, host-detail twice, member settings), which is why
+  // the order is asserted rather than left to whoever edits the table next.
   assert.deepEqual(
     modules()
       .filter((m) => m.offered)
       .map((m) => m.key),
-    ["grok", "opencode", "interactive"],
+    ["interactive", "grok", "opencode"],
   );
 });
 
