@@ -681,6 +681,188 @@ string-typed key, and a `path_prefix` query over a file list GitHub had already 
 300 answered as though complete — so "this release ran no migrations" and "they fell off
 the end upstream" were the same empty list.
 
+**Phases 103–112** (20 stories, closed 2026-08-17 — built and released to production;
+the manager tested on live, so what each story recorded as *not proven* is listed
+rather than assumed; Phase 108 and Phases 113–114 stay open) — a release that cannot
+get stuck, work that existed nowhere safe, honest outcomes on the Reports hub and the
+work item, a Workbench that acts on a draft, and a Team page rebuilt from the row up.
+
+- **A release cannot get stuck** (103) — from the 2026.08.16.3 incident: the runner
+  restarted ten minutes into a prep, the `release_prep_runs` row stayed `running` two
+  and a half hours after its lease expired, and `releases_one_in_flight_per_project`
+  (215) blocked every future cut for the project while `/cancel` took only `queued` and
+  `/retry` only `failed`. Release prep was the one claimed job with no reaper — nothing
+  read `claim_expires_at`. `db.reap_expired_release_preps` (103.1) fails every expired
+  `running` prep through the existing `_fail_release_prep` body (`for update of p skip
+  locked`), on the same three triggers as `requeue_expired_claims` — startup, the
+  60-second liveness loop, and `list_release_prep_pool` — landing on `failed` rather
+  than requeuing, because a prep that died may have burned a paid session and Retry is
+  the manager's call. `GET /worker/release-prep/held` (103.2) lets a restarted runner
+  re-adopt the preps it holds before its first poll — `release_prep.briefing` extracted
+  from `claim` so the re-adopted job still carries the Release instruction; the route is
+  declared before `/release-prep/{prep_id}` because FastAPI matches in order — with
+  `_live_preps` guarding against supervising twice and no second `release_prep_runs`
+  row, since it is the same attempt. `POST /releases/{id}/cancel` (103.3) widens to
+  `queued`, `running`, `notes-ready` and `uat-deploy-failed` and `_stop_prep_runs` ends
+  the job with the release: queued rows deleted, running rows moved to `cancelled` (the
+  status 215 defined and nothing had ever written); `/reject` calls the same helper,
+  closing the hole where a zombie agent could write notes onto a rejected release, and
+  `release_prep.not_running_error` gives submit and heartbeat a sentence naming that the
+  manager stopped it. `StopReleaseButton` (exported `STOPPABLE`) separates Stop — the
+  attempt failed — from Reject — the build is bad. `release-liveness.ts` (103.4) gives
+  the Workbench release card the reading story runs already had — who holds it, held
+  minutes, silent, abandoned — with silence exact rather than approximate, since
+  `heartbeat_release_prep` is the only writer of `claim_expires_at` and every beat sets
+  it to `now() + 2h`; no `last_heartbeat_at`, no migration. Migration **275** (103.5)
+  adds one branch to `issue_dispatch_refusal` (235's choke point) so `dispatch_issue`
+  refuses `plan`/`code` on a project with a release in flight and
+  `org_issue_dispatch_blocks` hands the identical sentence to the Workbench and the
+  issue page — a hard refusal, not a soft hold, because a parked run reads as progress
+  and a queue should not drain silently into a rejected build's aftermath. `breakdown`,
+  `elaborate`, `draw` and `guidelines` stay open; `merge` is deliberately not frozen.
+- **The tree can be trusted** (104) — two pieces of work found existing nowhere safe.
+  `main` carried five duplicated migration numbers; the fix for 249 had been written on
+  2026-08-13, sat on an unpushed branch, went stale and was deleted on 2026-08-16. 104.1
+  recovered it from the object store (`git cat-file` on `1a5ebcb`), cherry-picked rather
+  than rewrote it, and brought it current: `249_project_env` → **276**, the later 271
+  (`a_release_case_knows_its_section`) → **277**; 014, 015 and 205 are grandfathered and
+  `test_migration_numbering.py` fails Essential on any new duplicate while asserting the
+  grandfathered pairs still collide. The recovered commit's `migrate.py` fix survives:
+  the skip-if-applied guard had been dead for every prefixed ledger row (92 of 258 on
+  prod) because Supabase stores names verbatim; `strip_prefix` normalises both sides,
+  which is what makes the rename safe even though dev records `249_project_env` and prod
+  plain `project_env`. 104.2 commits the untracked Playwright suite in `scripts/testing/`
+  as written — 22 specs, `run-all.mjs`, `endpoints.json`, `tools/generate-catalog.py` —
+  as a fourth suite, since it needs a running service and Essential blocks network by
+  design; the tree was scanned for credential shapes and every hit is a documented fake.
+- **The Reports hub can close a report honestly** (105) — the hub offered promote or
+  Ignore, and Ignoring a bug that was fixed records the opposite of what happened. Mark
+  fixed (105.1) reaches the `fixed` status migration 184 already gave the superadmin
+  console, on the detail, the desktop row and the phone card; recurrence needed no code
+  because `app_issues_open_fingerprint_key` is partial over `('new','triaged')` so a
+  `fixed` row cannot be `ingest_report`'s `on conflict` target — the story adds the
+  sentence saying so, widens Reopen to any non-`promoted` closed status, and gives
+  `23505` its own words. 105.2 calls `promote_app_issue` (183) with `p_epic_id` omitted
+  from the list, one click, no dialog — `PromoteDialog` stays beside it for when the
+  epic matters — behind a shared `canPromote`; the RPC's own double-promotion guard
+  makes a client guard unnecessary. Both UI only, no migration.
+- **The Workbench acts on a draft** (106) — Triage was the one group that navigated.
+  `triage-action.ts` (106.1) names what `dispatch_kind_for` (255) would run — Dispatch
+  planning, Dispatch RCA, Dispatch build — and a `draft` feature, which cannot be
+  dispatched at all, gets `draft-prd` posting `/api/v1/issues/{id}/prd/draft`. Triage
+  rows carry `org_issue_dispatch_blocks` so a held draft wears the hourglass, keep a
+  secondary **Open draft**, lose their green `emphasis`, and stay out of "Dispatch
+  selected"/"Dispatch all". No migration, no API change.
+- **Fixed is an outcome, and nothing waits forever** (107) — `mark_issue_fixed`
+  (migration **278**, 107.1) moves a bug, chore or story to `done` — the status the
+  feature rollup already sets, so every consumer counts it — flips the `app_issues` row
+  it was promoted from to `fixed`, and completes the parent feature if this was its last
+  open child, mirroring `approve_run` (168), in one transaction; refuses features,
+  `merged`/`done`, `queued`/`running` and abandoned items, with `lib/mark-fixed.ts`
+  restating the rules client-side and a test that they cannot disagree. 107.2 is run
+  `f483ee01`: queued six days, never claimed, and the card read "An agent is reading the
+  repository" — `requeue_expired_claims` cannot see a run with no lease. `refreshState`
+  splits `working` from `waiting`/`stalled` on `claimed_at`, the stalled card offers
+  Cancel it against the existing `/api/v1/runs/{id}/cancel`, `lib/capability-gap.ts` and
+  `NoCapableWorker` (`UserX`, deliberately not `Hourglass`) render the eligibility
+  `blockedReason` US-35.5 had computed and thrown away, and a `QUEUE_AGING_HOURS = 24`
+  banner covers every kind — chosen over auto-cancel, which would turn a visibility bug
+  into a data-loss bug. 107.3 gives the four `AGENT_ROLES` one icon each in
+  `role-icon.tsx` (`iconForKind` resolves through `roleOfKind`, so a kind cannot
+  disagree with its role); the roster draws all four and greys the absent ones, `null`
+  `enabled_kinds` lights all four, and `ActionGlyph` wears the capability its run needs
+  — except `failed` re-dispatch, which keeps `RotateCcw` rather than guess.
+- **The Team page answers at a glance** (109) — 109.1 strips the row to what is
+  scanned: the module pill, token count, join date and output figures move to About and
+  Output (last 30 days) in the expand panel; the seat stays (two agents may share a
+  name); Remove — the one irreversible action beside Suspend — leaves the row for the
+  agent's settings page and a person's expand panel via one `RemoveMember`; the duplicate
+  runner-console door goes. 109.2 adds Spent, Lines of code and Human equivalent tiles
+  summed in the existing `agent_effort_daily` loop, the estimate from
+  `lib/human-equivalent.ts` (`HUMAN_LINES_PER_HOUR` 25, `REMOVED_LINE_WEIGHT` 0.5) with
+  "rough estimate from lines changed" on its face. That tile read 72,841 hours, and 109.3
+  found run `60af1e2a`: 7,999 files, 1,788,138 lines — a vendored tree, 98.3% of the
+  workspace's output, from a revoked worker. `compute_diff_metrics` now classifies
+  `vendored` first (`VENDORED_DIRS`/`VENDORED_FILES`/`VENDORED_SUFFIXES`, whole path
+  segments so `redistribute/` and `buildings.py` still count) and `lines_added`,
+  `lines_removed`, `files_changed` count authored files only, while `change_breakdown`
+  keeps them marked; `recompute_run_metrics` repairs `runs` and only the touched
+  `agent_effort_daily` keys, dry by default.
+- **An agent's projects are the ones you checked** (110) — the wizard asked the project
+  question twice, `workers.project_id` and `worker_capabilities`, written by two calls
+  that never read each other, with helper sentences that contradicted; the code sided
+  with the scope, so an agent with two projects checked never claimed the second's runs.
+  Migration **279** drops `workers.project_id`, its index and `set_worker_project`, and
+  recreates `create_worker` without `p_project`; `_scoped_project` and every branch
+  reading it leave `factory_mcp.py`, `worker_run_refusal` is the only claim gate, a shared
+  `_default_project` gives the ten no-claim tools the worker's sole grant, the pool
+  listings return `project_id`, and the retired `/mcp/<org-shortname>/<project-slug>`
+  URL (404 since 216) leaves all ten refusals. Read from prod first: 63 workers, 28
+  scoped, only one active (`d7b07e1d`) narrower than its grants; nothing narrows.
+- **The Add agent wizard asks in the right order** (111) — roles move to step 1 beside
+  the name, Agent Type to step 2 above the placement it constrains (`interactive` is
+  `poolOnly`, and two snap-backs existed to undo a contradiction created a page earlier),
+  step 3 becomes Projects. Interactive is first and the default *conditionally* — only
+  when a selectable pool exists, so Next is never dead on arrival. Both snap-backs stay,
+  with the reason recorded: a machine can still be picked and then a pool-only type.
+- **The Team roster is a table** (112) — 112.1 makes the roster nine columns on the
+  shared `ui/table.tsx`, `Worked` and `Done` right-aligned so agents compare, a person's
+  row blank where a person has no answer, `cellsFor(m)` feeding both the table and the
+  stacked below-`sm` layout US-68.6 introduced. 112.2 moves Recently done and Performance
+  to a **History** tab, renames the list **Activity** (it includes voluntary releases,
+  the opposite of done), puts both on `ui/table.tsx`, and tints the expanded row and
+  panel `bg-muted/50` because the manager reported the panel "blends with UI".
+
+**What Phases 103–112 recorded as not proven, and what is left to the manager.** Two
+things are owed at this close, not merely unproven: **migration 279 is applied to
+`build-mill-dev` but not to `Software-Factory`** — deliberately deferred to "the release
+that carries the code", which shipped on 2026-08-17 without it, so prod still has
+`workers.project_id`, `set_worker_project` and the five-argument `create_worker` (whose
+`p_project` default is the only reason the deployed code works); apply it with the next
+release. And **109.3's backfill has not been run** — `recompute_run_metrics` was never
+executed, so production still reports the +1.8M vendored lines and the 72,841-hour tile;
+AC6/AC7 stay unmet until someone runs it dry, then `--apply`. The dominant gap
+otherwise is the checkout these were built in: no `apps/web/.env.local`, no
+`apps/api/.env`, no `DATABASE_URL`, so almost nothing visual was rendered before it
+shipped. **103.1**'s `test_release_prep_reaper_sql.py` (10 tests) was not run, the AC1
+concurrency claim rests on `skip locked` untested, and the wiring is verified by reading;
+**103.2** restarted no real runner mid-prep, and `list_held_release_preps` is covered
+only in Full QA; **103.3**'s button, dialog copy and icon-only variant were never seen
+and no live agent had its next heartbeat refused; **103.4**'s derivation is proven but
+the card is not — AC1/AC2/AC4/AC5 as visible things, and AC6's cost reasoned not
+measured; **103.5**'s `test_release_freeze_sql.py` was not run, `dispatch_issue` raising
+the refusal is inferred from 235's structure, and `merge` is a known unfrozen gap.
+**104.1** replayed nothing — "numeric order yields the live schema" is argued from the
+ledger, and 27 disagreeing ledger rows are untouched by design; **104.2**'s suite was
+never run and `endpoints.json` (2026-08-15) lacks `GET /worker/release-prep/held`.
+**105.1** AC3 (a recurrence opens a new row) and the `23505` reopen were reasoned from
+the index, not reproduced; **105.2** promoted nothing from the list; **106.1** clicked
+nothing — AC1–AC5, AC7 reasoned. **107.1**: nothing clicked and `test_embed_ambiguity.py`
+could not run — AC1–AC3, AC7 to press, AC3 the only path writing a row the manager did
+not select; **107.2**'s cancel path was never executed (the 422 content-type fix is
+argued), `requeue_expired_claims` is unchanged, the badge is on two surfaces only, and
+run `9f41a332` is still queued and needs a decision; **107.3**: no icon has been seen,
+and `text-muted-foreground/30` is unchecked in either theme. **109.1**: no row seen, and
+AC5/AC6 are destructive paths never exercised; **109.2**: no tile seen and no total
+compared to the rows. **110.1**: the wizard was not rendered and both `*_sql.py` suites
+skipped (the four tests proving AC2). **111.1**: nobody has seen it, and the open
+question stands — Interactive-by-default is platform-billed and pool-only. **112.1**: no
+one has looked at it, AC8's screenshots do not exist, AC1–AC6 unverified, and nine
+columns on a narrow laptop is an open question. **112.2** was the exception — AC1, AC3's
+empty state and AC5 confirmed on screen in both themes — but AC2/AC4/AC6 were never seen
+populated.
+
+**Fixed in passing, and worth remembering.** 103.4 found the Workbench release card's
+`if (!mine.length) continue` fired before the in-flight check, so 2026.08.16.3 — carrying
+zero items — produced no card at all, and the status filter omitted `notes-ready`,
+`deploying` and `uat-deploy-failed`. 105.2 found the detail offering `PromoteDialog` on an
+ignored report `promote_app_issue` refuses, and left recorded that the RPC's guard does not
+list `fixed`. 107.2's `cancel-stalled-refresh.tsx` sets `Content-Type: application/json`
+because `apiFetch` adds the bearer but not the type and FastAPI answers 422 without it.
+110.1 found three `test_factory_mcp.py` tests with inline stub rows missing the new
+`project_id` key, fixed before commit, and confirmed the 40 database-less failures there
+are identical on `HEAD~1`.
+
 **Retired unbuilt — do not re-propose without a fresh ask** (2026-08-09 sweep): the
 `mcp_tool_calls` stall detector (us-69.1) and the `git clean -fd` workspace hygiene fix
 (us-69.2 — a shared project workspace still carries untracked sibling-story files between
