@@ -1130,8 +1130,10 @@ async def idle_reason(
     user: AuthUser = Depends(verify_token),
     settings: Settings = Depends(get_settings),
 ):
-    """US-27.9: why this agent is not working — one of `working`, `revoked`,
-    `paused`, `no-grants`, `queue-held`, `idle`.
+    """US-27.9: why this agent is not working. us-116.4: the answer is
+    `db.agent_status` — `state` (offline first, then the idle reason with
+    `paused` read as `stopped` and `idle` as `ready`), `reason` (the idle-reason
+    word), `detail`.
 
     "Waiting for work" must only ever mean there is no work. On 2026-07-26 it
     meant a revoked token, for fourteen minutes, on every surface at once."""
@@ -1139,7 +1141,7 @@ async def idle_reason(
     if not worker:
         raise HTTPException(status_code=404, detail="runner not found")
     await _require_manage_work(str(worker["org_id"]), user, settings)
-    return db.worker_idle_reason(settings, worker_id)
+    return db.agent_status(settings, worker_id)
 
 
 @router.post("/{worker_id}/policy-preview")

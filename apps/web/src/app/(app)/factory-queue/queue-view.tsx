@@ -26,7 +26,7 @@ import { RequeueButton } from "../workbench/requeue-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
 import { CancelRunDialog } from "@/components/cancel-run-dialog";
-import { IDLE_LABELS, idleTone, type IdleReason } from "../team/team-view";
+import { STATUS_LABELS, statusTextClass, type AgentStatus } from "@/lib/idle-reasons";
 import type { QueueGroup, QueueItem, QueueRunState } from "./data";
 import {
   rollupQueueRows,
@@ -41,8 +41,9 @@ import {
 type StuckAgent = {
   principalId: string;
   name: string;
-  reason: string;
-  detail?: string;
+  /** us-116.4: the agent's state — the same word the roster shows. */
+  state: string;
+  detail?: string | null;
 };
 
 function useStuckAgents(orgId: string): StuckAgent[] {
@@ -61,16 +62,19 @@ function useStuckAgents(orgId: string): StuckAgent[] {
         apiFetch(`/api/v1/agents/idle-reasons?org=${orgId}`).catch(() => null),
       ]);
       if (cancelled) return;
-      const reasons = (reasonsBody?.reasons ?? {}) as Record<string, IdleReason>;
+      const reasons = (reasonsBody?.reasons ?? {}) as Record<string, AgentStatus>;
       const out: StuckAgent[] = [];
       for (const w of workers ?? []) {
-        const idle = reasons[w.id as string];
-        if (!idle || idle.reason === "working" || idle.reason === "idle") continue;
+        const st = reasons[w.id as string];
+        // us-116.4: `state` is the one status; ready and working are the
+        // healthy pair, everything else (offline included) is worth a line.
+        const state = st?.state ?? st?.reason;
+        if (!state || state === "working" || state === "ready" || state === "idle") continue;
         out.push({
           principalId: (w.principal_id as string | null) ?? (w.id as string),
           name: (w.name as string) || "an agent",
-          reason: idle.reason,
-          detail: idle.detail,
+          state,
+          detail: st?.detail,
         });
       }
       setStuck(out);
@@ -102,8 +106,8 @@ function StuckAgentsBanner({ agents }: { agents: StuckAgent[] }) {
               {a.name}
             </Link>
             {" — "}
-            <span className={idleTone(a.reason)}>
-              {IDLE_LABELS[a.reason] ?? a.reason}
+            <span className={statusTextClass(a.state)}>
+              {STATUS_LABELS[a.state] ?? a.state}
             </span>
             {a.detail && <span className="text-amber-700/80 dark:text-amber-400/80"> · {a.detail}</span>}
           </li>

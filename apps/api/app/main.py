@@ -142,6 +142,20 @@ async def lifespan(app: FastAPI):
                         "Requeued %d expired claim(s) from the sweep", swept
                     )
                 await reconcile.reconcile_pushed_expired_claims(get_settings())
+                # us-116.4: the presence reaper migration 099 promised. A
+                # session whose heartbeat is older than the window is closed
+                # so the row agrees with the `live_runner_sessions` view and
+                # realtime subscribers see it — a hard-killed API no longer
+                # leaves every agent reading online for good.
+                stale = await asyncio.to_thread(
+                    db.close_stale_runner_sessions, get_settings()
+                )
+                if stale:
+                    logger.warning(
+                        "Closed %d runner session(s) with no heartbeat in %ds",
+                        stale,
+                        db.PRESENCE_WINDOW_SECONDS,
+                    )
                 # US-103.1: release prep's own lease sweep, same loop, same
                 # cadence discipline. Its lease is two hours, so this fires
                 # long after the agent died — us-103.3's Stop is what covers

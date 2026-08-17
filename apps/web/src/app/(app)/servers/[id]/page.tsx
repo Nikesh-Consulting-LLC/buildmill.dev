@@ -102,11 +102,12 @@ export default async function MachinePage({
     const connected = new Set<string>();
     const runningNow = new Map<string, string>();
     if (workerIds.length) {
+      // us-116.4: presence is the `live_runner_sessions` view — connected AND
+      // heartbeated inside the window — the one predicate every surface reads.
       const { data: sessions } = await supabase
-        .from("runner_sessions")
+        .from("live_runner_sessions")
         .select("worker_id")
-        .in("worker_id", workerIds)
-        .is("disconnected_at", null);
+        .in("worker_id", workerIds);
       for (const s of sessions ?? []) connected.add(s.worker_id as string);
 
       const { data: runs } = await supabase

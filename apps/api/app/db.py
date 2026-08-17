@@ -1882,18 +1882,79 @@ def open_runner_session(
     return str(row["id"])
 
 
+# us-116.4: how long a session may go without a heartbeat before it is not
+# live. Three missed beats (the runner beats every 30 s), and the same window
+# claims already use for a stale heartbeat (`HEARTBEAT_STALE_SECONDS`). The
+# `live_runner_sessions` view (migration 281) is the same number in SQL —
+# `test_presence.py` pins the two together.
+PRESENCE_WINDOW_SECONDS = 90
+
+
 def touch_runner_session(settings: Settings, session_id: str) -> None:
-    """Heartbeat a live session (last_seen_at = now); no-op once disconnected."""
+    """Heartbeat a live session (last_seen_at = now).
+
+    us-116.4: a beat REVIVES a row the sweep closed (`disconnected_at = null`).
+    The runner only beats while its socket is up, so a beat is proof of life;
+    without this, one delayed beat past the window would leave a live agent
+    reading Offline until it happened to reconnect."""
     with _connect(settings) as conn:
         conn.execute(
             """
             update public.runner_sessions
-            set last_seen_at = now()
-            where id = %s and disconnected_at is null
+            set last_seen_at = now(), disconnected_at = null
+            where id = %s
             """,
             (session_id,),
         )
         conn.commit()
+
+
+def close_stale_runner_sessions(
+    settings: Settings, window_seconds: int = PRESENCE_WINDOW_SECONDS
+) -> int:
+    """us-116.4: the reaper migration 099 promised. Rows whose heartbeat is
+    older than the window get `disconnected_at = now()`, so realtime
+    subscribers on the table see the change and the row agrees with the
+    `live_runner_sessions` view. Runs on the API's liveness loop."""
+    with _connect(settings) as conn:
+        rows = conn.execute(
+            """
+            update public.runner_sessions
+            set disconnected_at = now()
+            where disconnected_at is null
+              and last_seen_at < now() - make_interval(secs => %s)
+            returning id
+            """,
+            (window_seconds,),
+        ).fetchall()
+        conn.commit()
+    return len(rows)
+
+
+def worker_is_live(settings: Settings, worker_id: str) -> bool:
+    """us-116.4: presence, by the ONE predicate — a session connected and
+    heartbeated inside the window (the `live_runner_sessions` view)."""
+    if not _valid_uuid(worker_id):
+        return False
+    with _connect(settings) as conn:
+        row = conn.execute(
+            "select 1 from public.live_runner_sessions where worker_id = %s limit 1",
+            (worker_id,),
+        ).fetchone()
+    return row is not None
+
+
+def worker_last_seen(settings: Settings, worker_id: str) -> Any:
+    """The most recent heartbeat this worker's sessions recorded, live or not —
+    the "last seen 4 min ago" beside Offline."""
+    if not _valid_uuid(worker_id):
+        return None
+    with _connect(settings) as conn:
+        row = conn.execute(
+            "select max(last_seen_at) as seen from public.runner_sessions where worker_id = %s",
+            (worker_id,),
+        ).fetchone()
+    return (row or {}).get("seen")
 
 
 def close_runner_session(settings: Settings, session_id: str) -> None:
@@ -2398,10 +2459,10 @@ def worker_session_declares_auth(settings: Settings, worker_id: str) -> bool:
         row = conn.execute(
             """
             select 1
-            from public.runner_sessions rs,
+            from public.live_runner_sessions rs,
                  jsonb_array_elements(rs.module_settings) m,
                  jsonb_array_elements(m->'settings') k
-            where rs.worker_id = %s and rs.disconnected_at is null
+            where rs.worker_id = %s
               and m->>'module' = 'claude' and k->>'name' = 'auth'
             limit 1
             """,
@@ -4965,6 +5026,45 @@ def worker_idle_reason(settings: Settings, worker_id: str) -> dict[str, Any]:
             "reason": "idle",
             "detail": f"{len(offerable)} item(s) claimable — it should pick one up",
         }
+
+
+# us-116.4: the one vocabulary every surface renders, in precedence order.
+# `offline` sits first because nothing below it is actionable while the agent is
+# not there; `stopped` is what the manager's vocabulary calls `paused` (a state
+# the manager put it in and only the manager lifts); `ready` is today's `idle`.
+AGENT_STATES: tuple[str, ...] = (
+    "offline", "revoked", "working", "stopped", "no-roles", "no-model",
+    "no-grants", "queue-held", "ready",
+)
+_STATE_OF_REASON = {"paused": "stopped", "idle": "ready"}
+
+
+def agent_status(settings: Settings, worker_id: str) -> dict[str, Any]:
+    """us-116.4: THE status of one agent — presence in front of
+    `worker_idle_reason`, one answer for the roster, the runner page, the
+    machine page, the superadmin card and the wizard.
+
+    Returns `{state, reason, detail, last_seen_at}`: `state` is one of
+    `AGENT_STATES`; `reason` is `worker_idle_reason`'s word (kept so existing
+    readers of the batch endpoints keep working); `detail` is the sentence
+    under it. Presence is `worker_is_live` — the `live_runner_sessions` view,
+    never a second predicate."""
+    if not worker_is_live(settings, worker_id):
+        seen = worker_last_seen(settings, worker_id)
+        return {
+            "state": "offline",
+            "reason": "offline",
+            "detail": "no live control socket — the agent's process is not connected",
+            "last_seen_at": seen.isoformat() if hasattr(seen, "isoformat") else seen,
+        }
+    reason = worker_idle_reason(settings, worker_id)
+    word = str(reason.get("reason") or "unknown")
+    return {
+        "state": _STATE_OF_REASON.get(word, word),
+        "reason": word,
+        "detail": reason.get("detail"),
+        "last_seen_at": None,
+    }
 
 
 def list_factory_queue(

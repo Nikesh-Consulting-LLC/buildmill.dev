@@ -33,6 +33,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toastError, toastSuccess } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import {
+  STATUS_LABELS,
+  stateFor,
+  statusBadgeClass,
+  type AgentStatus,
+} from "@/lib/idle-reasons";
 import type { AgentServerRow, SlotRow } from "../agent-host";
 import { probeAge } from "../agent-host";
 
@@ -527,9 +533,7 @@ function AgentsTab({
   // US-27.9: why each agent is idle. Presence is not permission — a connected
   // socket proves the process is alive, not that it may claim. On 2026-07-26
   // two revoked agents read as "waiting for work" here for fourteen minutes.
-  const [reasons, setReasons] = useState<
-    Record<string, { reason: string; detail: string }>
-  >({});
+  const [reasons, setReasons] = useState<Record<string, AgentStatus>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -640,21 +644,28 @@ function AgentsTab({
                         {owners[slot.id]}
                       </Badge>
                     )}
-                    {slot.paused ? (
-                      <Badge className="bg-muted text-muted-foreground">Paused</Badge>
-                    ) : (
-                      <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                        Enabled
-                      </Badge>
-                    )}
-                    {slot.connected ? (
-                      <Badge variant="outline">Connected</Badge>
-                    ) : (
-                      <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
-                        Not connected
-                      </Badge>
-                    )}
-                    {/* desired vs observed shown separately, never merged */}
+                    {/* us-116.4: THE state — the same word the Team roster
+                        shows for this agent, from the same status. Presence
+                        is the live view (server-rendered), the rest is the
+                        status poll; before it answers, the state falls back
+                        to what this page already knows (offline / stopped /
+                        ready). Paused/Enabled and Connected/Not connected
+                        collapsed into it. */}
+                    {(() => {
+                      const state = stateFor(
+                        slot.connected,
+                        reasons[slot.id] ??
+                          (slot.paused ? { state: "stopped" } : null),
+                      );
+                      return (
+                        <Badge className={statusBadgeClass(state)} data-testid="agent-state">
+                          {STATUS_LABELS[state]}
+                        </Badge>
+                      );
+                    })()}
+                    {/* Machine-only facts stay as secondary badges — they are
+                        WHY, not the state. desired vs observed shown
+                        separately, never merged. */}
                     {slot.service_state && slot.service_state !== "active" && (
                       <Badge className="bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300">
                         service {slot.service_state}
@@ -666,14 +677,6 @@ function AgentsTab({
                     {slot.auto_repair_needs_attention && (
                       <Badge className="bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300">
                         Auto-repair gave up
-                      </Badge>
-                    )}
-                    {/* US-27.9: a revoked token is an alarm, not a state —
-                        the machine is running and useless, and nothing else
-                        about it looks wrong. */}
-                    {reasons[slot.id]?.reason === "revoked" && (
-                      <Badge className="bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300">
-                        Token revoked
                       </Badge>
                     )}
                   </div>
@@ -691,8 +694,8 @@ function AgentsTab({
                       : reasons[slot.id]
                         ? reasons[slot.id].detail
                         : slot.paused
-                          ? "Idle — paused"
-                          : "Idle"}
+                          ? "Stopped — claiming nothing until started"
+                          : "Ready"}
                     {slot.principal_id && (
                       <>
                         {" · "}
