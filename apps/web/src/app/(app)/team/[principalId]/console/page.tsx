@@ -135,6 +135,7 @@ export default async function AgentConsolePage({
               wants this, not a transcript of what it did last week. */}
           <StartSession
             workerId={worker.id as string}
+            principalId={principalId}
             projects={(projects ?? []) as { id: string; name: string }[]}
             idleTimeoutMinutes={IDLE_TIMEOUT_MINUTES}
           />

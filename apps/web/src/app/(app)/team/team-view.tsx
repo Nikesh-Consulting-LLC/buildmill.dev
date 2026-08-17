@@ -145,18 +145,11 @@ export type MachineOption = {
 export type IdleReason = { reason: string; detail?: string };
 
 /** US-35.1: "Idle" alone was the whole problem — presence is not permission.
- *  `working` and plain `idle` need no explanation; the rest are conditions a
- *  manager has to act on, so they read as such. Exported for the member page
- *  (US-53.3), which absorbed the drawer that used to render them here. */
-export const IDLE_LABELS: Record<string, string> = {
-  revoked: "Token revoked",
-  paused: "Paused",
-  "no-grants": "No project grants",
-  "queue-held": "Queue held",
-  idle: "Idle",
-  working: "Working",
-  unknown: "Unknown",
-};
+ *  us-116.2: the vocabulary and its tone live in `@/lib/idle-reasons` (a pure
+ *  module the web tests can pin); re-exported here for the member page
+ *  (US-53.3), which absorbed the drawer that used to render them. */
+import { IDLE_LABELS, idleTone } from "@/lib/idle-reasons";
+export { IDLE_LABELS, idleTone };
 
 /** US-35.3: how long the current claim has been held. Ticks client-side from a
  *  server timestamp — a run that started 40 minutes ago should not read "just
@@ -170,13 +163,6 @@ function elapsedSince(iso: string | null | undefined, now: number): string | nul
   if (mins < 60) return `${mins}m`;
   const hours = Math.floor(mins / 60);
   return `${hours}h ${mins % 60}m`;
-}
-
-export function idleTone(reason: string) {
-  if (reason === "working") return "text-emerald-600 dark:text-emerald-400";
-  if (reason === "idle") return "text-muted-foreground";
-  // Everything else is a condition that stops work happening.
-  return "text-amber-600 dark:text-amber-400";
 }
 
 export function formatWhen(iso: string) {

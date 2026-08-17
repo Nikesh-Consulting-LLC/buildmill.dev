@@ -4799,15 +4799,27 @@ def worker_idle_reason(settings: Settings, worker_id: str) -> dict[str, Any]:
     every three seconds. Every surface agreed with "waiting for work" and every
     surface was wrong.
 
-    Presence is not permission. Returns one of:
+    Presence is not permission. Returns one of, in this precedence:
 
-      working      — it holds a run right now
       revoked      — its token is dead; the machine is running and useless
+      working      — it holds a run right now
       paused       — deliberately, by an admin (US-26.5)
+      no-roles     — us-116.2: every role unchecked (`enabled_kinds = []`)
+      no-model     — us-116.2: no model resolves for any kind it claims
       no-grants    — its capability grants match nothing that is queued
       queue-held   — there is work, but every item of it is held or paused
       idle         — the healthy one: there is genuinely nothing to do
+
+    us-116.2: the two configuration reasons sit ABOVE the queue tier because a
+    misconfigured agent is not idle, it is stuck — an agent with no roles, no
+    model and no grants used to render identically to a working one. `no-model`
+    is `model_resolution.resolve_session` (us-116.1) asked early — one
+    definition of "has a model" — and an agent that resolves a model for some
+    claimed roles but not others is NOT flagged: it can work, and a warning
+    about a role it is not being asked to perform is noise. `enabled_kinds`
+    NULL is not `no-roles`: us-53.4 makes a never-saved agent unrestricted.
     """
+    from . import model_resolution  # local: model_resolution imports db
     if not _valid_uuid(worker_id):
         return {"reason": "unknown", "detail": "no such agent"}
     with _connect(settings) as conn:
@@ -4834,16 +4846,44 @@ def worker_idle_reason(settings: Settings, worker_id: str) -> dict[str, Any]:
         if held:
             return {"reason": "working", "detail": "holding a run"}
 
-        paused = conn.execute(
-            "select paused from public.runner_config where worker_id = %s",
+        config_row = conn.execute(
+            "select paused, enabled_kinds, model_overrides, model_routes, run_routes "
+            "from public.runner_config where worker_id = %s",
             (worker_id,),
         ).fetchone()
-        if paused and paused["paused"]:
+        if config_row and config_row["paused"]:
             return {
                 "reason": "paused",
                 "detail": "paused by an admin — connected, but claiming nothing",
             }
 
+    # us-116.2: configuration before queue state. Outside the connection above
+    # so the resolver's own reads (presets, org default) open their own.
+    config = dict(config_row) if config_row else {}
+    kinds = config.get("enabled_kinds")
+    if isinstance(kinds, list) and not kinds:
+        return {
+            "reason": "no-roles",
+            "detail": (
+                "every role is unchecked, so this agent claims nothing — check "
+                "at least one under What this agent does on its settings page"
+            ),
+        }
+    picked = model_resolution.resolve_session(
+        model_resolution.load_inputs(settings, str(worker["org_id"]), config=config)
+    )
+    if not picked.model:
+        roles = ", ".join(model_resolution.roles_of(picked.tried)) or "no role"
+        return {
+            "reason": "no-model",
+            "detail": (
+                f"no model resolves for any role this agent claims ({roles}) — "
+                "set one under Model per role on its settings page, or give the "
+                "org's default preset a model"
+            ),
+        }
+
+    with _connect(settings) as conn:
         # Everything queued in the org, before this worker's own filters.
         queued = conn.execute(
             """

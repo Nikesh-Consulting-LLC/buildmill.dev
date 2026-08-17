@@ -17,6 +17,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 
 import { apiCall } from "@/lib/api";
+import { idleFixHref } from "@/lib/idle-reasons";
 import { SpendSummary } from "@/components/spend-summary";
 
 import { AgentTabs } from "../agent-tabs";
@@ -72,29 +73,22 @@ function fixForIncident(
   return null;
 }
 
-/** The same question for the idle-reason readout, whose reasons are a fixed set. */
+/** The same question for the idle-reason readout, whose reasons are a fixed
+ *  set. us-116.2: the shared map (`idleFixHref`) carries the settings-page
+ *  anchors for the configuration reasons; `paused` stays here because its fix
+ *  is the machine, which only this page knows. */
 function fixForIdle(
   principalId: string,
   reason: string,
   slot: AgentSlot | null,
 ): Fix | null {
-  switch (reason) {
-    case "no-grants":
-      // US-35.1: grants live on the agent's own profile now, not on a
-      // worker page — that route is a redirect.
-      return { href: `/team?principal=${principalId}`, label: "Capability grants" };
-    case "paused":
-      // US-35.2: the machine, not the retired agent-server page.
-      return slot?.serverId
-        ? { href: `/servers/${slot.serverId}`, label: "Agent controls" }
-        : null;
-    case "revoked":
-      return { href: "/team", label: "Mint a new token" };
-    case "queue-held":
-      return { href: "/issues", label: "The work queue" };
-    default:
-      return null;
+  if (reason === "paused") {
+    // US-35.2: the machine, not the retired agent-server page.
+    return slot?.serverId
+      ? { href: `/servers/${slot.serverId}`, label: "Agent controls" }
+      : null;
   }
+  return idleFixHref(principalId, reason);
 }
 
 export default function AgentRunnerPage() {

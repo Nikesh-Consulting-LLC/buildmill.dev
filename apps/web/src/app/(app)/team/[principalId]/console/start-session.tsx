@@ -6,9 +6,20 @@
  * The CLI window can only ever show a conversation that already exists — a run
  * the agent was dispatched. This is the other way in: pick a project, and the
  * agent opens a session against its checkout with nothing dispatched at all.
+ *
+ * us-116.2: the button stops being a trap. It used to be enabled whenever a
+ * project was picked, and every configuration problem was discovered after the
+ * click, as an amber sentence under it. The reason is already computed
+ * server-side (`worker_idle_reason`), so a configuration that cannot open a
+ * session disables the button with the same sentence up front and a link to
+ * the fix. The post-click handling stays exactly as it was — it still has to
+ * catch the races the API refuses (offline, already holding a session, a
+ * gateway fault); it just stops being the first time the manager learns about
+ * a setting.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { MessageSquarePlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -20,16 +31,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { apiCall } from "@/lib/api";
+import { idleFixHref, SESSION_BLOCKING_REASONS } from "@/lib/idle-reasons";
 import { useRouter } from "@/lib/router-with-progress";
 
 type Project = { id: string; name: string };
+type IdleReason = { reason: string; detail?: string };
 
 export function StartSession({
   workerId,
+  principalId,
   projects,
   idleTimeoutMinutes,
 }: {
   workerId: string;
+  principalId: string;
   projects: Project[];
   idleTimeoutMinutes: number;
 }) {
@@ -37,6 +52,32 @@ export function StartSession({
   const [projectId, setProjectId] = useState(projects[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // us-116.2: the same reason the roster's State column shows, asked here so
+  // the button can refuse before the click. Null until it answers — the
+  // button is usable meanwhile, exactly as before.
+  const [idle, setIdle] = useState<IdleReason | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const res = await apiCall(`/api/v1/runner/${workerId}/idle-reason`);
+        if (!cancelled) setIdle(res ?? null);
+      } catch {
+        // an explanation that cannot be fetched is not worth a broken page
+      }
+    }
+    void load();
+    const timer = setInterval(load, 20000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [workerId]);
+
+  const blocked =
+    idle && SESSION_BLOCKING_REASONS.has(idle.reason) ? idle : null;
+  const fix = blocked ? idleFixHref(principalId, blocked.reason) : null;
 
   async function start() {
     if (!projectId) return;
@@ -92,11 +133,32 @@ export function StartSession({
             ))}
           </SelectContent>
         </Select>
-        <Button size="sm" onClick={start} disabled={busy || !projectId}>
+        <Button
+          size="sm"
+          onClick={start}
+          disabled={busy || !projectId || blocked !== null}
+          title={blocked?.detail ?? undefined}
+        >
           <MessageSquarePlus className="size-3.5" />
           {busy ? "Opening…" : "Open session"}
         </Button>
       </div>
+      {blocked && (
+        <p
+          className="text-xs text-amber-700 dark:text-amber-400"
+          data-testid="session-blocked"
+        >
+          {blocked.detail ?? "This agent cannot open a session yet."}
+          {fix && (
+            <>
+              {" — "}
+              <Link href={fix.href} className="underline underline-offset-4">
+                {fix.label}
+              </Link>
+            </>
+          )}
+        </p>
+      )}
       {error && (
         <p className="text-xs text-amber-700 dark:text-amber-400">{error}</p>
       )}
