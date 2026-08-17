@@ -1,0 +1,42 @@
+name: Ops — recompute run metrics
+
+# us-109.3's backfill, run where the production credentials already live.
+#
+# `apps/api/scripts/recompute_run_metrics.py` re-counts every succeeded run's
+# lines/files with vendored paths excluded and repairs `agent_effort_daily`
+# for the (org, worker, day) keys that moved. It needs DATABASE_URL, which
+# exists on the VM (`/opt/buildmill.dev/apps/api/.env`) and nowhere else on
+# purpose — so this is the sanctioned way to run it: manual trigger, dry by
+# default, and the report lands in the job log where it can be read before
+# anyone re-runs it with `apply`.
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Write the changes (unchecked = report only)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  recompute:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.GCP_VM_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.GCP_VM_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Recompute (${{ inputs.apply && 'APPLY' || 'dry run' }})
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }}" '
+            set -e
+            cd /opt/buildmill.dev/apps/api
+            # Settings read apps/api/.env itself (pydantic env_file) — nothing to source.
+            .venv/bin/python -m scripts.recompute_run_metrics ${{ inputs.apply && '--apply' || '' }}
+          '
