@@ -1291,19 +1291,14 @@ function DoneStep({
   // the tenant-scoped endpoint (US-57.4) — the host-scoped one 403s a
   // tenant, since it authorizes on the platform org, not the slot's own.
   async function enable() {
-    if (!slot || (placement === "machine" && !machine)) return;
+    if (!slot || !created.principalId) return;
     setEnabling(true);
     setEnableError(null);
     try {
-      const path =
-        placement === "pool"
-          ? `/api/v1/agent-pools/slots/${slot.id}`
-          : `/api/v1/agent-servers/${machine!.hostId}/slots/${slot.id}`;
-      await apiCall(path, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ desired_state: "enabled" }),
-      });
+      // us-116.5: Start means start — the agent's own endpoint (authorized on
+      // the slot's org, so a pool tenant can use it), which also restarts the
+      // service if the agent is not live.
+      await apiCall(`/api/v1/agents/${created.principalId}/start`, { method: "POST" });
       setSlot({ ...slot, desired_state: "enabled" });
       onChanged();
     } catch (e) {

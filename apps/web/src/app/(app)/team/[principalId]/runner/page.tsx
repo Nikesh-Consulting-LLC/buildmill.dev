@@ -17,6 +17,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 
 import { apiCall } from "@/lib/api";
+import { toastError, toastSuccess } from "@/components/ui/toast";
 import {
   STATUS_LABELS,
   idleFixHref,
@@ -144,29 +145,44 @@ export default function AgentRunnerPage() {
             · slot {slot.slotIndex}
           </span>
           <span className="ml-auto flex gap-2">
+            {/* us-116.5: Start means start — enable, and restart the service
+                if the agent is not live — and Stop is today's pause. Both are
+                the agent's own endpoints, authorized on the slot's org (so a
+                tenant on a platform pool can use them), and every refusal is a
+                toast: these used to `catch {}` and look like nothing happened. */}
             <button
               type="button"
               disabled={fleetBusy}
+              data-testid={slot.paused ? "agent-start" : "agent-stop"}
               onClick={async () => {
                 setFleetBusy(true);
+                const action = slot.paused ? "start" : "stop";
                 try {
-                  await apiCall(`/api/v1/agent-servers/${slot.hostId}/slots/${slot.id}`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      desired_state: slot.paused ? "enabled" : "paused",
-                    }),
+                  const res = await apiCall(`/api/v1/agents/${principalId}/${action}`, {
+                    method: "POST",
                   });
+                  toastSuccess(
+                    action === "start"
+                      ? res?.restarted
+                        ? "Enabled — restarting its service"
+                        : "Started"
+                      : res?.finishing
+                        ? `Stopped — finishing ${res.finishing} first`
+                        : "Stopped",
+                  );
                   await reload();
-                } catch {
-                  /* the console keeps rendering; the fleet page reports why */
+                } catch (e) {
+                  toastError(
+                    action === "start" ? "Could not start" : "Could not stop",
+                    (e as Error).message,
+                  );
                 } finally {
                   setFleetBusy(false);
                 }
               }}
               className="rounded-md border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50"
             >
-              {slot.paused ? "Enable" : "Pause"}
+              {slot.paused ? "Start" : "Stop"}
             </button>
             <button
               type="button"
@@ -178,8 +194,9 @@ export default function AgentRunnerPage() {
                     `/api/v1/agent-servers/${slot.hostId}/slots/${slot.id}/restart`,
                     { method: "POST" }
                   );
-                } catch {
-                  /* ditto */
+                  toastSuccess("Restart queued");
+                } catch (e) {
+                  toastError("Could not restart", (e as Error).message);
                 } finally {
                   setFleetBusy(false);
                 }

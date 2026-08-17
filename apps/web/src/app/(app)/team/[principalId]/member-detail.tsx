@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Bot, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { confirmDialog } from "@/components/ui/confirm-dialog";
 import { ROLE_LABELS } from "@/lib/permissions";
 import { money } from "@/lib/budget";
 import { compactTokens, formatWorkSeconds } from "@/lib/work-seconds";
@@ -37,6 +38,7 @@ export function MemberDetail({
   effortWindowDays,
   canManage,
   onRemoved,
+  onSuspendToggled,
 }: {
   orgId: string;
   member: MemberRow;
@@ -63,6 +65,9 @@ export function MemberDetail({
    *  on its settings page instead — this is the only home a person has. */
   canManage?: boolean;
   onRemoved?: () => void;
+  /** us-116.5: flips the agent's membership between active and suspended —
+   *  the caller owns the write (the roster's `mutate`). Absent = no control. */
+  onSuspendToggled?: () => Promise<void> | void;
 }) {
   const isAgent = member.principals?.kind === "agent";
   const [caps, setCaps] = useState<{ project_id: string }[] | null>(null);
@@ -211,6 +216,29 @@ export function MemberDetail({
         </section>
       )}
 
+      {/* us-116.5: an agent's Suspend left the roster row — there it wore the
+          same ▶/⏸ as a pause and REVOKED the token (migration 089's cascade;
+          it killed the Sandy fleet on 2026-08-09). It lives here, worded as
+          what it does, behind a confirm. Reactivate restores exactly the
+          tokens suspension revoked (us-55.2). */}
+      {isAgent && canManage && onSuspendToggled && (
+        <section className="grid gap-2 border-t pt-4">
+          <h3 className="text-sm font-semibold">
+            {member.status === "suspended" ? "Reactivate this agent" : "Suspend this agent"}
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            {member.status === "suspended"
+              ? "Restores the worker token suspension revoked; the machine's service reconnects on its own."
+              : "Suspend revokes this agent's worker token — its service keeps running and can claim nothing. To pause work without revoking anything, use Stop on the roster instead."}
+          </p>
+          <SuspendAgentButton
+            suspended={member.status === "suspended"}
+            name={principalName(member)}
+            onConfirmed={onSuspendToggled}
+          />
+        </section>
+      )}
+
       {/* us-109.1: a person has no settings page, so this is where their
           Remove lives now that it is off the roster row. An agent's is on
           `/team/{id}/settings` — deliberately not repeated here, so there is
@@ -233,5 +261,45 @@ export function MemberDetail({
         </section>
       )}
     </div>
+  );
+}
+
+
+/** us-116.5: the confirm that says what suspending an agent does. */
+function SuspendAgentButton({
+  suspended,
+  name,
+  onConfirmed,
+}: {
+  suspended: boolean;
+  name: string;
+  onConfirmed: () => Promise<void> | void;
+}) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      data-testid={suspended ? "agent-reactivate" : "agent-suspend"}
+      className="w-fit rounded-md border px-2.5 py-1 text-xs hover:bg-muted disabled:opacity-50"
+      onClick={async () => {
+        const ok = await confirmDialog({
+          title: suspended ? `Reactivate ${name}?` : `Suspend ${name}?`,
+          description: suspended
+            ? "Its worker token is restored and the machine's service reconnects on its own."
+            : `This revokes ${name}'s worker token. Its service keeps running and can claim nothing until you reactivate it. To pause work without revoking anything, use Stop on the roster instead.`,
+          confirmLabel: suspended ? "Reactivate" : "Suspend — revoke its token",
+        });
+        if (!ok) return;
+        setBusy(true);
+        try {
+          await onConfirmed();
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {suspended ? "Reactivate" : "Suspend"}
+    </button>
   );
 }

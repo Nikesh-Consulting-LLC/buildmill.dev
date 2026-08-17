@@ -19,7 +19,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .. import db
+from .. import agent_provision, db
 from ..auth import AuthUser, verify_token
 from ..config import Settings, get_settings
 from ..supabase import RpcError, postgrest_get, rpc
@@ -145,4 +145,143 @@ async def rename_agent(
         "worker_id": str(agent["worker_id"]) if agent.get("worker_id") else None,
         "slot_index": agent.get("slot_index"),
         "service_name": agent.get("service_name"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# us-116.5: Start means start.
+#
+# Three buttons used to be called start and none of them started: the roster's
+# ▶ on an agent row was membership Reactivate (its ⏸ Suspend REVOKED the
+# token); Enable flipped `runner_config.paused` and never touched a dead
+# service; Restart was authorized on the host's org, so a tenant whose agent
+# sits on a platform pool got a 404 the runner page swallowed. These two are the
+# agent's own — authorized on the SLOT's org, exactly as the PATCH is and for
+# the same reason its docstring gives — and Start does everything the word
+# implies.
+# ---------------------------------------------------------------------------
+
+
+async def _require_manage_org(org_id: str, user: AuthUser, settings: Settings) -> None:
+    try:
+        ok = await rpc(
+            settings, user.token, "has_org_capability",
+            {"p_org": org_id, "p_capability": "manage_org"},
+        )
+    except RpcError:
+        ok = False
+    if not ok:
+        raise HTTPException(status_code=403, detail="Only an owner can start or stop an agent")
+
+
+def _agent_slot_or_409(settings: Settings, principal_id: str) -> dict[str, Any]:
+    slot = agent_provision.slot_for_principal(settings, principal_id)
+    if not slot or not slot.get("worker_id"):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This agent was installed outside Build Mill, so there are no "
+                "start/stop controls for it here — its settings still apply."
+            ),
+        )
+    return slot
+
+
+@router.post("/{principal_id}/start")
+async def start_agent(
+    principal_id: str,
+    user: AuthUser = Depends(verify_token),
+    settings: Settings = Depends(get_settings),
+):
+    """Leave the agent running and ready, and say what it took.
+
+    1. `runner_config.paused = false`, `agent_slots.desired_state = enabled`,
+       push `config.update` — today's Enable.
+    2. If the agent is live (a heartbeat inside the window, us-116.4) — done:
+       `{enabled: true, restarted: null}`.
+    3. If it is not live, or the last probe found its unit anything but
+       `active` — queue the existing restart job for the slot (drain, restart
+       the unit, restore the desired state — which step 1 just made
+       `enabled`): `{enabled: true, restarted: <job_id>}`.
+
+    Refusals are sentences: a job already running on the host (409, naming
+    it), a revoked token (409 — the repair is Re-issue, a different button,
+    and the manager should be told which).
+    """
+    slot = _agent_slot_or_409(settings, principal_id)
+    await _require_manage_org(str(slot["org_id"]), user, settings)
+    worker_id = str(slot["worker_id"])
+
+    worker = db.get_worker(settings, worker_id)
+    if not worker or worker.get("status") != "active":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This agent's worker token has been revoked — starting it would "
+                "run a service that can claim nothing. Re-issue its token from the "
+                "machine page first."
+            ),
+        )
+
+    await asyncio.to_thread(agent_provision.set_paused, settings, worker_id, False)
+    await asyncio.to_thread(
+        agent_provision.update_slot, settings, str(slot["id"]), {"desired_state": "enabled"}
+    )
+    await agent_provision.push_config(settings, worker_id)
+
+    live = await asyncio.to_thread(db.worker_is_live, settings, worker_id)
+    unit = str(slot.get("service_state") or "unknown")
+    restarted: str | None = None
+    if not live or unit not in ("active", "unknown"):
+        try:
+            job = await asyncio.to_thread(
+                agent_provision.create_job,
+                settings,
+                org_id=str(slot["host_org_id"]),
+                agent_server_id=str(slot["agent_server_id"]),
+                kind="restart",
+                slot_id=str(slot["id"]),
+                by=user.id,
+                by_email=user.email,
+            )
+        except agent_provision.JobActive as e:
+            raise HTTPException(
+                status_code=409,
+                detail=f"{e} The agent is enabled; start it again once the machine is free.",
+            )
+        agent_provision.launch(
+            settings,
+            {
+                "job_id": str(job["id"]),
+                "agent_server_id": str(slot["agent_server_id"]),
+                "kind": "restart",
+                "slot_id": str(slot["id"]),
+            },
+        )
+        restarted = str(job["id"])
+    return {"enabled": True, "restarted": restarted, "live": live, "service_state": unit}
+
+
+@router.post("/{principal_id}/stop")
+async def stop_agent(
+    principal_id: str,
+    user: AuthUser = Depends(verify_token),
+    settings: Settings = Depends(get_settings),
+):
+    """Today's Pause, unchanged in meaning: the service keeps running, the
+    socket stays up, the agent claims nothing, a run it holds finishes. It
+    reads **Stopped** (us-116.4). Deliberately not `systemctl stop`: a stopped
+    process cannot tell you it is stopped."""
+    slot = _agent_slot_or_409(settings, principal_id)
+    await _require_manage_org(str(slot["org_id"]), user, settings)
+    worker_id = str(slot["worker_id"])
+    await asyncio.to_thread(agent_provision.set_paused, settings, worker_id, True)
+    await asyncio.to_thread(
+        agent_provision.update_slot, settings, str(slot["id"]), {"desired_state": "paused"}
+    )
+    await agent_provision.push_config(settings, worker_id)
+    busy = await asyncio.to_thread(agent_provision.worker_is_busy, settings, worker_id)
+    return {
+        "enabled": False,
+        "finishing": (busy or {}).get("title") or ((busy or {}).get("id") and str(busy["id"])) if busy else None,
     }

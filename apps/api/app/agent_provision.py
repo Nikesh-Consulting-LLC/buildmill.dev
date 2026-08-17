@@ -50,6 +50,7 @@ import paramiko
 import psycopg
 
 from . import db, deploy, ssh
+from .db import _valid_uuid
 from .config import Settings
 from .pool import pool_for
 
@@ -2185,6 +2186,26 @@ def _get_slot(settings: Settings, slot_id: str) -> dict[str, Any] | None:
     with _connect(settings) as conn:
         return conn.execute(
             "select * from public.agent_slots where id = %s", (slot_id,)
+        ).fetchone()
+
+
+def slot_for_principal(settings: Settings, principal_id: str) -> dict[str, Any] | None:
+    """us-116.5: the live slot an agent (a principal) occupies, with the host
+    it sits on — the one lookup Start/Stop need. Service-role on purpose: a
+    tenant's slot on a shared pool sits on a host row the tenant cannot read
+    (`agent_servers` is member-only), and the caller has already been
+    authorized on the SLOT's org, which is the tenant's own."""
+    if not _valid_uuid(principal_id):
+        return None
+    with _connect(settings) as conn:
+        return conn.execute(
+            "select s.*, a.org_id as host_org_id, a.status as host_status,"
+            " a.shared as host_shared"
+            " from public.agent_slots s"
+            " join public.agent_servers a on a.id = s.agent_server_id"
+            " where s.principal_id = %s and s.status = 'active'"
+            " limit 1",
+            (principal_id,),
         ).fetchone()
 
 

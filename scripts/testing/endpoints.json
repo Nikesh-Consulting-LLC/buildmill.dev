@@ -726,6 +726,32 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/agents/{principal_id}/start",
+    "tag": "agents",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "start_agent",
+    "params": {
+      "principal_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/agents/{principal_id}/stop",
+    "tag": "agents",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "stop_agent",
+    "params": {
+      "principal_id": "string"
+    },
+    "body": false,
+    "mutating": true
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/report/{deployment_id}/issues",
     "tag": "app-issues",
     "auth": "report_key",
@@ -2491,6 +2517,17 @@
     "auth": "worker_token",
     "public": false,
     "op": "list_release_prep",
+    "params": {},
+    "body": false,
+    "mutating": false
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/worker/release-prep/held",
+    "tag": "worker",
+    "auth": "worker_token",
+    "public": false,
+    "op": "list_held_release_prep",
     "params": {},
     "body": false,
     "mutating": false
