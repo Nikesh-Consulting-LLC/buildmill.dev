@@ -136,12 +136,12 @@ export function AddAgentWizard({
   // US-55.1: which projects it may access — all checked by default, because
   // the gate is fail-closed and an agent with zero access rows claims
   // nothing. The wizard used to create exactly that agent.
+  // us-110.1: this list is the whole answer. A second, single-select "which
+  // project its MCP tools connect to" used to sit under it writing
+  // workers.project_id — a narrower scope that silently stopped an agent
+  // claiming runs in projects checked here. The column is gone; what is
+  // checked is what the agent works on.
   const [accessIds, setAccessIds] = useState<string[]>([]);
-  // MCP scope: a worker's MCP endpoint now serves exactly one project
-  // (workers.project_id), separate from the git-access checkboxes above —
-  // an agent can still hold git capability on several projects, but its
-  // MCP tools only ever see one.
-  const [mcpProjectId, setMcpProjectId] = useState<string>("");
 
   // Step 4 — how it bills (claude only).
   const [billing, setBilling] = useState("api");
@@ -221,7 +221,6 @@ export function AddAgentWizard({
       const projectList = (projRows.data ?? []) as { id: string; name: string }[];
       setProjects(projectList);
       setAccessIds(projectList.map((p) => p.id));
-      setMcpProjectId((cur) => cur || projectList[0]?.id || "");
 
       const poolOptions: PoolOption[] = (
         (poolRows.data ?? []) as {
@@ -274,7 +273,6 @@ export function AddAgentWizard({
     setModuleKey("opencode");
     setRoles([...ALL_ROLE_KEYS]);
     setAccessIds(projects.map((p) => p.id));
-    setMcpProjectId(projects[0]?.id ?? "");
     setBilling("api");
     setCreated(null);
     setPartial(null);
@@ -309,7 +307,6 @@ export function AddAgentWizard({
           p_org: orgId,
           p_name: name.trim(),
           p_type: "autonomous",
-          p_project: mcpProjectId || null,
         });
         if (rpcError) {
           setPartial({ what: "", error: rpcError.message });
@@ -532,7 +529,7 @@ export function AddAgentWizard({
           (placement === "machine" && !!machineId) ||
           (placement === "pool" && !!poolId)
         : step === "what"
-          ? !!activeModule && (projects.length === 0 || !!mcpProjectId)
+          ? !!activeModule
           : true;
 
   function next() {
@@ -986,51 +983,15 @@ export function AddAgentWizard({
                   )}
                 </div>
 
-                {/* MCP scope: exactly one project — the worker's token now
-                    carries this directly (workers.project_id), so the MCP
-                    endpoint knows which pool to serve without a URL. */}
-                <div className="grid gap-1.5 text-sm">
-                  <Label htmlFor="wizard-mcp-project">
-                    Which project its MCP tools connect to
-                  </Label>
-                  {projects.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">
-                      No projects yet — assign one from the agent&apos;s Team
-                      page once one exists.
-                    </p>
-                  ) : (
-                    <Select
-                      items={projects.map((p) => ({ value: p.id, label: p.name }))}
-                      value={mcpProjectId}
-                      onValueChange={(v) => typeof v === "string" && setMcpProjectId(v)}
-                    >
-                      <SelectTrigger id="wizard-mcp-project" className="w-full max-w-sm">
-                        <SelectValue placeholder="Pick a project" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {projects.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    A worker&apos;s MCP tools only ever see one project&apos;s
-                    pool. Change this later from the agent&apos;s Team page if
-                    it needs to move to a different project.
-                  </p>
-                </div>
-
                 {/* US-55.1: project access, all checked by default — the gate
                     is fail-closed, so an agent created with none can claim
-                    nothing at all. This is the separate git-remote grant
-                    list; an agent can still hold git access to several
-                    projects even though its MCP scope above is just one. */}
+                    nothing at all. us-110.1: and this is now the ONLY project
+                    question. The single-select MCP scope that used to sit
+                    above it is gone, so what is checked here is what the
+                    agent works on — over git, over MCP, and in the pool. */}
                 <div className="grid gap-1.5 text-sm">
                   <span className="text-muted-foreground">
-                    Which projects it may access over git
+                    Which projects it works on
                   </span>
                   {projects.length === 0 ? (
                     <p className="text-xs text-muted-foreground">
@@ -1062,7 +1023,8 @@ export function AddAgentWizard({
                   )}
                   <p className="text-xs text-muted-foreground">
                     On every project checked, the agent does whatever the
-                    roles above allow.
+                    roles above allow — it claims that project&apos;s runs and
+                    reaches its code over git and MCP.
                   </p>
                   {projects.length > 0 && accessIds.length === 0 && (
                     <p className="text-xs text-amber-700 dark:text-amber-400">

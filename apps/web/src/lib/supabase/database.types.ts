@@ -5826,7 +5826,6 @@ export type Database = {
           no_claim_checkout: boolean
           org_id: string
           principal_id: string | null
-          project_id: string | null
           revoked_by_suspension_at: string | null
           status: string
           token_hash: string
@@ -5843,7 +5842,6 @@ export type Database = {
           no_claim_checkout?: boolean
           org_id: string
           principal_id?: string | null
-          project_id?: string | null
           revoked_by_suspension_at?: string | null
           status?: string
           token_hash: string
@@ -5860,7 +5858,6 @@ export type Database = {
           no_claim_checkout?: boolean
           org_id?: string
           principal_id?: string | null
-          project_id?: string | null
           revoked_by_suspension_at?: string | null
           status?: string
           token_hash?: string
@@ -5882,13 +5879,6 @@ export type Database = {
             columns: ["principal_id"]
             isOneToOne: false
             referencedRelation: "principals"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "workers_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
@@ -6111,7 +6101,6 @@ export type Database = {
         Args: {
           p_name: string
           p_org: string
-          p_project?: string
           p_type: string
           p_user_id?: string
         }
@@ -6363,10 +6352,6 @@ export type Database = {
       set_platform_llm_key: { Args: { p_key: string }; Returns: undefined }
       set_run_paused: {
         Args: { p_paused: boolean; p_run: string }
-        Returns: undefined
-      }
-      set_worker_project: {
-        Args: { p_project: string; p_worker: string }
         Returns: undefined
       }
       shares_org_with_caller: {

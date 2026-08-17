@@ -54,6 +54,10 @@ def mcp_client():
         ),
     )
     mp.setattr("app.factory_mcp.db.set_run_branch_ref", lambda s, rid, b: None)
+    # us-110.1: the no-claim reads default their project from the grant list.
+    # Default to "granted several" — no default, argument required — so a test
+    # that wants the sole-grant path opts into it with _worker_with_sole_project.
+    mp.setattr("app.factory_mcp.db.sole_granted_project", lambda s, w: None)
 
     # US-7.9: build-config fetch hits Storage; default to none.
     async def _no_build_config(s, org, proj):
@@ -215,8 +219,8 @@ def test_server_instructions_match_final_surface(mcp_client):
 
 
 def _pool_stub(captured):
-    def stub(s, w, project_id=None):
-        captured["project_id"] = project_id
+    def stub(s, w):
+        captured["called"] = True
         return [
             {
                 "id": "run-1",
@@ -224,6 +228,7 @@ def _pool_stub(captured):
                 "issue_id": "issue-1",
                 "issue_title": "Add CSV export",
                 "issue_type": "story",
+                "project_id": PROJECT_ID,
                 "project_name": "Webshop",
                 "repo_full_name": "acme/webshop",
             }
@@ -248,9 +253,8 @@ def test_list_available_work_delegates(mcp_client, monkeypatch):
 
 
 def _queue_stub(captured, rows=None):
-    def stub(s, org_id, project_id=None):
+    def stub(s, org_id):
         captured["org_id"] = org_id
-        captured["project_id"] = project_id
         return rows if rows is not None else [
             {
                 "id": "run-1",
@@ -266,6 +270,7 @@ def _queue_stub(captured, rows=None):
                 "epic_number": 1,
                 "epic_title": "Exports",
                 "parent_id": "feature-1",
+                "project_id": PROJECT_ID,
                 "project_name": "Webshop",
                 "worker_name": None,
                 "held": False,
@@ -310,6 +315,7 @@ def test_list_factory_queue_marks_held_paused_running(mcp_client, monkeypatch):
             "epic_number": 1,
             "epic_title": "Epic",
             "parent_id": None,
+            "project_id": PROJECT_ID,
             "project_name": "Webshop",
             "worker_name": "worker-x",
             "hold_reason": None,
@@ -330,6 +336,7 @@ def test_list_factory_queue_marks_held_paused_running(mcp_client, monkeypatch):
             "epic_number": 1,
             "epic_title": "Epic",
             "parent_id": None,
+            "project_id": PROJECT_ID,
             "project_name": "Webshop",
             "worker_name": None,
             "hold_reason": None,
@@ -350,6 +357,7 @@ def test_list_factory_queue_marks_held_paused_running(mcp_client, monkeypatch):
             "epic_number": 1,
             "epic_title": "Epic",
             "parent_id": "feature-1",
+            "project_id": PROJECT_ID,
             "project_name": "Webshop",
             "worker_name": None,
             "hold_reason": "waiting on sibling stories to be approved",
@@ -378,8 +386,7 @@ def test_list_factory_queue_marks_held_paused_running(mcp_client, monkeypatch):
 
 
 def _my_work_stub(captured, claimed=None, submitted=None):
-    def stub(s, w, project_id=None):
-        captured["project_id"] = project_id
+    def stub(s, w):
         captured["worker_id"] = w["id"]
         return {"claimed": claimed or [], "submitted": submitted or []}
 
@@ -420,7 +427,6 @@ def test_list_my_work_shows_claims_and_submissions(mcp_client, monkeypatch):
     )
     assert resp.status_code == 200
     assert captured["worker_id"] == WORKER["id"]
-    assert captured["project_id"] is None
     assert "Add CSV export" in resp.text
     assert "run-c" in resp.text
     assert "get_work_context" in resp.text  # resume nudge
@@ -445,8 +451,18 @@ def test_list_my_work_empty_cases_are_not_errors(mcp_client, monkeypatch):
     assert '"error"' not in resp.text
 
 
-def test_list_my_work_scoped_by_worker_project_id(mcp_client, monkeypatch):
-    _worker_with_project(monkeypatch, PROJECT_ID)
+def test_list_my_work_is_every_project_this_worker_holds(mcp_client, monkeypatch):
+    """us-110.1: what you hold is what you hold. The recovery view used to be
+    narrowed by the MCP scope, which could hide a live claim from the agent
+    that owned it."""
+    import inspect
+
+    from app import db as real_db
+
+    assert list(
+        inspect.signature(real_db.list_worker_runs).parameters
+    ) == ["settings", "worker"]
+
     captured: dict = {}
     monkeypatch.setattr(
         "app.factory_mcp.db.list_worker_runs", _my_work_stub(captured)
@@ -457,7 +473,7 @@ def test_list_my_work_scoped_by_worker_project_id(mcp_client, monkeypatch):
         headers=HDR,
     )
     assert resp.status_code == 200
-    assert captured["project_id"] == PROJECT_ID
+    assert captured["worker_id"] == WORKER["id"]
 
 
 # ----------------------------------------- US-5.2: report_progress
@@ -642,8 +658,10 @@ def test_get_project_guidelines_empty_is_not_an_error(mcp_client, monkeypatch):
     assert '"error"' not in resp.text
 
 
-def test_get_project_guidelines_defaults_to_scoped_project(mcp_client, monkeypatch):
-    _worker_with_project(monkeypatch, PROJECT_ID)
+def test_get_project_guidelines_defaults_to_the_sole_granted_project(
+    mcp_client, monkeypatch
+):
+    _worker_with_sole_project(monkeypatch, PROJECT_ID)
     captured: dict = {}
 
     def stub(s, project_id, org_id):
@@ -743,8 +761,10 @@ def test_get_project_learnings_empty_is_not_an_error(mcp_client, monkeypatch):
     assert '"error"' not in resp.text
 
 
-def test_get_project_learnings_defaults_to_scoped_project(mcp_client, monkeypatch):
-    _worker_with_project(monkeypatch, PROJECT_ID)
+def test_get_project_learnings_defaults_to_the_sole_granted_project(
+    mcp_client, monkeypatch
+):
+    _worker_with_sole_project(monkeypatch, PROJECT_ID)
     captured: dict = {}
 
     def stub(s, project_id, org_id):
@@ -900,12 +920,11 @@ def test_submit_learning_rejects_empty_and_oversize(mcp_client, monkeypatch):
 # scope now lives on the worker token itself, via workers.project_id.)
 
 
-def _worker_with_project(monkeypatch, project_id):
+def _worker_with_sole_project(monkeypatch, project_id):
+    """us-110.1: a worker granted exactly one project. That — not a scope
+    column — is what makes project_id optional on the no-claim reads."""
     monkeypatch.setattr(
-        "app.factory_mcp.db.get_worker_by_token",
-        lambda s, t: (
-            dict(WORKER, project_id=project_id) if t == "sfw_testtoken" else None
-        ),
+        "app.factory_mcp.db.sole_granted_project", lambda s, w: project_id
     )
 
 
@@ -918,8 +937,19 @@ def test_extra_path_segments_after_mcp_is_404(mcp_client):
     assert resp.status_code == 404
 
 
-def test_worker_project_id_filters_the_pool(mcp_client, monkeypatch):
-    _worker_with_project(monkeypatch, PROJECT_ID)
+def test_the_pool_is_not_narrowed_by_any_second_scope(mcp_client, monkeypatch):
+    """us-110.1: list_worker_pool takes no project argument any more. The
+    capability grant list is the only project filter, applied inside it — a
+    second one is what used to hide a granted project's runs from the agent
+    that was granted them."""
+    import inspect
+
+    from app import db as real_db
+
+    assert list(
+        inspect.signature(real_db.list_worker_pool).parameters
+    ) == ["settings", "worker"]
+
     captured: dict = {}
     monkeypatch.setattr(
         "app.factory_mcp.db.list_worker_pool", _pool_stub(captured)
@@ -930,13 +960,13 @@ def test_worker_project_id_filters_the_pool(mcp_client, monkeypatch):
         headers=HDR,
     )
     assert resp.status_code == 200
-    # the pool query was scoped to the worker's own assigned project
-    assert captured["project_id"] == PROJECT_ID
+    assert captured["called"] is True
 
 
-def test_worker_without_project_id_does_not_filter(mcp_client, monkeypatch):
-    # the module-scoped mcp_client fixture's default get_worker_by_token
-    # stub returns WORKER as-is, which has no project_id key.
+def test_available_work_carries_the_project_id(mcp_client, monkeypatch):
+    """us-110.1: with no scope to default from, a worker granted several
+    projects learns a project_id here — so the no-claim reads have one to
+    pass. The name alone was not addressable."""
     captured: dict = {}
     monkeypatch.setattr(
         "app.factory_mcp.db.list_worker_pool", _pool_stub(captured)
@@ -947,29 +977,49 @@ def test_worker_without_project_id_does_not_filter(mcp_client, monkeypatch):
         headers=HDR,
     )
     assert resp.status_code == 200
-    assert captured["project_id"] is None
+    assert PROJECT_ID in resp.text
 
 
-def test_claim_outside_project_scope_refused(mcp_client, monkeypatch):
-    _worker_with_project(monkeypatch, PROJECT_ID)
+def test_claim_is_gated_only_by_the_capability_refusal(mcp_client, monkeypatch):
+    """us-110.1: the out-of-scope refusal is gone. A run this worker is
+    allowed to take is taken, whichever granted project it belongs to."""
+    run_id = str(uuid.uuid4())
     monkeypatch.setattr(
-        "app.factory_mcp.db.run_in_project", lambda s, r, p: False
+        "app.factory_mcp.db.worker_run_refusal", lambda s, w, r: None
     )
-
-    def never_claim(s, r, w):
-        raise AssertionError("claim must not run for an out-of-scope run")
-
-    monkeypatch.setattr("app.factory_mcp.db.claim_run", never_claim)
+    monkeypatch.setattr(
+        "app.factory_mcp.db.claim_run",
+        lambda s, r, w: {
+            "id": r,
+            "kind": "code",
+            "claim_expires_at": "2026-01-01T00:00:00Z",
+        },
+    )
+    monkeypatch.setattr(
+        "app.factory_mcp.db.record_run_activity", lambda s, r, t: None
+    )
     resp = mcp_client.post(
         "/mcp",
         json=_rpc(
-            "tools/call",
-            {"name": "claim_work", "arguments": {"run_id": str(uuid.uuid4())}},
+            "tools/call", {"name": "claim_work", "arguments": {"run_id": run_id}}
         ),
         headers=HDR,
     )
     assert resp.status_code == 200
-    assert "project-scoped" in resp.text
+    assert "Claimed code run" in resp.text
+    assert "project-scoped" not in resp.text
+
+
+def test_no_refusal_still_recommends_the_retired_mcp_url(mcp_client):
+    """The /mcp/<org-shortname>/<project-slug> form 404s (migration 216
+    superseded it), yet ten refusals went on telling agents to use it. A
+    refusal that names an impossible cure is worse than no hint."""
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[1] / "app" / "factory_mcp.py"
+    text = src.read_text(encoding="utf-8")
+    assert "<project-slug>" not in text
+    assert "project-scoped MCP url" not in text
 
 
 def test_claim_race_lost_is_actionable_not_error(mcp_client, monkeypatch):
@@ -1985,13 +2035,14 @@ def test_list_available_work_flags_retries(mcp_client, monkeypatch):
     prior = str(uuid.uuid4())
     monkeypatch.setattr(
         "app.factory_mcp.db.list_worker_pool",
-        lambda s, w, project_id=None: [
+        lambda s, w: [
             {
                 "id": "run-2",
                 "kind": "code",
                 "issue_id": "issue-1",
                 "issue_title": "Add CSV export",
                 "issue_type": "story",
+                "project_id": PROJECT_ID,
                 "project_name": "Webshop",
                 "repo_full_name": "acme/webshop",
                 "retry_of_run_id": prior,

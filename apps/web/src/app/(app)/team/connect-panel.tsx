@@ -152,8 +152,9 @@ export function ConnectPanel({
         )}`;
 
   // Reuse the single snippet source (no drift), then substitute the real
-  // token. Scope lives on the token (workers.project_id), so the MCP URL is
-  // the same everywhere; the repo picker chooses only the git remote.
+  // token. us-110.1: the MCP URL is the same everywhere — a worker reaches
+  // the projects its access grants name, and nothing on the token narrows
+  // that; the repo picker chooses only the git remote.
   const snippets = useMemo(() => {
     const base = buildSnippets({
       mcpUrl: factoryMcpUrl(),

@@ -53,11 +53,24 @@ logger = logging.getLogger("uvicorn.error")
 _current_worker: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
     "factory_mcp_worker", default=None
 )
-# US-3.14: the project id a project-scoped MCP url resolves to (or None for
-# an org-wide / bare url). Set by the auth wrapper, read by the pool tools.
-_scoped_project: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "factory_mcp_scoped_project", default=None
+# us-110.1: there is no MCP project scope any more. A worker's projects are
+# the ones on its access list, and that list is what the pool filter already
+# used; the scope only ever added a second, narrower answer to the same
+# question. What it also quietly did — supply a default project_id to the
+# tools callable without a claim — is below.
+_NO_PROJECT_HINT = (
+    "pass project_id; list_available_work returns one for every claimable run"
 )
+
+
+def _default_project(worker: dict[str, Any]) -> str | None:
+    """The project a no-claim read means when the caller didn't say.
+
+    Exactly the unambiguous case: a worker granted one project. Granted
+    several, this returns None and the caller refuses with `_NO_PROJECT_HINT`
+    rather than picking — guessing here would answer about the wrong project,
+    silently, which is the failure mode the retired scope was built out of."""
+    return db.sole_granted_project(get_settings(), str(worker["id"]))
 
 
 # US-5.10: standard MCP annotations on every tool, so clients can call
@@ -136,8 +149,9 @@ mcp = FastMCP(
         "as get_repo_tree/read_repo_file/get_workspace but keyed by "
         "project_id instead of a held run_id — for exploring a project, "
         "testing that you can check code out, or working outside the "
-        "claim/work-item flow entirely. They default project_id to a "
-        "project-scoped MCP url and ref to the project's default branch. "
+        "claim/work-item flow entirely. They default project_id to your "
+        "project when you have exactly one, and ref to the project's "
+        "default branch. "
         "Available whenever this worker has project access, unless a "
         "manager has turned it off for this worker specifically. Purely "
         "read-only — there is nothing to submit_changeset back to; "
@@ -339,11 +353,11 @@ def _omitted_manifest(
 
 @mcp.tool(**_read("List available work"))
 async def list_available_work() -> dict[str, Any]:
-    """List the org's claimable factory work — plan and code runs waiting
-    in the pool, first-come-first-served."""
+    """List the claimable factory work in every project you have access to —
+    plan and code runs waiting in the pool, first-come-first-served."""
     settings = get_settings()
     worker = _worker()
-    runs = db.list_worker_pool(settings, worker, project_id=_scoped_project.get())
+    runs = db.list_worker_pool(settings, worker)
     items = [
         {
             "run_id": str(r["id"]),
@@ -352,6 +366,10 @@ async def list_available_work() -> dict[str, Any]:
             "issue_title": r["issue_title"],
             "issue_type": r["issue_type"],
             "project": r["project_name"],
+            # us-110.1: the id too — with several projects granted and no
+            # scope to default from, this is where the no-claim reads get a
+            # project_id to pass.
+            "project_id": str(r["project_id"]),
             "repo": r["repo_full_name"],
             # US-5.5: a retry names the run it follows, so an agent whose
             # submission was rejected can spot (and re-claim) its own
@@ -403,9 +421,7 @@ async def list_factory_queue() -> dict[str, Any]:
     this order)."""
     settings = get_settings()
     worker = _worker()
-    rows = db.list_factory_queue(
-        settings, str(worker["org_id"]), project_id=_scoped_project.get()
-    )
+    rows = db.list_factory_queue(settings, str(worker["org_id"]))
     items = []
     for r in rows:
         if r["status"] == "running":
@@ -436,6 +452,9 @@ async def list_factory_queue() -> dict[str, Any]:
                     else None
                 ),
                 "project": r["project_name"],
+                # us-110.1: as in list_available_work — the id, so a
+                # multi-project worker can address a project without a scope.
+                "project_id": str(r["project_id"]),
                 "hold_reason": r.get("hold_reason"),
                 "holder": r.get("worker_name") if state == "running" else None,
             }
@@ -478,9 +497,7 @@ async def list_my_work() -> dict[str, Any]:
     a session restart. Resume claimed work with get_work_context."""
     settings = get_settings()
     worker = _worker()
-    work = db.list_worker_runs(
-        settings, worker, project_id=_scoped_project.get()
-    )
+    work = db.list_worker_runs(settings, worker)
     claimed = [
         {
             "run_id": str(r["id"]),
@@ -639,15 +656,9 @@ async def claim_work(run_id: str) -> dict[str, Any]:
     guidance to list again, not an error."""
     settings = get_settings()
     worker = _worker()
-    # US-3.14: a project-scoped MCP url only claims that project's runs.
-    scoped = _scoped_project.get()
-    if scoped and not db.run_in_project(settings, run_id, scoped):
-        return _err(
-            "that run isn't in this project-scoped MCP url",
-            "use the org-wide MCP url, or claim a run from this project",
-        )
-    # US-31.3: fail-closed capability gate — the refusal names which half is
-    # missing (project access vs an unchecked kind), not just that one is.
+    # US-31.3: fail-closed capability gate, and since us-110.1 the ONLY one —
+    # the refusal names which half is missing (project access vs an unchecked
+    # kind), not just that one is.
     refusal = db.worker_run_refusal(settings, str(worker["id"]), run_id)
     if refusal:
         return _err(
@@ -2224,13 +2235,9 @@ async def _project_repo_and_token(
     claim in play, US-3.12/31.3). Exactly one of (project+token) / error."""
     settings = get_settings()
     worker = _worker()
-    pid = project_id or _scoped_project.get()
+    pid = project_id or _default_project(worker)
     if not pid:
-        return None, None, _err(
-            "no project specified",
-            "pass project_id, or connect via a project-scoped MCP url "
-            "(/mcp/<org-shortname>/<project-slug>)",
-        )
+        return None, None, _err("no project specified", _NO_PROJECT_HINT)
     if not worker.get("no_claim_checkout", True):
         return None, None, _err(
             "no-claim checkout is turned off for this worker",
@@ -2382,8 +2389,9 @@ async def get_project_tree(
     """List a project's repository tree — paths, types, sizes — without
     claiming or holding any run. For exploring a project, checking it out
     for testing, or deciding what to work on. ref defaults to the
-    project's default branch. Defaults project_id to the MCP url's scoped
-    project; pass it explicitly on an org-wide url. Needs project access
+    project's default branch. Defaults project_id to your project when you
+    have access to exactly one; pass it explicitly otherwise. Needs project
+    access
     and this worker's no-claim checkout left on (both on by default —
     see get_project_workspace)."""
     project, token, err = await _project_repo_and_token(
@@ -3372,17 +3380,13 @@ async def get_project_guidelines(project_id: str = "") -> dict[str, Any]:
     """Fetch a project's application guidelines — the same assembled
     markdown committed to AGENTS.md (conventions, architecture, gotchas).
     Use this to learn how a project works, any time, not just while
-    holding a claim. Defaults to the project this MCP url is scoped to;
-    pass project_id explicitly when connected via an org-wide url."""
+    holding a claim. Defaults to your project when you have access to
+    exactly one; pass project_id explicitly otherwise."""
     settings = get_settings()
     worker = _worker()
-    pid = project_id or _scoped_project.get()
+    pid = project_id or _default_project(worker)
     if not pid:
-        return _err(
-            "no project specified",
-            "pass project_id, or connect via a project-scoped MCP url "
-            "(/mcp/<org-shortname>/<project-slug>)",
-        )
+        return _err("no project specified", _NO_PROJECT_HINT)
     project = db.get_project_guidelines_md(settings, pid, str(worker["org_id"]))
     if project is None:
         return _err(
@@ -3410,18 +3414,14 @@ def _is_text_document(mime: str) -> bool:
 async def list_project_documents(project_id: str = "") -> dict[str, Any]:
     """List a project's documents — design docs, PRD material, work-item
     attachments — with ids to read via get_document. Documents linked to a
-    work item you currently hold a claim on are marked. Defaults to the
-    project this MCP url is scoped to; pass project_id explicitly when
-    connected via an org-wide url."""
+    work item you currently hold a claim on are marked. Defaults to your
+    project when you have access to exactly one; pass project_id explicitly
+    otherwise."""
     settings = get_settings()
     worker = _worker()
-    pid = project_id or _scoped_project.get()
+    pid = project_id or _default_project(worker)
     if not pid:
-        return _err(
-            "no project specified",
-            "pass project_id, or connect via a project-scoped MCP url "
-            "(/mcp/<org-shortname>/<project-slug>)",
-        )
+        return _err("no project specified", _NO_PROJECT_HINT)
     docs = db.list_project_documents(
         settings, pid, str(worker["org_id"]), str(worker["id"])
     )
@@ -3502,17 +3502,13 @@ async def get_project_learnings(project_id: str = "") -> dict[str, Any]:
     discoveries earlier runs left behind (US-1.21's living lessons-learned
     document). Read it any time, not just while holding a claim, so you
     benefit from what previous workers learned before repeating their
-    mistakes. Defaults to the project this MCP url is scoped to; pass
-    project_id explicitly when connected via an org-wide url."""
+    mistakes. Defaults to your project when you have access to exactly one;
+    pass project_id explicitly otherwise."""
     settings = get_settings()
     worker = _worker()
-    pid = project_id or _scoped_project.get()
+    pid = project_id or _default_project(worker)
     if not pid:
-        return _err(
-            "no project specified",
-            "pass project_id, or connect via a project-scoped MCP url "
-            "(/mcp/<org-shortname>/<project-slug>)",
-        )
+        return _err("no project specified", _NO_PROJECT_HINT)
     project = db.get_project_learnings_md(settings, pid, str(worker["org_id"]))
     if project is None:
         return _err(
@@ -3551,7 +3547,7 @@ async def get_environment(run_id: str = "", project_id: str = "") -> dict[str, A
             return _err("you do not hold this run", "claim_work it first")
         pid = str(run.get("project_id") or "")
     else:
-        pid = project_id or _scoped_project.get() or ""
+        pid = project_id or _default_project(worker) or ""
     if not pid:
         return _err(
             "no project specified",
@@ -3623,13 +3619,9 @@ async def submit_learning(text: str, project_id: str = "") -> dict[str, Any]:
             "distill it to the durable point — the learnings document is "
             "curated, not a transcript",
         )
-    pid = project_id or _scoped_project.get()
+    pid = project_id or _default_project(worker)
     if not pid:
-        return _err(
-            "no project specified",
-            "pass project_id, or connect via a project-scoped MCP url "
-            "(/mcp/<org-shortname>/<project-slug>)",
-        )
+        return _err("no project specified", _NO_PROJECT_HINT)
     project = db.get_project_learnings_md(settings, pid, str(worker["org_id"]))
     if project is None:
         return _err(
@@ -3780,13 +3772,9 @@ async def recommend_guideline_change(
             "an instructions document that long is not one an agent will "
             "read — cut it down",
         )
-    pid = project_id or _scoped_project.get()
+    pid = project_id or _default_project(worker)
     if not pid:
-        return _err(
-            "no project specified",
-            "pass project_id, or connect via a project-scoped MCP url "
-            "(/mcp/<org-shortname>/<project-slug>)",
-        )
+        return _err("no project specified", _NO_PROJECT_HINT)
     project = db.get_project_guidelines_md(settings, pid, str(worker["org_id"]))
     if project is None:
         return _err(
@@ -6636,12 +6624,11 @@ def build_mcp_asgi():
     is verified exactly like the REST endpoints; the worker rides a
     contextvar into the tools.
 
-    Single endpoint (superseding the old US-3.14 /<org-shortname>[/<project-slug>]
-    URL scoping): every worker token is scoped to at most one project via
-    workers.project_id, so no path segments after /mcp are needed or
-    accepted. A worker with no assigned project can still reach org-wide
-    tools; project-scoped tools relying on _scoped_project will simply see
-    None and error through their own "no project" path.
+    Single endpoint, and a single scope. US-3.14's per-project URL path was
+    superseded by workers.project_id (216), which us-110.1 then retired
+    outright: a worker's projects are its worker_capabilities grants, the same
+    list the pool filter always used. So no path segments after /mcp are
+    needed or accepted, and there is nothing project-shaped to resolve here.
 
     All DB lookups run off the event loop via asyncio.to_thread — this
     handler runs ahead of every single MCP request (including tools/list),
@@ -6677,21 +6664,15 @@ def build_mcp_asgi():
             await _send_json(send, 404, b'{"error": "unknown factory MCP url"}')
             return
 
-        scoped_project = (
-            str(worker["project_id"]) if worker.get("project_id") else None
-        )
-
         inner_path = (root_path or "") + "/"
         inner_scope = dict(scope)
         inner_scope["path"] = inner_path
         inner_scope["raw_path"] = inner_path.encode("latin-1")
 
         wtok = _current_worker.set(dict(worker))
-        ptok = _scoped_project.set(scoped_project)
         try:
             await inner(inner_scope, receive, send)
         finally:
             _current_worker.reset(wtok)
-            _scoped_project.reset(ptok)
 
     return app
