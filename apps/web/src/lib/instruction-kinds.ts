@@ -1,7 +1,7 @@
 /** US-100.4: the one vocabulary for the per-task instructions.
  *
  * A project shows its instructions grouped by phase, in a fixed order, with a
- * title and a description per kind (`worker-instructions-tab.tsx`). A
+ * title and a description per kind (`instructions-tab.tsx`). A
  * template used to describe the same kinds with a second, drifted list — bare
  * slugs, no groups, no descriptions — so a superadmin authoring a template
  * could not see what a manager would get. Both now read this module, and

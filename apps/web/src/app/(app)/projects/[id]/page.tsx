@@ -41,7 +41,7 @@ import { ProjectSummaryCard } from "./project-summary-card";
 import { ProjectSetupReadinessCard } from "./project-setup-readiness-card";
 import { epicLabel, workItemDisplayId } from "@/lib/work-items";
 import { LearningsTab } from "./learnings-tab";
-import { WorkerInstructionsTab } from "./worker-instructions-tab";
+import { InstructionsTab } from "./instructions-tab";
 import { GithubTab } from "./github-tab";
 import {
   DeploymentsTab,
@@ -50,21 +50,31 @@ import {
 } from "./deployments-tab";
 import { SuitesTab, type SuiteRow } from "./suites-tab";
 import { EnvironmentTab } from "./environment-tab";
-import { AgentInstructionsTab } from "./agent-instructions-tab";
 
 export default async function ProjectDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<{ tab?: string; section?: string }>;
+  searchParams?: Promise<{ tab?: string; section?: string; file?: string }>;
 }) {
   const { id } = await params;
   // US-7.7: readiness deep-links land on the tab that resolves each check.
-  // US-20.1: `section` selects one of Worker Instructions' sections.
+  // US-114.2: `guidelines` and `worker-instructions` were two tabs; both now
+  // resolve to Instructions (the first with AGENTS.md selected) so old deep
+  // links keep landing. `file` selects a file in it; the old `section` param
+  // (US-20.1) is honoured only for `task-processing`.
   const search = await searchParams;
-  const initialTab = search?.tab ?? "overview";
-  const initialSection = search?.section;
+  const rawTab = search?.tab ?? "overview";
+  const initialTab =
+    rawTab === "guidelines" || rawTab === "worker-instructions" ? "instructions" : rawTab;
+  const initialFile =
+    search?.file ??
+    (rawTab === "guidelines"
+      ? "agents"
+      : search?.section === "task-processing"
+        ? "task-processing"
+        : undefined);
   const supabase = await createClient();
 
   const {
@@ -83,14 +93,64 @@ export default async function ProjectDetailPage({
   if (!project) notFound();
 
   // Phase 67 (us-67.1): which project template this project was silently
-  // seeded from — provenance only, read-only, visible to every role.
+  // seeded from — provenance, visible to every role. US-114.3 reads the
+  // template's files too, so the Instructions tab can say which of the
+  // project's files differ from it and put one back.
   const { data: projectTemplate } = project.org_template_id
     ? await supabase
         .from("org_project_templates")
-        .select("name")
+        .select("id, name, template_key, agent_instructions")
         .eq("id", project.org_template_id)
         .maybeSingle()
     : { data: null };
+  const { data: projectTemplateSections } = projectTemplate
+    ? await supabase
+        .from("org_project_template_sections")
+        .select("section_key, content")
+        .eq("org_template_id", projectTemplate.id)
+        .eq("section_type", "worker_instruction")
+    : { data: [] };
+  const templateForTab = projectTemplate
+    ? {
+        id: projectTemplate.id,
+        name: projectTemplate.name,
+        template_key: projectTemplate.template_key,
+        agent_instructions: projectTemplate.agent_instructions ?? "",
+        sections: Object.fromEntries(
+          (projectTemplateSections ?? []).map((s) => [s.section_key, s.content ?? ""])
+        ),
+      }
+    : null;
+  // US-114.3: the org's templates a manager may switch this project to, with
+  // filled-file counts — the same list the create dialog offers.
+  const { data: orgTemplateRows } = await supabase
+    .from("org_project_templates")
+    .select("id, name, template_key, is_default, agent_instructions")
+    .eq("org_id", project.org_id)
+    .eq("is_available", true)
+    .is("archived_at", null)
+    .order("sort_order", { ascending: true });
+  const orgTemplateIds = (orgTemplateRows ?? []).map((t) => t.id);
+  const { data: orgTemplateFilled } = orgTemplateIds.length
+    ? await supabase
+        .from("org_project_template_sections")
+        .select("org_template_id")
+        .in("org_template_id", orgTemplateIds)
+        .eq("section_type", "worker_instruction")
+        .neq("content", "")
+    : { data: [] };
+  const filledByTemplate: Record<string, number> = {};
+  for (const s of orgTemplateFilled ?? []) {
+    filledByTemplate[s.org_template_id] = (filledByTemplate[s.org_template_id] ?? 0) + 1;
+  }
+  const orgTemplateOptions = (orgTemplateRows ?? []).map((t) => ({
+    id: t.id,
+    name: t.name,
+    template_key: t.template_key,
+    is_default: t.is_default,
+    fileCount:
+      (filledByTemplate[t.id] ?? 0) + ((t.agent_instructions ?? "").trim() ? 1 : 0),
+  }));
 
   const { data: ownRole } = await supabase
     .from("organization_members")
@@ -436,12 +496,9 @@ export default async function ProjectDetailPage({
         {/* US-7.6: tab order follows the setup flow. */}
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          {/* us-100.3: named for what it holds. The value stays
-              "guidelines" so existing deep links keep resolving. */}
-          <TabsTrigger value="guidelines">Agent Instructions</TabsTrigger>
-          <TabsTrigger value="worker-instructions">
-            Task Instructions
-          </TabsTrigger>
+          {/* US-114.2: Agent Instructions + Task Instructions are one tab in
+              the templates' shape; the old values still resolve here. */}
+          <TabsTrigger value="instructions">Instructions</TabsTrigger>
           <TabsTrigger value="deployments">Deployments</TabsTrigger>
           <TabsTrigger value="suites">Suites</TabsTrigger>
           <TabsTrigger value="environment">Environment</TabsTrigger>
@@ -509,20 +566,20 @@ export default async function ProjectDetailPage({
                   label: "Agent Instructions marked ready",
                   detail: "Reviewed and marked good to go.",
                   done: !!project.guidelines_ready_at,
-                  href: `${base}?tab=guidelines`,
+                  href: `${base}?tab=instructions&file=agents`,
                 },
                 {
                   label: "Task Instructions marked ready",
                   detail: "Reviewed and marked good to go.",
                   done: !!project.worker_instructions_ready_at,
-                  href: `${base}?tab=worker-instructions`,
+                  href: `${base}?tab=instructions&file=plan`,
                 },
                 {
                   label: "Build & test config defined",
                   detail:
                     "Runtime + setup and the build/test/lint verify commands.",
                   done: envOk && runCmds,
-                  href: `${base}?tab=guidelines`,
+                  href: `${base}?tab=instructions&file=agents`,
                 },
                 {
                   label: "UAT + Production deployments with a Website",
@@ -549,24 +606,43 @@ export default async function ProjectDetailPage({
           />
         </TabsContent>
 
-        {/* us-100.1/us-100.3: one document, not twenty-two section cards.
-            Migration 263 repointed assemble_project_guidelines at
-            projects.agent_instructions, so the old GuidelinesTab was saving
-            to a table nothing reads — an edit that appears to save and
-            changes nothing an agent sees. Replaced rather than left up. */}
-        <TabsContent value="guidelines">
-          <AgentInstructionsTab
+        {/* US-114.2 / US-114.3: the project's files in the templates' shape —
+            Task processing and the grouped tree on the left, one editor on
+            the right — with the template banner above. */}
+        <TabsContent value="instructions">
+          <InstructionsTab
             projectId={project.id}
-            initial={project.agent_instructions ?? ""}
+            projectName={project.name}
+            projectSlug={project.slug}
+            orgId={project.org_id}
             canEdit={caps.can("manage_project")}
             repoFullName={project.repo_full_name ?? null}
-            readyAt={project.guidelines_ready_at}
-            readyByName={
+            agentInstructions={project.agent_instructions ?? ""}
+            rows={workerInstructions ?? []}
+            actorNames={instructionActorNames}
+            template={templateForTab}
+            orgTemplates={orgTemplateOptions}
+            guidelinesReadyAt={project.guidelines_ready_at}
+            guidelinesReadyByName={
               project.guidelines_ready_by
                 ? readyActorNames[project.guidelines_ready_by] ?? null
                 : null
             }
-            editedSince={guidelinesEditedSinceReady}
+            guidelinesEditedSince={guidelinesEditedSinceReady}
+            workerReadyAt={project.worker_instructions_ready_at}
+            workerReadyByName={
+              project.worker_instructions_ready_by
+                ? readyActorNames[project.worker_instructions_ready_by] ?? null
+                : null
+            }
+            initialFile={initialFile}
+            // US-86.1: the two routing switches; the fallbacks mirror the
+            // column defaults (both NOT NULL, so they never fire).
+            followBuildOrder={project.follow_build_order ?? true}
+            routeFeatureAsOne={project.route_feature_as_one ?? true}
+            autoApprovePrd={project.auto_approve_prd ?? false}
+            autoApprovePlan={project.auto_approve_plan ?? false}
+            autoApproveCode={project.auto_approve_code ?? false}
           />
         </TabsContent>
 
@@ -588,29 +664,6 @@ export default async function ProjectDetailPage({
                 worker: (Array.isArray(w) ? w[0]?.name : w?.name) ?? "worker",
               };
             })}
-          />
-        </TabsContent>
-
-        <TabsContent value="worker-instructions">
-          <WorkerInstructionsTab
-            rows={workerInstructions ?? []}
-            actorNames={instructionActorNames}
-            orgId={project.org_id}
-            projectId={project.id}
-            readyAt={project.worker_instructions_ready_at}
-            readyByName={
-              project.worker_instructions_ready_by
-                ? readyActorNames[project.worker_instructions_ready_by] ?? null
-                : null
-            }
-            initialSection={initialSection}
-            // US-86.1: the two routing switches; the fallbacks mirror the
-            // column defaults (both NOT NULL, so they never fire).
-            followBuildOrder={project.follow_build_order ?? true}
-            routeFeatureAsOne={project.route_feature_as_one ?? true}
-            autoApprovePrd={project.auto_approve_prd ?? false}
-            autoApprovePlan={project.auto_approve_plan ?? false}
-            autoApproveCode={project.auto_approve_code ?? false}
           />
         </TabsContent>
 

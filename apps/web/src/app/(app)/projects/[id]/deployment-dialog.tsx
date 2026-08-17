@@ -1170,7 +1170,7 @@ export function DeploymentDialog({
                         {" · "}grounded in this project&apos;s{" "}
                         <Link
                           className="underline underline-offset-2 hover:text-foreground"
-                          href={`/projects/${projectId}?tab=guidelines`}
+                          href={`/projects/${projectId}?tab=instructions&file=agents`}
                         >
                           Deployment and Release
                         </Link>{" "}

@@ -14,9 +14,10 @@ git history keeps the full text.
 The 2026-08-09 backlog close confirmed everything built to that point (62 phases,
 479 stories); Phases 73–75 followed on 2026-08-10, Phases 76–78 (22 stories) were
 confirmed and collapsed on 2026-08-11, Phases 79–90 (41 stories) on 2026-08-13, and
-Phases 91–96 (42 stories) were closed on 2026-08-15, and **Phases 98–102 (27
-stories) on 2026-08-16** — all built and released to production, with the manager
-testing on live rather than through per-story UAT sittings. The condensed record —
+Phases 91–96 (42 stories) were closed on 2026-08-15, Phases 98–102 (27 stories) on
+2026-08-16, and **Phases 103–112 (20 stories) on 2026-08-17** — all built and
+released to production, with the manager testing on live rather than through
+per-story UAT sittings. The condensed record —
 including what those phases did *not* prove, the manager actions each left open
 (96.10's routing table, 96.11's worker-token rotation), the five acceptance criteria
 that closed unbuilt (98.6's structured review table, 99.4's publish audit, 99.6's
@@ -25,50 +26,42 @@ seed-publishes-files and section preview, 99.7's accept/decline, 100.1's
 retired-unbuilt-do-not-re-propose list — is in
 [APPLICATION.md → Delivery history](../APPLICATION.md#delivery-history).
 
-Twenty-seven stories are open: Phase 113's release-prep crash (found 2026-08-17, blocking every release since Phase 101 shipped), Phase 112's Team roster table and Phase 111's
-Add agent wizard reorder (both requested 2026-08-17), Phase 110's agent-scope cleanup (requested
-2026-08-16, built and released 2026-08-17), Phase 109's Team page cleanup and the metrics
-bug it uncovered (requested
-2026-08-16), Phase 108's production crash inbox (drafted
-2026-08-16, two of its six defects breaking live paths today), Phase 107's
-fixed-outcome and queue guard (requested
-2026-08-16), Phase 106's Workbench quick action (requested
-2026-08-16), Phase 103's release deadlock (built and released
-2026-08-16), Phase 104's two pieces of work that existed nowhere safe,
-Phase 105's two missing outcomes on the Reports hub (requested 2026-08-16),
-Phase 97's GitHub linkage repair (requested 2026-08-15, costing live runs
-today), and the residue carried out of Phases 85–89:
+Eleven stories are open: Phase 114's template zip export/import and the project
+Instructions tab that matches the templates (built 2026-08-17, awaiting UAT), Phase
+113's release-prep crash (found 2026-08-17, blocking every release since Phase 101
+shipped), Phase 108's production crash inbox (drafted 2026-08-16, two of its six
+defects breaking live paths today), Phase 97's GitHub linkage repair (requested
+2026-08-15, costing live runs today), and the residue carried out of Phases 85–89:
 
 | Order | Story | Title | Status |
 |---|---|---|---|
 | 1 | [us-113.1](us-113.1-release-notes-can-be-submitted.md) | Release notes can be submitted | New |
-| 2 | [us-112.1](us-112.1-the-team-roster-is-a-table.md) | The Team roster is a table | Testing |
-| 3 | [us-112.2](us-112.2-a-member-has-a-history-tab.md) | A member has a History tab | Testing |
-| 4 | [us-111.1](us-111.1-the-wizard-asks-in-the-right-order.md) | The Add agent wizard asks in the right order | Testing |
-| 5 | [us-110.1](us-110.1-an-agents-projects-are-the-ones-you-checked.md) | An agent's projects are the ones you checked | Testing |
-| 6 | [us-109.1](us-109.1-the-team-row-says-who-not-how-much.md) | The Team row says who, not how much | Testing |
-| 7 | [us-109.2](us-109.2-the-team-kpis-price-the-work.md) | The team's KPI row prices the work | Testing |
-| 8 | [us-109.3](us-109.3-nobody-wrote-node-modules.md) | Nobody wrote node_modules | Testing |
-| 9 | [us-108.1](us-108.1-the-crash-inbox-goes-to-zero.md) | The crash inbox goes to zero | New |
-| 10 | [us-107.1](us-107.1-a-work-item-can-be-marked-fixed.md) | A work item can be marked fixed | Testing |
-| 11 | [us-107.2](us-107.2-nothing-sits-queued-forever.md) | Nothing sits queued forever | Testing |
-| 12 | [us-107.3](us-107.3-an-agent-capability-has-an-icon.md) | An agent capability has an icon | Testing |
-| 13 | [us-106.1](us-106.1-a-draft-dispatches-from-the-workbench.md) | A draft dispatches from the Workbench | Testing |
-| 14 | [us-105.1](us-105.1-a-report-can-be-marked-fixed.md) | A report can be marked fixed | Testing |
-| 15 | [us-105.2](us-105.2-a-report-is-promoted-in-one-click.md) | A report is promoted in one click | Testing |
-| 16 | [us-103.1](us-103.1-an-abandoned-release-prep-is-reaped.md) | An abandoned release prep is reaped | Testing |
-| 17 | [us-103.3](us-103.3-the-manager-can-stop-an-in-flight-release.md) | The manager can stop an in-flight release | Testing |
-| 18 | [us-103.2](us-103.2-a-restarted-runner-re-adopts-its-prep.md) | A restarted runner re-adopts the prep it was holding | Testing |
-| 19 | [us-103.4](us-103.4-the-workbench-shows-the-release-in-flight.md) | The Workbench shows the release in flight | Testing |
-| 20 | [us-103.5](us-103.5-a-release-in-flight-freezes-dispatch.md) | A release in flight freezes dispatch, and says so | Testing |
-| 21 | [us-104.1](us-104.1-every-migration-number-is-unique.md) | Every migration number is unique | Testing |
-| 22 | [us-104.2](us-104.2-the-api-test-suite-lives-in-the-repo.md) | The API test suite lives in the repo | Testing |
-| 23 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
-| 24 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
-| 25 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
-| 26 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
-| 27 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
-| 28 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+| 2 | [us-114.1](us-114.1-a-template-travels-as-a-zip.md) | A template travels as a zip | Testing |
+| 3 | [us-114.2](us-114.2-a-project-edits-its-files-like-a-template.md) | A project edits its files like a template | Testing |
+| 4 | [us-114.3](us-114.3-a-project-knows-its-template.md) | A project knows its template, and can change it | Testing |
+| 5 | [us-108.1](us-108.1-the-crash-inbox-goes-to-zero.md) | The crash inbox goes to zero | New |
+| 6 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
+| 7 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
+| 8 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
+| 9 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
+| 10 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
+| 11 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+
+**Phase 114 — A template travels as a zip** (requested 2026-08-17). A project
+template is seventeen files — the `AGENTS.md` body and one `.buildmill/*.md` per
+task kind (us-100.4) — and the only way to move a tuned set between the catalog,
+an org, or a laptop is to paste them one at a time. **us-114.1** adds Export and
+Import to both template pages: Export downloads the template as a zip in exactly
+the layout a project publishes, and Import overwrites the selected template's
+files from such a zip — never creating a template — after a confirmation that
+names what will be overwritten, cleared, left alone, and ignored. Superadmin on
+the catalog; Owner/Admin (`manage_project`) on the org's copies, with RLS as the
+boundary. **us-114.2** folds the project's *Agent Instructions* and *Task
+Instructions* tabs into one **Instructions** tab drawn with the templates' own
+tree + editor, so a template and the project it seeded look the same. **us-114.3**
+puts a template banner on that tab — which template, how many files differ,
+Reset to template per file, the same Export/Import, and Change template, which
+replaces every file's content and re-links the project.
 
 **Phase 113 — Release notes can be submitted** (found 2026-08-17). Every
 release prep has crashed since Phase 101 shipped: us-101.4 added `notes_doc` to
@@ -80,86 +73,6 @@ jsonb write in `db.py` already does, guards `update_release` so a dict can
 never again reach psycopg raw, and adds the regression test the existing
 suite could not have: every test of this path monkeypatches `update_release`,
 so the adaptation that fails never ran.
-
-**Phase 112 — The Team roster is a table** (requested 2026-08-17). The roster
-is a list of bordered cards whose fields land wherever the content to their
-left ends, so "Pod-001 slot 9" sits at a different x-position on every row and
-nothing can be read down a column — and each member stacks up to three lines
-for facts a few characters wide. us-109.1 already did the subtractive half by
-moving the module, token count, join date and output figures into the expand
-panel; what remains is content in the wrong shape. **us-112.1** makes it a real
-table on the shared `ui/table.tsx`, one line per member, splitting the
-`worked · completed` prose string into two right-aligned numeric columns so
-agents can actually be compared. The stacked layout US-68.6 introduced stays
-below `sm`, because a table there would re-create the squeeze bug it fixed.
-
-**Phase 111 — The Add agent wizard asks in the right order** (requested
-2026-08-17). The wizard asks about plumbing before it asks what the agent is:
-placement on step 2, agent type and roles on step 3. That order is backwards in
-a way the code already pays for — `interactive` is pool-only, so choosing it
-retracts the owned-machine option chosen a page earlier, and two separate
-snap-backs exist to undo the contradiction after the fact. **us-111.1** moves
-the four role checkboxes up to step 1 beside the name, moves Agent Type to step
-2 above the placement it constrains, and leaves step 3 holding only the project
-list us-110.1 left it with — relabelled *Projects*. Buildmill Interactive Agent
-becomes the first type and the default, conditionally: it is pool-only, so an
-org with no selectable pool would otherwise open step 2 with a dead Next, and
-falls back to the first type that has somewhere to run.
-
-**Phase 110 — An agent's projects are the ones you checked** (requested
-2026-08-16). Step 3 of the Add agent wizard asks which projects an agent may
-use, twice, in two vocabularies — a single-select *"Which project its MCP tools
-connect to"* writing `workers.project_id`, and a multi-select *"Which projects
-it may access over git"* writing `worker_capabilities`. They are written by two
-independent calls that never read each other, and the helper sentences beneath
-them contradict: one says the agent only ever sees one project's pool, the
-other says it does whatever the roles allow on every project checked. The code
-sides with the first, so an agent created with two projects checked silently
-never claims the second's runs. **us-110.1** settles it by removing the scope
-rather than renaming it: the access list becomes the only place project scope
-is set, `workers.project_id` and `set_worker_project` are dropped, and the two
-jobs the scope was quietly doing are replaced — the pool filter was already the
-US-31.3 capability gate, and the default `project_id` for the ten no-claim
-tools becomes the worker's sole grant when it has exactly one, with the pool
-listings returning a project id for when it has several. It also retires the
-`/mcp/<org-shortname>/<project-slug>` URL that ten refusal messages still
-recommend and that has 404'd since migration 216. The automated provisioner
-already creates unscoped workers this way; only the wizard pinned them.
-
-**Phase 109 — The Team page answers at a glance** (requested 2026-08-16). The
-roster row had accreted every fact anyone ever wanted about a member: a module
-name that never changes, a token count, a join date, and five accounting
-figures — three lines per row, of which one was the question being asked. All
-of it reference, sitting in the place reserved for scanning. **us-109.1** moves
-the module, the token count, the join date and the output figures into the
-expand panel US-53.3 already built to hold exactly this, keeps the seat (two
-agents may share a name, so it is the only thing telling them apart) and the
-two figures that say whether an agent is earning its seat, and takes **Remove**
-off the row entirely — it was the one irreversible action there, wearing the
-same button as Suspend and sitting beside it — to an agent's settings page and
-a person's expand panel, plus the duplicate runner-console door. **us-109.2**
-answers the question the row could not: three more KPI tiles — spend, lines
-added and removed, and a **human-equivalent** estimate in hours derived from
-lines changed at a named, unit-tested rate, labelled a rough estimate on its
-face so a confident-looking number is not read as a measurement. Both are web
-only: no migration, no API change, and no query that was not already running.
-
-That tile then read **72,841 hours — 35 person-years** over a window in which
-35 items merged, and **us-109.3** is what it found. One run had landed 1,788,138
-lines across 7,999 files (224 lines a file, the signature of a vendored tree);
-every other run in the window changed under 200 files. That single run was
-98.3% of the workspace's reported output, and it came from a revoked worker no
-longer in the org, so it inflated the total while no roster row could show it.
-Authored output was **+31k, not +1.8M**; the honest estimate is ~1,315 hours.
-The fix is at the ingest — `compute_diff_metrics` now excludes dependency
-trees, build output, lockfiles and minified bundles from `lines_added`,
-`lines_removed` and `files_changed`, matched on whole path segments so
-`redistribute/` and `buildings.py` are never discounted — which corrects the
-Team KPIs, the Costs page, the issue and review pages and `agent_effort_daily`
-at once. Vendored files stay in `change_breakdown` marked as such: they really
-were in the changeset, and hiding them would conceal what went wrong.
-**The backfill has not been run** — `recompute_run_metrics` needs a database
-credential this checkout does not have, so production still reports 1.8M.
 
 **Phase 108 — The crash inbox goes to zero** (drafted 2026-08-16, from an
 audit of production `app_issues`). The hub held 23 reports; eight had been
@@ -183,85 +96,6 @@ that **us-97.1 already owns and has not built** — a `301` from a renamed repo
 parsed as payload — and are deliberately left to it rather than fixed twice.
 The story also closes the eight stale work items and the reports behind them,
 so the hub's open list becomes the six fixed here plus us-97.1's three.
-
-**Phase 103 — A release cannot get stuck** (drafted 2026-08-16, from the
-2026.08.16.3 incident). The runner restarted ten minutes into preparing a
-release. Its supervising task died; the `release_prep_runs` row did not. Two
-and a half hours later the prep was still `running`, its lease 26 minutes
-expired, the worker online and healthy — and nothing anywhere was ever going
-to change that. Release prep is the one claimed job in the factory with **no
-lease reaper**: `requeue_expired_claims` sweeps `runs` only, and nothing reads
-`release_prep_runs.claim_expires_at`. The manager had no move either — `/cancel`
-takes only `queued`, `/retry` only `failed`, and `running` sits between them
-with an empty Actions cell — while `releases_one_in_flight_per_project` counted
-the dead release as in flight and blocked every future cut for the project. It
-was cleared by editing the production database. us-103.1 reaps an expired prep
-lease down the failure path that already exists, so Retry becomes reachable
-by itself; us-103.3 gives the manager a Stop that ends the job as well as the
-release (and closes the matching hole in `/reject`, where a zombie agent could
-still write notes onto a rejected release); us-103.2 has a restarted runner
-re-adopt the prep it is holding, so a routine restart costs a minute rather
-than a release. The two surfaces the manager asked for follow: us-103.4 gives
-the Workbench release card the same liveness reading story runs already get —
-who holds it, how long, whether it is silent or abandoned, and Stop — because
-for two and a half hours that card cheerfully read "being prepared"; and
-us-103.5 freezes `plan`/`code` dispatch on a project while its release is in
-flight, through migration 235's existing `issue_dispatch_refusal` so the button
-and the RPC cannot disagree. Writing stories, bugs and chores stays open;
-routing them waits for the release to be released, stopped or rejected, and
-every surface says so in those words.
-
-**Phase 104 — The tree can be trusted** (drafted 2026-08-16). Two pieces of
-real work were found existing nowhere safe, and both are the same failure in
-different clothes. **us-104.1**: `main` carried five duplicated migration
-numbers (014, 015, 205, 249, 271), which makes "applied in numeric order"
-ambiguous at each one. A fix for the 249 collision had been *written* on
-2026-08-13 — renumbering the file, plus an Essential guard so the next
-collision fails in a test rather than on somebody's replay, plus a real bug it
-uncovered in `migrate.py` whose skip-if-applied check was dead for 92 of 258
-prod rows — and then it sat on an unpushed local branch, went stale (it
-renumbered to 252; `252_agent_effort_ledger` landed on main the next day), and
-was deleted in a branch cleanup on 2026-08-16. It was recovered from the
-object store, brought current at 276/277, and merged. **us-104.2**: the
-Playwright API suite in `scripts/testing/` — 22 specs over 227 operations,
-whose auth-boundary layer asserts that a *forged but well-formed* credential
-is refused, not merely that a missing one is — had been untracked since
-2026-08-15 with its own `.gitignore` already written for the commit that never
-came. Both stories exist because a guard that lives on one laptop is not a
-guard.
-
-**Phase 105 — The Reports hub can close a report honestly** (drafted
-2026-08-16, from the manager's own use). Reporting works and Build Mill files
-its own crashes, but the hub could only ever *promote* a report or *ignore*
-it — and plenty of bugs are simply fixed on the way past. Ignoring one records
-"not worth acting on" about something that was acted on. **us-105.1** adds
-**Mark fixed**, an outcome the database has had since migration 184 and the
-superadmin console has had a button for since US-16.9; the org-facing hub never
-grew one. The recurrence behaviour the manager asked for — fixed, and if it
-comes back it counts from one — turned out to need no code at all:
-`app_issues_open_fingerprint_key` is partial over `status in ('new','triaged')`,
-so a `fixed` row cannot be the `on conflict` target and the next occurrence
-inserts a fresh row. The story adds the button that reaches that, and the
-sentence that explains it. **us-105.2** moves promotion onto the list itself:
-`PromoteDialog` asks the one question a report cannot answer — which epic — and
-for a bug the answer is usually "none", so the common path was open-a-dialog-
-and-change-nothing. The dialog stays for when the epic matters. Both stories are
-UI only; no migration, and the `fixed` status was verified live on both projects
-before either was written.
-
-**Phase 106 — The Workbench acts on a draft** (drafted 2026-08-16, from the
-manager's own use). Every group on the Workbench's "Waiting on you" tab acts —
-Reviews approve, Fix & retry re-dispatches, Dispatch dispatches — except
-Triage, which holds every `draft` item and merely navigates: a bug offered
-"Open draft" where its own page offered "Dispatch RCA". **us-106.1** puts the
-factory's own answer in the row. `dispatch_kind_for` already decides what a
-plain dispatch of a draft means, so the label names it — planning for a story,
-an RCA for a bug (us-96.5), a build for a chore (us-96.1) — and a feature, the
-one type that cannot be dispatched from `draft` at all, drafts its PRD instead.
-Triage rows also start carrying `org_issue_dispatch_blocks`, so a held draft
-wears the hourglass rather than a button that errors. No migration: everything
-offered was already accepted. Drafts stay out of the batch selection, because
-"Dispatch all" means work the manager has already finished writing.
 
 **Phase 97 — GitHub linkage stays true** (drafted 2026-08-15, from the
 run-`ff9ef2be` incident). A repository rename/transfer on GitHub answers

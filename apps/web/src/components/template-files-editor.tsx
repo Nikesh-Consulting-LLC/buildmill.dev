@@ -120,12 +120,20 @@ export function TemplateFileEditor({
   canManage,
   onSave,
   orgId,
+  note,
+  actions,
 }: {
   file: TemplateFile;
   value: string;
   canManage: boolean;
   onSave: (text: string) => Promise<boolean>;
   orgId?: string;
+  /** US-114.2: what a project knows about this file that a template does
+   * not — who edited it, whether it differs from its template. Rendered
+   * under the description. */
+  note?: ReactNode;
+  /** US-114.3: controls beside Save (Reset to template, …). */
+  actions?: ReactNode;
 }) {
   const [draft, setDraft] = useState(value);
   const [saving, setSaving] = useState(false);
@@ -155,16 +163,21 @@ export function TemplateFileEditor({
               {file.description}
             </p>
           )}
+          {note}
         </div>
-        {canManage && (
-          <Button
-            size="sm"
-            className="shrink-0"
-            disabled={!dirty || saving}
-            onClick={() => void save()}
-          >
-            {saving ? "Saving…" : "Save"}
-          </Button>
+        {(canManage || actions) && (
+          <div className="flex shrink-0 items-center gap-2">
+            {actions}
+            {canManage && (
+              <Button
+                size="sm"
+                disabled={!dirty || saving}
+                onClick={() => void save()}
+              >
+                {saving ? "Saving…" : "Save"}
+              </Button>
+            )}
+          </div>
         )}
       </div>
       <MarkdownEditor

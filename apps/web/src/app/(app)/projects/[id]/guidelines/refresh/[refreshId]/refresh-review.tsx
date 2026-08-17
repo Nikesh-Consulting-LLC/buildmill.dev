@@ -206,7 +206,7 @@ export function RefreshReview({
             <Button
               size="sm"
               variant="outline"
-              render={<Link href={`/projects/${projectId}?tab=guidelines`} />}
+              render={<Link href={`/projects/${projectId}?tab=instructions&file=agents`} />}
             >
               Review and publish
             </Button>

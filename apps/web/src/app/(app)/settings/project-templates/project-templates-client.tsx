@@ -50,6 +50,8 @@ import {
   TemplateFileEditor,
   TemplateFileTree,
 } from "@/components/template-files-editor";
+import { TemplateZipButtons } from "@/components/template-zip-buttons";
+import type { ImportPlan } from "@/lib/template-zip";
 
 type GlobalTemplate = {
   id: string;
@@ -334,6 +336,54 @@ export function ProjectTemplatesClient({
     return true;
   }
 
+  /** US-114.1: apply a confirmed zip import — the same writes `saveFile`
+   * makes, batched: the document to the row, changed sections in one upsert,
+   * cleared sections in one delete. RLS (`manage_project`) is the boundary. */
+  async function applyImport(t: OrgTemplate, plan: ImportPlan) {
+    try {
+      const doc = plan.overwrite.find((f) => f.key === AGENTS_KEY);
+      const docCleared = plan.cleared.some((f) => f.key === AGENTS_KEY);
+      if (doc || docCleared) {
+        const { error } = await supabase
+          .from("org_project_templates")
+          .update({ agent_instructions: doc ? doc.text : "" })
+          .eq("id", t.id);
+        if (error) throw new Error(`AGENTS.md: ${error.message}`);
+      }
+      const upserts = plan.overwrite.filter((f) => f.key !== AGENTS_KEY);
+      if (upserts.length) {
+        const { error } = await supabase.from("org_project_template_sections").upsert(
+          upserts.map((f) => ({
+            org_template_id: t.id,
+            org_id: orgId,
+            section_type: "worker_instruction",
+            section_key: f.key,
+            title: "",
+            content: f.text,
+            sort_order: 0,
+          })),
+          { onConflict: "org_template_id,section_type,section_key" },
+        );
+        if (error) throw new Error(`${upserts.map((f) => f.path).join(", ")}: ${error.message}`);
+      }
+      const clears = plan.cleared.filter((f) => f.key !== AGENTS_KEY);
+      if (clears.length) {
+        const { error } = await supabase
+          .from("org_project_template_sections")
+          .delete()
+          .eq("org_template_id", t.id)
+          .eq("section_type", "worker_instruction")
+          .in(
+            "section_key",
+            clears.map((f) => f.key),
+          );
+        if (error) throw new Error(`${clears.map((f) => f.path).join(", ")}: ${error.message}`);
+      }
+    } finally {
+      await reload();
+    }
+  }
+
   const selected = templates.find((t) => t.id === selectedId) ?? null;
   const copiedKeys = new Set(templates.filter((t) => t.template_key).map((t) => t.template_key));
   const contents: TemplateContents | null =
@@ -572,6 +622,11 @@ export function ProjectTemplatesClient({
                   </div>
                   {canManage && (
                     <div className="flex gap-2">
+                      <TemplateZipButtons
+                        contents={contents}
+                        name={selected.name}
+                        onImport={(plan) => applyImport(selected, plan)}
+                      />
                       <Button variant="outline" size="sm" onClick={() => void toggleArchived(selected)}>
                         {selected.archived_at ? "Unarchive" : "Archive"}
                       </Button>

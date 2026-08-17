@@ -28,6 +28,7 @@ of its own.
 |---|---|---|
 | `/projects` | Project list — create a project (repo link, branches, slug) | New `projects` row |
 | `/projects/[id]` | One project's home — links to epics, releases, deployments, connect, audit, issues | Nothing directly — a hub |
+| `/projects/[id]?tab=instructions` | The project's instruction files in the templates' shape (US-114.2): Task processing + the grouped tree of `AGENTS.md` and `.buildmill/*.md` on the left, one editor on the right; the template banner (US-114.3) — which org template, how many files differ, Reset to template, Export/Import zip, Change template; mark-ready, publish, History, refresh above. `?tab=guidelines` / `?tab=worker-instructions` still land here | `projects.agent_instructions`, `worker_instructions` rows, `projects.org_template_id` (Change template) — direct Supabase; publish via `POST /projects/{id}/guidelines/save-instructions` |
 | `/projects/[id]/epics` | Epic list with rollup progress per epic | Nothing — read-only |
 | `/projects/[id]/epics/[epicId]` | One epic's issues grouped by type; complete/reopen the epic | `epics.status` via a direct Supabase update, guarded server-side by `guard_epic_completion` (see [Epic status](#epic-status)) |
 | `/projects/[id]/connect` | Everything a worker needs to attach: MCP URL, git remote, and this project's Power Git grants | `git_power_grants` rows (grant/revoke) via direct Supabase |
@@ -79,6 +80,7 @@ of its own.
 | `/settings/llm-providers` | Configure thinking-task LLM providers and which function routes to which | `llm_providers`, `llm_function_routes` (direct Supabase; keys via a write-only vault RPC) |
 | `/settings/notifications` | Webhook notification endpoints — add/delete/test | `POST/DELETE /notifications/endpoints`, `.../test` |
 | `/settings/team`, `/settings/tokens`, `/settings/workers` | Redirects to `/team` (folded in, US-9.13/9.14) | Nothing |
+| `/settings/project-templates` | The org's project templates — copy from the catalog, edit each of the seventeen files, set default, hide/archive; **Export** a template as a zip of its files and **Import** a zip over the selected template (US-114.1, Owner/Admin) | `org_project_templates`, `org_project_template_sections` — direct Supabase under `manage_project` RLS; `copy_project_template_into_org` RPC |
 
 **Admin** (platform-admin only)
 
@@ -89,6 +91,7 @@ of its own.
 | `/admin/users` | Every user — edit, deactivate, reset password, edit org memberships | `PATCH /admin/users/{id}`, `.../deactivate`, `.../reset-password`; `POST/PATCH/DELETE /admin/memberships` |
 | `/admin/roles` | The six-role capability matrix | `PUT /admin/role-capabilities`, `POST .../reset` |
 | `/admin/prompt-templates`, `/admin/prompt-templates/[...key]` | List every template; edit one thinking/worker-instruction/guideline-section override | `PUT/DELETE /admin/prompt-templates/{key}` |
+| `/admin/project-templates` | The superadmin catalog of project templates — create, rename, duplicate, set default, disable, delete; edit each file; **Export**/**Import** a template as a zip (US-114.1) | `GET/POST/PATCH/DELETE /admin/project-templates`, `.../duplicate`, `PUT/DELETE .../sections/worker_instruction/{kind}` |
 
 **Auth & standalone**
 
