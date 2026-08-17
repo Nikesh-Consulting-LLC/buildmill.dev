@@ -27,6 +27,9 @@ export type NotificationLike = {
 export const KNOWN_NOTIFICATION_TYPES = [
   "runner_fault",
   "deploy_unhealthy",
+  // us-116.8: every agent in the org offline for more than two minutes — told
+  // once per episode by the API's fleet-dark sweep.
+  "fleet_dark",
 ] as const;
 
 function str(payload: Record<string, unknown>, key: string): string | null {
@@ -71,6 +74,12 @@ export function describeNotification(n: NotificationLike): NotificationView {
         summary: "failed its health check",
         detail: message,
       };
+    case "fleet_dark":
+      return {
+        subject: "Every agent",
+        summary: "went offline",
+        detail: message,
+      };
     default:
       // Degraded, but never machine text and never a claim about an object
       // the notification is not about.
@@ -99,6 +108,9 @@ export function notificationHref(n: NotificationLike): string | null {
       : `/issues/${issueId}`;
   if (n.type === "runner_fault" && principalId)
     return `/team/${principalId}/runner`;
+  // us-116.8: the roster is where the fleet's state is — every row reads
+  // Offline until they come back.
+  if (n.type === "fleet_dark") return "/team";
   return null;
 }
 

@@ -5028,6 +5028,86 @@ def worker_idle_reason(settings: Settings, worker_id: str) -> dict[str, Any]:
         }
 
 
+# ---------------------------------------------------------------------------
+# us-116.8: fleet-dark episodes — one row per fleet-wide outage in an org.
+# ---------------------------------------------------------------------------
+
+
+def fleet_presence_by_org(settings: Settings) -> list[Any]:
+    """Per org with active autonomous agents: how many, how many are live now
+    (the `live_runner_sessions` view), and the newest heartbeat any of them
+    ever sent — the three facts `fleet_alarm.decide` needs."""
+    from .fleet_alarm import OrgPresence
+
+    with _connect(settings) as conn:
+        rows = conn.execute(
+            """
+            select w.org_id, o.name as org_name,
+                   count(distinct w.id) as agents,
+                   count(distinct l.worker_id) as live,
+                   max(s.last_seen_at) as last_seen
+            from public.workers w
+            join public.organizations o on o.id = w.org_id
+            left join public.live_runner_sessions l on l.worker_id = w.id
+            left join public.runner_sessions s on s.worker_id = w.id
+            where w.type = 'autonomous' and w.status = 'active'
+            group by w.org_id, o.name
+            """
+        ).fetchall()
+    return [
+        OrgPresence(
+            org_id=str(r["org_id"]), org_name=str(r["org_name"] or ""),
+            agents=int(r["agents"] or 0), live=int(r["live"] or 0),
+            last_seen=r["last_seen"],
+        )
+        for r in rows
+    ]
+
+
+def open_fleet_dark_episodes(settings: Settings) -> dict[str, dict[str, Any]]:
+    with _connect(settings) as conn:
+        rows = conn.execute(
+            "select id, org_id, started_at, agent_count, app_issue_id, notified_at"
+            " from public.fleet_dark_episodes where ended_at is null"
+        ).fetchall()
+    return {str(r["org_id"]): dict(r) for r in rows}
+
+
+def open_fleet_dark_episode(
+    settings: Settings, org_id: str, started_at: Any, agent_count: int
+) -> str:
+    with _connect(settings) as conn:
+        row = conn.execute(
+            "insert into public.fleet_dark_episodes (org_id, started_at, agent_count)"
+            " values (%s, %s, %s) returning id",
+            (org_id, started_at, agent_count),
+        ).fetchone()
+        conn.commit()
+    return str(row["id"])
+
+
+def mark_fleet_dark_notified(
+    settings: Settings, episode_id: str, app_issue_id: str | None
+) -> None:
+    with _connect(settings) as conn:
+        conn.execute(
+            "update public.fleet_dark_episodes set notified_at = now(),"
+            " app_issue_id = %s where id = %s",
+            (app_issue_id, episode_id),
+        )
+        conn.commit()
+
+
+def close_fleet_dark_episode(settings: Settings, episode_id: str, at: Any) -> None:
+    with _connect(settings) as conn:
+        conn.execute(
+            "update public.fleet_dark_episodes set ended_at = %s"
+            " where id = %s and ended_at is null",
+            (at, episode_id),
+        )
+        conn.commit()
+
+
 # us-116.4: the one vocabulary every surface renders, in precedence order.
 # `offline` sits first because nothing below it is actionable while the agent is
 # not there; `stopped` is what the manager's vocabulary calls `paused` (a state

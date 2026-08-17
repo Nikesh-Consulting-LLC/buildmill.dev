@@ -55,6 +55,18 @@ test("an unhealthy deploy names the deployment", () => {
   assert.equal(v.summary, "failed its health check");
 });
 
+test("a fleet-dark notification says every agent went offline and goes to the roster", () => {
+  const n = notif("fleet_dark", {
+    message: "All 6 agents in Sandy's Workspace went offline at 11:49 UTC on 2026-08-17 and none has reconnected.",
+    agents: 6,
+  });
+  const v = describeNotification(n);
+  assert.equal(v.subject, "Every agent");
+  assert.equal(v.summary, "went offline");
+  assert.ok(v.detail?.startsWith("All 6 agents"));
+  assert.equal(notificationHref(n), "/team");
+});
+
 test("no row ever says 'a work item' for something that is not one", () => {
   for (const type of KNOWN_NOTIFICATION_TYPES) {
     const v = describeNotification(notif(type, {}));

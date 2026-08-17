@@ -10,6 +10,7 @@ import {
   KeyRound,
   Pause,
   Play,
+  Square,
   SlidersHorizontal,
   SquareTerminal,
   User,
@@ -17,7 +18,8 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { RoleCapabilities } from "@/components/role-icon";
-import { apiFetch } from "@/lib/api";
+import { apiCall, apiFetch } from "@/lib/api";
+import { toastError, toastSuccess } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { formatWorkSeconds } from "@/lib/work-seconds";
 import { formatLastSeen } from "@/lib/format-time";
@@ -545,6 +547,41 @@ function MemberList({
     }
   }
 
+  // us-116.5: Start means start. One call per agent, authorized on its slot's
+  // org; the API says what it did (enabled, and restarted the service when the
+  // agent was not live) or why it refused — and every answer is a toast, never
+  // swallowed. `router.refresh()` re-reads presence; the status poll follows.
+  async function agentAction(principalId: string, action: "start" | "stop", name: string) {
+    setError(null);
+    setBusyId(principalId);
+    try {
+      const res = await apiCall(`/api/v1/agents/${principalId}/${action}`, {
+        method: "POST",
+      });
+      if (action === "start") {
+        toastSuccess(
+          res?.restarted
+            ? `${name} enabled — restarting its service`
+            : `${name} started`,
+        );
+      } else {
+        toastSuccess(
+          res?.finishing
+            ? `${name} stopped — finishing ${res.finishing} first`
+            : `${name} stopped`,
+        );
+      }
+      router.refresh();
+    } catch (e) {
+      toastError(
+        action === "start" ? `Could not start ${name}` : `Could not stop ${name}`,
+        (e as Error).message,
+      );
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   if (!members.length) {
     return (
       <EmptyState
@@ -800,23 +837,51 @@ function MemberList({
       </span>
     );
 
+    // us-116.5: is this agent Stopped (paused) right now — the one fact the
+    // Start/Stop toggle needs, from the same status the State cell renders.
+    const agentStopped = agentState === "stopped";
     const actions = (
       <span className="flex shrink-0 items-center justify-end gap-1">
 {canManage && (
           <>
-            <Button
-              variant="outline"
-              size="sm"
-              title={suspended ? "Reactivate" : "Suspend"}
-              disabled={busyId === m.principal_id}
-              onClick={() =>
-                mutate(m.principal_id, {
-                  status: suspended ? "active" : "suspended",
-                })
-              }
-            >
-              {suspended ? <Play className="size-4" /> : <Pause className="size-4" />}
-            </Button>
+            {/* us-116.5: the membership ▶/⏸ leaves agent rows. On an agent it
+                was Suspend/Reactivate — and Suspend REVOKES the token, which
+                is how the whole Sandy fleet died on 2026-08-09 from a button
+                that looked like pause. Humans keep it; an agent's suspend
+                lives in its detail panel behind a confirm that says so. */}
+            {!isAgent && (
+              <Button
+                variant="outline"
+                size="sm"
+                title={suspended ? "Reactivate" : "Suspend"}
+                disabled={busyId === m.principal_id}
+                onClick={() =>
+                  mutate(m.principal_id, {
+                    status: suspended ? "active" : "suspended",
+                  })
+                }
+              >
+                {suspended ? <Play className="size-4" /> : <Pause className="size-4" />}
+              </Button>
+            )}
+            {isAgent && canManageOrg && seat && (
+              <Button
+                variant="outline"
+                size="sm"
+                title={agentStopped ? "Start" : "Stop"}
+                data-testid={agentStopped ? "agent-start" : "agent-stop"}
+                disabled={busyId === m.principal_id}
+                onClick={() =>
+                  agentAction(
+                    m.principal_id,
+                    agentStopped ? "start" : "stop",
+                    principalName(m),
+                  )
+                }
+              >
+                {agentStopped ? <Play className="size-4" /> : <Square className="size-4" />}
+              </Button>
+            )}
             {!isAgent && m.user_id && m.principals?.email && (
               <Button
                 variant="outline"
@@ -948,6 +1013,15 @@ function MemberList({
                 effortWindowDays={effortWindowDays}
                 canManage={canManage}
                 onRemoved={() => router.refresh()}
+                // us-116.5: an agent's Suspend/Reactivate lives here now.
+                onSuspendToggled={
+                  isAgent
+                    ? () =>
+                        mutate(m.principal_id, {
+                          status: suspended ? "active" : "suspended",
+                        })
+                    : undefined
+                }
               />
             </TabsContent>
             <TabsContent value="connect" className="grid gap-5 pt-3">

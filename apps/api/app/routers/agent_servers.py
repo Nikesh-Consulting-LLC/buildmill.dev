@@ -489,6 +489,10 @@ class AddSlotsBody(BaseModel):
     slots: int = 1
     adopt_worker_id: str | None = None
     confirm_capacity: bool = False
+    # us-116.6: the state the new slot lands in. `paused` is the bare default
+    # (a slot with no grants has nothing to claim); the wizard asks for
+    # `enabled` because it has just collected the intent.
+    desired_state: str = "paused"
 
 
 @router.post("/{host_id}/slots")
@@ -518,6 +522,10 @@ async def add_slots(
         raise HTTPException(
             status_code=422, detail="binding an existing agent adds exactly one slot"
         )
+    if body.desired_state not in ("enabled", "paused"):
+        raise HTTPException(
+            status_code=422, detail="desired_state must be 'enabled' or 'paused'"
+        )
 
     if body.adopt_worker_id:
         await _check_adoptable(settings, user, host, body.adopt_worker_id)
@@ -535,6 +543,7 @@ async def add_slots(
         "add_slot",
         slots=body.slots,
         adopt_worker_id=body.adopt_worker_id,
+        desired_state=body.desired_state,
     )
 
 

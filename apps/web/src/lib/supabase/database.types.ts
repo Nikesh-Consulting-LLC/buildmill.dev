@@ -214,6 +214,7 @@ export type Database = {
       agent_pool_placement_requests: {
         Row: {
           created_at: string
+          desired_state: string
           error: string | null
           id: string
           org_id: string
@@ -225,6 +226,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          desired_state?: string
           error?: string | null
           id?: string
           org_id: string
@@ -236,6 +238,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          desired_state?: string
           error?: string | null
           id?: string
           org_id?: string
@@ -1851,6 +1854,47 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "projects"
             referencedColumns: ["id", "org_id"]
+          },
+        ]
+      }
+      fleet_dark_episodes: {
+        Row: {
+          agent_count: number
+          app_issue_id: string | null
+          created_at: string
+          ended_at: string | null
+          id: string
+          notified_at: string | null
+          org_id: string
+          started_at: string
+        }
+        Insert: {
+          agent_count?: number
+          app_issue_id?: string | null
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          notified_at?: string | null
+          org_id: string
+          started_at: string
+        }
+        Update: {
+          agent_count?: number
+          app_issue_id?: string | null
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          notified_at?: string | null
+          org_id?: string
+          started_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fleet_dark_episodes_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -4702,6 +4746,7 @@ export type Database = {
       }
       runner_incidents: {
         Row: {
+          cleared_at: string | null
           created_at: string
           id: string
           kind: string
@@ -4711,6 +4756,7 @@ export type Database = {
           worker_id: string
         }
         Insert: {
+          cleared_at?: string | null
           created_at?: string
           id?: string
           kind?: string
@@ -4720,6 +4766,7 @@ export type Database = {
           worker_id: string
         }
         Update: {
+          cleared_at?: string | null
           created_at?: string
           id?: string
           kind?: string
