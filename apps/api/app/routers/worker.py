@@ -25,10 +25,10 @@ from .. import (
     github_tokens,
     issue_sync,
     mcp_tools,
+    model_resolution,
     project_env,
     reconcile,
     release_prep,
-    run_settings,
     validation,
 )
 from ..config import Settings, get_settings
@@ -151,14 +151,12 @@ def stamp_run_settings(
             kind,
         )
 
-    resolved = run_settings.resolve(
-        kind=kind,
-        run_routes=config.get("run_routes"),
-        presets_by_id=db.presets_by_id(settings, org_id),
-        org_default=db.org_default_preset(settings, org_id),
-        legacy_model=(config.get("model_routes") or {}).get(kind),
-        # US-66.1: the agent's own pin for this kind, if it set one.
-        agent_model_override=(config.get("model_overrides") or {}).get(kind),
+    # us-116.1: the resolver's inputs are built in ONE place, shared with the
+    # session path — the two used to disagree because the session had its own
+    # two-line copy of these rules.
+    resolved = model_resolution.resolve_for_kind(
+        model_resolution.load_inputs(settings, org_id, config=config),
+        kind,
         supervisor_override=supervisor,
         manager_override=overrides.get("manager"),
     )

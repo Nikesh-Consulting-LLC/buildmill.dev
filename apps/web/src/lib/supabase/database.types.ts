@@ -588,6 +588,8 @@ export type Database = {
           error: string | null
           id: string
           last_active_at: string
+          model: string | null
+          model_kind: string | null
           org_id: string
           project_id: string
           status: string
@@ -602,6 +604,8 @@ export type Database = {
           error?: string | null
           id?: string
           last_active_at?: string
+          model?: string | null
+          model_kind?: string | null
           org_id: string
           project_id: string
           status?: string
@@ -616,6 +620,8 @@ export type Database = {
           error?: string | null
           id?: string
           last_active_at?: string
+          model?: string | null
+          model_kind?: string | null
           org_id?: string
           project_id?: string
           status?: string

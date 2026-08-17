@@ -10230,29 +10230,25 @@ def record_agent_session_event(
     return True
 
 
-def session_model(settings: Settings, worker_id: str) -> str:
-    """The model a CLI-window session reasons with — the agent's own `code`
-    role, the closest thing a free-form conversation has to a kind. Empty when
-    the agent has none, which the CALLER must turn into a refusal (US-78.5's
-    rule: no model, no session — never a CLI falling back to a default nobody
-    chose).
+def record_session_model(
+    settings: Settings, session_id: str, model: str, kind: str | None
+) -> None:
+    """us-116.1: which model a CLI-window session reasons with, and which
+    kind it resolved through — on the row, so "why is this conversation using
+    Sonnet" has an answer that is not a guess.
 
-    US-83.2: this replaces `session_model_env`, a stub that returned
-    `{"model": ...}` while the runner expected the full gateway env — no key
-    was ever minted, so a session's CLI would have started credential-less and
-    the no-model refusal (keyed on GROK_MODELS_BASE_URL) could never fire.
-    The env is now built where runs build theirs: a real mint plus
-    `llm_gateway.module_env`, in the session-open path."""
-    if not _valid_uuid(worker_id):
-        return ""
+    (This replaces `session_model`, the two-line reader of
+    `model_overrides.code` that was a second implementation of the resolver's
+    precedence rules; a session now resolves through
+    `model_resolution.resolve_session`, the same path a run's claim uses.)"""
+    if not _valid_uuid(session_id):
+        return
     with _connect(settings) as conn:
-        row = conn.execute(
-            "select model_overrides, model_routes from public.runner_config where worker_id = %s",
-            (worker_id,),
-        ).fetchone()
-    overrides = (row or {}).get("model_overrides") or {}
-    routes = (row or {}).get("model_routes") or {}
-    return str(overrides.get("code") or routes.get("code") or "")
+        conn.execute(
+            "update public.agent_sessions set model = %s, model_kind = %s where id = %s",
+            (model or None, kind or None, session_id),
+        )
+        conn.commit()
 
 
 def idle_agent_sessions(settings: Settings, minutes: int) -> list[dict[str, Any]]:

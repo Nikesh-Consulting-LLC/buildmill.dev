@@ -19,7 +19,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .. import db
+from .. import db, model_resolution
 from ..auth import AuthUser, verify_token
 from ..config import Settings, get_settings
 from ..supabase import postgrest_get, rpc
@@ -117,21 +117,32 @@ async def open_session(
     # `session_model_env` was a stub ({"model": ...}), so no key was ever
     # minted, the CLI would have started credential-less, and the runner's
     # no-model refusal (keyed on GROK_MODELS_BASE_URL) could never fire.
-    model = db.session_model(settings, body.worker_id)
+    #
+    # us-116.1: WHICH model is the run resolver's answer, asked about a kind
+    # the agent actually claims — not `model_overrides.code` read in isolation,
+    # which refused an Architect with six roles pinned for lacking a model for
+    # work it is configured never to do.
+    config = db.get_runner_config(settings, body.worker_id)
+    inputs = model_resolution.load_inputs(settings, org_id, config=config)
+    picked = model_resolution.resolve_session(inputs)
+    model = picked.model or ""
     if not model:
-        # US-78.5's rule, applied before anything spawns on the machine.
+        # US-78.5's rule, applied before anything spawns on the machine. The
+        # refusal names the agent, the roles it tried and every place a model
+        # can come from — never a control that is not on the page.
         db.finish_agent_session(
             settings, session["id"], "failed", error="no model configured"
         )
         raise HTTPException(
             status_code=409,
-            detail=(
-                "This agent has no model to reason with — set one on its "
-                "settings page under Model per role, then open the session again."
+            detail=model_resolution.no_model_refusal(
+                str(worker.get("name") or ""), picked.tried, inputs.org_default
             ),
         )
+    # AC3: which kind the conversation resolved through, on the row — so "why
+    # is this session using Sonnet" has an answer that is not a guess.
+    db.record_session_model(settings, session["id"], model, picked.kind)
     try:
-        config = db.get_runner_config(settings, body.worker_id)
         key = db.mint_gateway_key(
             settings,
             org_id,
