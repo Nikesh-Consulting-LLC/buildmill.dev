@@ -78,8 +78,6 @@ export const MODULES: {
   // US-60.1: Claude Code under a platform-billed name — no license or key
   // to bring, billed to the platform's own key instead of the org's.
   { key: "buildmill", label: "Buildmill Agent", help: "Claude Code, billed to the platform's own key — zero setup." },
-  { key: "grok", label: "Grok Build", help: "xAI's coding agent CLI.", offered: true },
-  { key: "opencode", label: "OpenCode", help: "The open-source coding agent CLI.", offered: true },
   // US-78.3: the only agent type that holds a live session you can watch and
   // type into. Platform-managed model, platform pools only (US-78.5/78.6).
   {
@@ -89,6 +87,8 @@ export const MODULES: {
     offered: true,
     poolOnly: true,
   },
+  { key: "grok", label: "Grok Build", help: "xAI's coding agent CLI.", offered: true },
+  { key: "opencode", label: "OpenCode", help: "The open-source coding agent CLI.", offered: true },
   { key: "sim", label: "Simulator", help: "A deterministic no-LLM module for testing the pipeline." },
 ];
 

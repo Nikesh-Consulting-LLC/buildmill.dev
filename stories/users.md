@@ -25,8 +25,9 @@ seed-publishes-files and section preview, 99.7's accept/decline, 100.1's
 retired-unbuilt-do-not-re-propose list — is in
 [APPLICATION.md → Delivery history](../APPLICATION.md#delivery-history).
 
-Twenty-four stories are open: Phase 110's agent-scope cleanup (requested
-2026-08-16), Phase 109's Team page cleanup and the metrics
+Twenty-seven stories are open: Phase 113's release-prep crash (found 2026-08-17, blocking every release since Phase 101 shipped), Phase 112's Team roster table and Phase 111's
+Add agent wizard reorder (both requested 2026-08-17), Phase 110's agent-scope cleanup (requested
+2026-08-16, built and released 2026-08-17), Phase 109's Team page cleanup and the metrics
 bug it uncovered (requested
 2026-08-16), Phase 108's production crash inbox (drafted
 2026-08-16, two of its six defects breaking live paths today), Phase 107's
@@ -40,30 +41,69 @@ today), and the residue carried out of Phases 85–89:
 
 | Order | Story | Title | Status |
 |---|---|---|---|
-| 1 | [us-110.1](us-110.1-an-agents-projects-are-the-ones-you-checked.md) | An agent's projects are the ones you checked | Testing |
-| 2 | [us-109.1](us-109.1-the-team-row-says-who-not-how-much.md) | The Team row says who, not how much | Testing |
-| 3 | [us-109.2](us-109.2-the-team-kpis-price-the-work.md) | The team's KPI row prices the work | Testing |
-| 4 | [us-109.3](us-109.3-nobody-wrote-node-modules.md) | Nobody wrote node_modules | Testing |
-| 5 | [us-108.1](us-108.1-the-crash-inbox-goes-to-zero.md) | The crash inbox goes to zero | New |
-| 6 | [us-107.1](us-107.1-a-work-item-can-be-marked-fixed.md) | A work item can be marked fixed | Testing |
-| 7 | [us-107.2](us-107.2-nothing-sits-queued-forever.md) | Nothing sits queued forever | Testing |
-| 8 | [us-107.3](us-107.3-an-agent-capability-has-an-icon.md) | An agent capability has an icon | Testing |
-| 9 | [us-106.1](us-106.1-a-draft-dispatches-from-the-workbench.md) | A draft dispatches from the Workbench | Testing |
-| 10 | [us-105.1](us-105.1-a-report-can-be-marked-fixed.md) | A report can be marked fixed | Testing |
-| 11 | [us-105.2](us-105.2-a-report-is-promoted-in-one-click.md) | A report is promoted in one click | Testing |
-| 12 | [us-103.1](us-103.1-an-abandoned-release-prep-is-reaped.md) | An abandoned release prep is reaped | Testing |
-| 13 | [us-103.3](us-103.3-the-manager-can-stop-an-in-flight-release.md) | The manager can stop an in-flight release | Testing |
-| 14 | [us-103.2](us-103.2-a-restarted-runner-re-adopts-its-prep.md) | A restarted runner re-adopts the prep it was holding | Testing |
-| 15 | [us-103.4](us-103.4-the-workbench-shows-the-release-in-flight.md) | The Workbench shows the release in flight | Testing |
-| 16 | [us-103.5](us-103.5-a-release-in-flight-freezes-dispatch.md) | A release in flight freezes dispatch, and says so | Testing |
-| 17 | [us-104.1](us-104.1-every-migration-number-is-unique.md) | Every migration number is unique | Testing |
-| 18 | [us-104.2](us-104.2-the-api-test-suite-lives-in-the-repo.md) | The API test suite lives in the repo | Testing |
-| 19 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
-| 20 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
-| 21 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
-| 22 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
-| 23 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
-| 24 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+| 1 | [us-113.1](us-113.1-release-notes-can-be-submitted.md) | Release notes can be submitted | New |
+| 2 | [us-112.1](us-112.1-the-team-roster-is-a-table.md) | The Team roster is a table | Testing |
+| 3 | [us-111.1](us-111.1-the-wizard-asks-in-the-right-order.md) | The Add agent wizard asks in the right order | Testing |
+| 4 | [us-110.1](us-110.1-an-agents-projects-are-the-ones-you-checked.md) | An agent's projects are the ones you checked | Testing |
+| 5 | [us-109.1](us-109.1-the-team-row-says-who-not-how-much.md) | The Team row says who, not how much | Testing |
+| 6 | [us-109.2](us-109.2-the-team-kpis-price-the-work.md) | The team's KPI row prices the work | Testing |
+| 7 | [us-109.3](us-109.3-nobody-wrote-node-modules.md) | Nobody wrote node_modules | Testing |
+| 8 | [us-108.1](us-108.1-the-crash-inbox-goes-to-zero.md) | The crash inbox goes to zero | New |
+| 9 | [us-107.1](us-107.1-a-work-item-can-be-marked-fixed.md) | A work item can be marked fixed | Testing |
+| 10 | [us-107.2](us-107.2-nothing-sits-queued-forever.md) | Nothing sits queued forever | Testing |
+| 11 | [us-107.3](us-107.3-an-agent-capability-has-an-icon.md) | An agent capability has an icon | Testing |
+| 12 | [us-106.1](us-106.1-a-draft-dispatches-from-the-workbench.md) | A draft dispatches from the Workbench | Testing |
+| 13 | [us-105.1](us-105.1-a-report-can-be-marked-fixed.md) | A report can be marked fixed | Testing |
+| 14 | [us-105.2](us-105.2-a-report-is-promoted-in-one-click.md) | A report is promoted in one click | Testing |
+| 15 | [us-103.1](us-103.1-an-abandoned-release-prep-is-reaped.md) | An abandoned release prep is reaped | Testing |
+| 16 | [us-103.3](us-103.3-the-manager-can-stop-an-in-flight-release.md) | The manager can stop an in-flight release | Testing |
+| 17 | [us-103.2](us-103.2-a-restarted-runner-re-adopts-its-prep.md) | A restarted runner re-adopts the prep it was holding | Testing |
+| 18 | [us-103.4](us-103.4-the-workbench-shows-the-release-in-flight.md) | The Workbench shows the release in flight | Testing |
+| 19 | [us-103.5](us-103.5-a-release-in-flight-freezes-dispatch.md) | A release in flight freezes dispatch, and says so | Testing |
+| 20 | [us-104.1](us-104.1-every-migration-number-is-unique.md) | Every migration number is unique | Testing |
+| 21 | [us-104.2](us-104.2-the-api-test-suite-lives-in-the-repo.md) | The API test suite lives in the repo | Testing |
+| 22 | [us-97.1](us-97.1-a-moved-repo-relinks-or-asks.md) | A moved repo relinks itself, or asks | New |
+| 23 | [us-85.3](us-85.3-a-broken-machine-is-not-a-work-fault.md) | A broken machine is not a work fault | New |
+| 24 | [us-87.9](us-87.9-every-foreign-key-has-its-index.md) | Every foreign key has its index | New |
+| 25 | [us-87.8](us-87.8-logs-age-out.md) | Logs age out, diffs live outside the row | New |
+| 26 | [us-87.10](us-87.10-a-page-load-has-a-budget.md) | A page load has a budget | New |
+| 27 | [us-89.3](us-89.3-grok-settings-ride-the-managed-scope.md) | The agent's Grok settings ride the managed scope | New |
+
+**Phase 113 — Release notes can be submitted** (found 2026-08-17). Every
+release prep has crashed since Phase 101 shipped: us-101.4 added `notes_doc` to
+the update patch as a raw dict, and psycopg has no dumper for `dict`, so
+`update_release` raises client-side before any SQL is sent — which is why
+Postgres logged nothing and the agent read a server 500 as bad input and
+retried sixty-one times. **us-113.1** encodes the value the way every other
+jsonb write in `db.py` already does, guards `update_release` so a dict can
+never again reach psycopg raw, and adds the regression test the existing
+suite could not have: every test of this path monkeypatches `update_release`,
+so the adaptation that fails never ran.
+
+**Phase 112 — The Team roster is a table** (requested 2026-08-17). The roster
+is a list of bordered cards whose fields land wherever the content to their
+left ends, so "Pod-001 slot 9" sits at a different x-position on every row and
+nothing can be read down a column — and each member stacks up to three lines
+for facts a few characters wide. us-109.1 already did the subtractive half by
+moving the module, token count, join date and output figures into the expand
+panel; what remains is content in the wrong shape. **us-112.1** makes it a real
+table on the shared `ui/table.tsx`, one line per member, splitting the
+`worked · completed` prose string into two right-aligned numeric columns so
+agents can actually be compared. The stacked layout US-68.6 introduced stays
+below `sm`, because a table there would re-create the squeeze bug it fixed.
+
+**Phase 111 — The Add agent wizard asks in the right order** (requested
+2026-08-17). The wizard asks about plumbing before it asks what the agent is:
+placement on step 2, agent type and roles on step 3. That order is backwards in
+a way the code already pays for — `interactive` is pool-only, so choosing it
+retracts the owned-machine option chosen a page earlier, and two separate
+snap-backs exist to undo the contradiction after the fact. **us-111.1** moves
+the four role checkboxes up to step 1 beside the name, moves Agent Type to step
+2 above the placement it constrains, and leaves step 3 holding only the project
+list us-110.1 left it with — relabelled *Projects*. Buildmill Interactive Agent
+becomes the first type and the default, conditionally: it is pool-only, so an
+org with no selectable pool would otherwise open step 2 with a dead Next, and
+falls back to the first type that has somewhere to run.
 
 **Phase 110 — An agent's projects are the ones you checked** (requested
 2026-08-16). Step 3 of the Add agent wizard asks which projects an agent may
