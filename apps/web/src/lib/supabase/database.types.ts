@@ -3257,9 +3257,11 @@ export type Database = {
         Row: {
           agent_instructions: string
           archived_at: string | null
+          category: string
           created_at: string
           description: string
           id: string
+          image_path: string | null
           is_available: boolean
           is_default: boolean
           name: string
@@ -3272,9 +3274,11 @@ export type Database = {
         Insert: {
           agent_instructions?: string
           archived_at?: string | null
+          category?: string
           created_at?: string
           description?: string
           id?: string
+          image_path?: string | null
           is_available?: boolean
           is_default?: boolean
           name: string
@@ -3287,9 +3291,11 @@ export type Database = {
         Update: {
           agent_instructions?: string
           archived_at?: string | null
+          category?: string
           created_at?: string
           description?: string
           id?: string
+          image_path?: string | null
           is_available?: boolean
           is_default?: boolean
           name?: string
@@ -3868,6 +3874,7 @@ export type Database = {
           created_at: string
           description: string
           id: string
+          image_path: string | null
           is_default: boolean
           is_disabled: boolean
           key: string
@@ -3883,6 +3890,7 @@ export type Database = {
           created_at?: string
           description?: string
           id?: string
+          image_path?: string | null
           is_default?: boolean
           is_disabled?: boolean
           key: string
@@ -3898,6 +3906,7 @@ export type Database = {
           created_at?: string
           description?: string
           id?: string
+          image_path?: string | null
           is_default?: boolean
           is_disabled?: boolean
           key?: string
@@ -6494,6 +6503,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      template_image_writable: { Args: { p_name: string }; Returns: boolean }
       worker_attempt_count: {
         Args: { p_issue: string; p_worker: string }
         Returns: number

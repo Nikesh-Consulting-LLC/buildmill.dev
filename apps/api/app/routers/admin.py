@@ -15,7 +15,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from .. import admin_auth
+from .. import admin_auth, storage
 from ..auth import AuthUser, verify_token
 from ..config import Settings, get_settings
 from ..supabase import (
@@ -899,6 +899,37 @@ class ProjectTemplatePatchBody(BaseModel):
     # us-100.4: the AGENTS.md body a project created from this template
     # starts with. Same ceiling as a project's own document.
     agent_instructions: str | None = Field(default=None, max_length=200000)
+    # US-118.1: the cover. `null` clears it (the web renders a generated
+    # cover); `builtin/<name>` is a cover shipped with the web app;
+    # `catalog/<this template>/cover` is an object the browser already put
+    # in the public `template-images` bucket under RLS. Nothing else — the
+    # DB CHECK says the same, this just answers 422 instead of 409.
+    image_path: str | None = Field(default=None, max_length=200)
+
+
+TEMPLATE_IMAGE_BUCKET = "template-images"
+_BUILTIN_COVER_RE = re.compile(r"^builtin/[a-z0-9-]{1,40}$")
+
+
+def template_cover_object(template_id: str) -> str:
+    """The one object path a catalog template's upload may live at."""
+    return f"catalog/{template_id}/cover"
+
+
+def validate_template_image_path(template_id: str, image_path: str | None) -> None:
+    if image_path is None:
+        return
+    if _BUILTIN_COVER_RE.match(image_path):
+        return
+    if image_path == template_cover_object(template_id):
+        return
+    raise HTTPException(
+        status_code=422,
+        detail=(
+            "image_path must be null, builtin/<name>, or "
+            f"{template_cover_object(template_id)}"
+        ),
+    )
 
 
 @router.patch("/project-templates/{template_id}")
@@ -917,6 +948,8 @@ async def patch_project_template(
         patch["key"] = patch["key"].strip()
         if not patch["key"]:
             raise HTTPException(status_code=422, detail="key cannot be blank")
+    if "image_path" in patch:
+        validate_template_image_path(template_id, patch["image_path"])
 
     existing = await admin_get(
         settings, "project_templates", {"id": f"eq.{template_id}", "select": "is_default,is_disabled"}
@@ -988,6 +1021,15 @@ async def duplicate_project_template(
             "category": source["category"],
             # us-100.4: the document is part of what a duplicate carries.
             "agent_instructions": source.get("agent_instructions") or "",
+            # US-118.1: a built-in cover is a name, so it travels; an uploaded
+            # cover is one object owned by one row — sharing it would make
+            # Remove on either break the other, so a duplicate of an upload
+            # starts with the generated cover.
+            "image_path": (
+                source.get("image_path")
+                if _BUILTIN_COVER_RE.match(source.get("image_path") or "")
+                else None
+            ),
         },
     )
     new_template = created[0]
@@ -1027,6 +1069,15 @@ async def delete_project_template(
             status_code=409, detail="cannot delete the default template"
         )
     await admin_delete(settings, "project_templates", {"id": f"eq.{template_id}"})
+    # US-118.1: the uploaded cover goes with the row — best-effort, because a
+    # missing object is the common case and a Storage hiccup must not leave
+    # the row half-deleted in the manager's eyes.
+    try:
+        await storage.delete_object(
+            settings, template_cover_object(template_id), bucket=TEMPLATE_IMAGE_BUCKET
+        )
+    except storage.StorageError:
+        pass
     return {"ok": True}
 
 

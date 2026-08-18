@@ -54,10 +54,10 @@ org side, 118.3 the New project row, 118.4 Change template.
 | 10 | [us-116.5](us-116.5-start-means-start.md) | Start means start | Testing |
 | 11 | [us-116.6](us-116.6-a-new-agent-starts-ready.md) | A new agent starts ready | Testing |
 | 12 | [us-116.8](us-116.8-the-fleet-says-when-it-goes-dark.md) | The fleet says when it goes dark, and says a standing fault once | Testing |
-| 13 | [us-118.1](us-118.1-a-template-carries-a-description-and-a-cover.md) | A template carries a description and a cover | New |
-| 14 | [us-118.2](us-118.2-an-orgs-copy-can-change-its-face.md) | An org's copy can change its face | New |
-| 15 | [us-118.3](us-118.3-a-new-project-is-chosen-from-cards.md) | A new project is chosen from cards | New |
-| 16 | [us-118.4](us-118.4-change-template-shows-the-same-card.md) | Change template shows the same card | New |
+| 13 | [us-118.1](us-118.1-a-template-carries-a-description-and-a-cover.md) | A template carries a description and a cover | Testing |
+| 14 | [us-118.2](us-118.2-an-orgs-copy-can-change-its-face.md) | An org's copy can change its face | Testing |
+| 15 | [us-118.3](us-118.3-a-new-project-is-chosen-from-cards.md) | A new project is chosen from cards | Testing |
+| 16 | [us-118.4](us-118.4-change-template-shows-the-same-card.md) | Change template shows the same card | Testing |
 
 **Phase 118 — A template shows its face** (requested 2026-08-17; design
 reference [docs/design/template-cards.html](../docs/design/template-cards.html),

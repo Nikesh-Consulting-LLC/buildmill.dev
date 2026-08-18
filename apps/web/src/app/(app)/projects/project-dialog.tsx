@@ -24,6 +24,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { TemplateRowPicker, type RowTemplate } from "@/components/template-row-picker";
+import { defaultTemplateId } from "@/lib/template-picker";
 
 export type ProjectFormData = {
   id: string;
@@ -33,14 +35,18 @@ export type ProjectFormData = {
   default_branch: string;
 };
 
-type OrgTemplate = { id: string; name: string; is_default: boolean };
+// US-118.3: the picker shows the face — description, category, cover.
+type OrgTemplate = RowTemplate & { id: string; name: string; is_default: boolean };
 
 export function ProjectDialog({
   orgId,
   project,
+  canManageTemplates = false,
 }: {
   orgId: string;
   project?: ProjectFormData;
+  /** US-118.3: an org with no templates shows a manager where to add one. */
+  canManageTemplates?: boolean;
 }) {
   const router = useRouter();
   const isEdit = !!project;
@@ -65,15 +71,21 @@ export function ProjectDialog({
     const supabase = createClient();
     supabase
       .from("org_project_templates")
-      .select("id, name, is_default")
+      .select("id, name, description, category, image_path, updated_at, is_default")
       .eq("org_id", orgId)
       .eq("is_available", true)
       .is("archived_at", null)
       .order("is_default", { ascending: false })
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true })
       .then(({ data }) => {
         const list = (data as OrgTemplate[] | null) ?? [];
         setTemplates(list);
-        setTemplateId((prev) => prev || list.find((t) => t.is_default)?.id || list[0]?.id || "");
+        // Keep a choice made earlier in this dialog, but not one from a
+        // different org's list (the component survives a workspace switch).
+        setTemplateId((prev) =>
+          prev && list.some((t) => t.id === prev) ? prev : defaultTemplateId(list),
+        );
       });
   }, [open, isEdit, orgId]);
 
@@ -149,7 +161,7 @@ export function ProjectDialog({
           </>
         )}
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className={isEdit ? undefined : "sm:max-w-3xl"}>
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit project" : "New project"}</DialogTitle>
           <DialogDescription>
@@ -159,12 +171,36 @@ export function ProjectDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSave} className="grid gap-4">
+          {!isEdit && templates && templates.length > 0 && (
+            <div className="grid min-w-0 gap-2">
+              <span id="project-template-label" className="text-sm font-medium">
+                Start from a template
+              </span>
+              <TemplateRowPicker
+                templates={templates}
+                value={templateId}
+                onChange={setTemplateId}
+                labelId="project-template-label"
+                disabled={saving}
+              />
+            </div>
+          )}
+          {!isEdit && templates && templates.length === 0 && canManageTemplates && (
+            <p className="text-xs text-muted-foreground">
+              No project templates yet — add one under{" "}
+              <a href="/settings/project-templates" className="underline underline-offset-4">
+                Settings → Project templates
+              </a>
+              .
+            </p>
+          )}
           <div className="grid gap-2">
             <Label htmlFor="project-name">Name</Label>
             <Input
               id="project-name"
               placeholder="My product"
               value={name}
+              autoFocus={!isEdit}
               onChange={(e) => setName(e.target.value)}
             />
           </div>
@@ -177,36 +213,6 @@ export function ProjectDialog({
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
-            </div>
-          )}
-          {!isEdit && templates && templates.length > 0 && (
-            <div className="grid gap-2">
-              <Label htmlFor="project-template">Project template</Label>
-              <Select
-                items={templates.map((t) => ({
-                  value: t.id,
-                  label: t.is_default ? `${t.name} (Default)` : t.name,
-                }))}
-                value={templateId}
-                onValueChange={(v) => {
-                  if (typeof v === "string") setTemplateId(v);
-                }}
-              >
-                <SelectTrigger id="project-template" className="w-full">
-                  <SelectValue placeholder="Select a template" />
-                </SelectTrigger>
-                <SelectContent>
-                  {templates.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.is_default ? `${t.name} (Default)` : t.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Seeds this project&apos;s guidelines and worker instructions from
-                the template — editable afterward.
-              </p>
             </div>
           )}
           <div className="grid gap-2">
