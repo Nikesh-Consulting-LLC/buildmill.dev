@@ -174,18 +174,48 @@ def _upstream_headers(token: str, request: Request) -> dict[str, str]:
     return headers
 
 
+# us-117.1: the transport failures that mean "nobody answered", as opposed to
+# an answer we did not like. Mirrors supabase._TRANSPORT_FAILURES — one list
+# per upstream, both saying the same thing about the same httpx classes.
+_TRANSPORT_FAILURES = (
+    httpx.ConnectTimeout,
+    httpx.ConnectError,
+    httpx.ReadTimeout,
+    httpx.PoolTimeout,
+    httpx.ReadError,
+    httpx.RemoteProtocolError,
+)
+
+
 async def _upstream_stream(
     method: str,
     url: str,
     headers: dict[str, str],
     content: AsyncIterator[bytes] | None = None,
 ) -> tuple[int, dict[str, str], AsyncIterator[bytes]]:
-    """Streaming request to GitHub; both directions unbuffered."""
+    """Streaming request to GitHub; both directions unbuffered.
+
+    us-117.1: a transport failure here is answered in words. This file had no
+    `except httpx.*` at all, so GitHub (or the network) not answering was an
+    unhandled exception — a bare 500 on the git wire, which is what a worker's
+    `git ls-remote` reported on 2026-08-17 with no hint of what had failed.
+    Same shape as US-79.5's `SupabaseUnreachable`: 504, and name the upstream.
+    """
     client = httpx.AsyncClient(
         timeout=httpx.Timeout(300.0, connect=15.0), follow_redirects=True
     )
     req = client.build_request(method, url, headers=headers, content=content)
-    resp = await client.send(req, stream=True)
+    try:
+        resp = await client.send(req, stream=True)
+    except _TRANSPORT_FAILURES as exc:
+        await client.aclose()
+        raise HTTPException(
+            status_code=504,
+            detail=(
+                "GitHub did not answer this git request "
+                f"({type(exc).__name__}) — try again."
+            ),
+        ) from exc
 
     async def body() -> AsyncIterator[bytes]:
         try:

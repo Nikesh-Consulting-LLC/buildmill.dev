@@ -49,12 +49,15 @@ class OpenBody(BaseModel):
 async def _require_develop(settings: Settings, user: AuthUser, org_id: str) -> None:
     """Opening a session spends model budget on a pool machine, so it takes the
     same capability as dispatching work — not merely being able to see the org."""
-    try:
-        ok = await rpc(
-            settings, user.token, "has_org_capability", {"p_org": org_id, "p_capability": "develop"}
-        )
-    except Exception:  # noqa: BLE001
-        ok = False
+    # us-117.1: NOT wrapped in `except Exception: ok = False`. That turned any
+    # failure of the check into a permissions verdict — so on 2026-08-17, when
+    # Supabase stopped answering, the owner of a workspace was told they could
+    # not run work in it, and went looking at roles. A transport failure raises
+    # `SupabaseUnreachable` and US-79.5's handler answers 504 naming the
+    # operation; only a genuine `False` is a 403.
+    ok = await rpc(
+        settings, user.token, "has_org_capability", {"p_org": org_id, "p_capability": "develop"}
+    )
     if not ok:
         raise HTTPException(status_code=403, detail="You cannot run work in this workspace.")
 

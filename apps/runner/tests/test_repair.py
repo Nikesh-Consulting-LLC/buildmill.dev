@@ -2,6 +2,8 @@
 
 import asyncio
 
+import pytest
+
 from supervisor.modules.base import ModuleResult, RunContext, ShellResult
 from supervisor.repair import apply_repair, classify, classify_fault, execute_with_repair
 
@@ -262,3 +264,62 @@ def test_wait_does_not_consume_the_reclone_budget(monkeypatch, tmp_path):
     res = asyncio.run(execute_with_repair(mod, _ctx(), FakePrim(), max_attempts=1))
     assert res.outcome == "succeeded"
     assert mod.calls == 3  # wait retry (1) + reclone attempt (1) + success
+
+
+# ---------------------------------------------------------------------------
+# us-117.1 — a server error is transient, and never destructive
+# ---------------------------------------------------------------------------
+
+# The verbatim failure a worker reported on 2026-08-17. Kept exact: the whole
+# defect was that the real phrasing matched none of the needle lists, so a
+# paraphrase here would prove nothing.
+_PROD_LS_REMOTE_500 = (
+    "git ls-remote failed: fatal: unable to access "
+    "'https://api.buildmill.dev/git/kaushlesh-s-workspace/demo.git/': "
+    "The requested URL returned error: 500"
+)
+
+
+def test_the_production_ls_remote_500_is_waited_out():
+    """It classified as `unrecoverable`, so the runner reported
+    "nothing to change -> not attempted" and abandoned the run without one
+    retry — against a fault that cleared on its own minutes later."""
+    assert classify(_failed(err=_PROD_LS_REMOTE_500)) == "wait"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "The requested URL returned error: 502",
+        "The requested URL returned error: 503",
+        "The requested URL returned error: 504",
+        "upstream said: HTTP 500",
+        "502 Bad Gateway",
+        "503 Service Unavailable",
+        "504 Gateway Timeout",
+        "Internal Server Error",
+    ],
+)
+def test_every_5xx_phrasing_waits(text):
+    assert classify(_failed(err=text)) == "wait"
+
+
+def test_a_server_error_never_triggers_a_reclone():
+    """The safety property. This message carries a _RECLONE needle AND a
+    server error; checked in the other order the destructive repair wins and
+    deletes the workspace over someone else's 502. US-54.2 paid for that
+    lesson once already."""
+    r = _failed(err="git fetch failed: The requested URL returned error: 502")
+    assert classify(r) == "wait"
+
+
+def test_a_genuine_checkout_corruption_still_reclones():
+    """The 5xx test must not swallow the cases _RECLONE exists for."""
+    assert classify(_failed(err="git fetch failed: index.lock exists")) == "reclone"
+
+
+def test_a_bare_number_does_not_buy_a_wait():
+    """The needles are phrasings, not digits — an agent narrating "500 lines
+    changed" must not be read as a server error."""
+    r = _failed(err="assertion failed after 500 lines changed")
+    assert classify(r) == "unrecoverable"

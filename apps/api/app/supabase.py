@@ -39,6 +39,13 @@ _TRANSPORT_FAILURES = (
     httpx.ConnectError,
     httpx.ReadTimeout,
     httpx.PoolTimeout,
+    # us-117.1: these two were missing, and on 2026-08-17 they were 9 of the
+    # 13 recorded faults — so the same outage produced some reports titled
+    # `SupabaseUnreachable: … (ConnectTimeout)` with the operation attached and
+    # others a bare `ReadError` traceback. A connection dropped mid-read is
+    # still nobody answering.
+    httpx.ReadError,
+    httpx.RemoteProtocolError,
 )
 
 # One retry, reads only: a connect timeout is usually a blip, and a read is
