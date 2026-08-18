@@ -8,6 +8,7 @@ import asyncio
 import logging
 import pathlib
 import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
 import websockets.http11
@@ -76,6 +77,19 @@ logger = logging.getLogger("uvicorn.error")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # us-119.1: the executor every `asyncio.to_thread` in this process runs
+    # on. asyncio's default is min(32, cpu + 4) threads — eight on the prod
+    # box — sized for CPU-bound work. Every database call the runner-facing
+    # handlers make is now a network wait on one of these threads, and eight
+    # of them in flight would make the ninth request queue exactly as it used
+    # to queue on the blocked loop. Sized by a setting; see config.py for why
+    # it sits above the connection pool rather than equal to it.
+    asyncio.get_running_loop().set_default_executor(
+        ThreadPoolExecutor(
+            max_workers=get_settings().db_executor_threads,
+            thread_name_prefix="factory-db",
+        )
+    )
     # US-1.32: runs orphaned by a crash/redeploy of this process must never
     # stay 'running' (they'd hold the single-flight lock forever).
     try:

@@ -5453,8 +5453,6 @@ def claim_run(
     stale run id could otherwise walk straight past."""
     if not _valid_uuid(run_id):
         return None
-    if worker_is_paused(settings, str(worker["id"])):
-        return None
     lease = _LEASES.get(worker["type"], _LEASES["autonomous"])
     with _connect(settings) as conn:
         run = conn.execute(
@@ -5487,6 +5485,14 @@ def claim_run(
                 last_heartbeat_at = now(),
                 provider = case when %s = 'human' then 'human' else provider end
             where id = %s and org_id = %s and status = 'queued'
+              -- US-26.5 / us-119.1 AC2: a paused worker claims nothing. This
+              -- used to be a separate read before the update; folded into
+              -- the same statement so a pause landing between the two cannot
+              -- hand a drained agent one more run.
+              and not exists (
+                select 1 from public.runner_config rc
+                where rc.worker_id = %s and rc.paused
+              )
               -- US-15.3 + US-17.2/17.3: a held run (sibling still being
               -- curated, or the feature/epic build-mode phase batch holds it)
               -- is never claimable, even on a direct race — the pool won't have
@@ -5519,6 +5525,7 @@ def claim_run(
                 worker["type"],
                 run_id,
                 worker["org_id"],
+                worker["id"],
             ),
         ).fetchone()
         if not run:
@@ -7499,17 +7506,27 @@ def pause_run(
         # lose (its own `status = 'running'` guard would already be gone).
         return False, "exhausted", attempts, cap
     with _connect(settings) as conn:
-        conn.execute(
+        # us-119.1 AC2: the read above and this write are two statements on
+        # two leased connections, and nothing serialises what lands between
+        # them — a manager's cancel, a heartbeat-expiry requeue, a completed
+        # submit. The status guard makes this the same conditional transition
+        # every other run write is; a lost race lands nothing and reports it,
+        # instead of overwriting a terminal status with 'paused'.
+        landed = conn.execute(
             """
             update public.runs
             set status = 'paused', resume_reason = %s, stdout = %s,
                 claude_session_id = coalesce(%s, claude_session_id),
                 resume_attempts = resume_attempts + 1, resume_state_at = now(),
                 claimed_at = null, claim_expires_at = null, last_heartbeat_at = null
-            where id = %s
+            where id = %s and status = 'running'
+            returning id
             """,
             (reason, stdout, claude_session_id, run_id),
-        )
+        ).fetchone()
+        if not landed:
+            conn.rollback()
+            return False, "", attempts, cap
         if run["issue_id"]:
             conn.execute(
                 """
