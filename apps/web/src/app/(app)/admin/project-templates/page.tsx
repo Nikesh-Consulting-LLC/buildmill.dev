@@ -26,18 +26,22 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronRight, Copy, EyeOff, Eye } from "lucide-react";
 
 import { apiCall } from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogClose,
-} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { MarkdownView } from "@/components/markdown-view";
+import { TemplateThumb } from "@/components/template-card";
+import {
+  TemplateDetailsDialog,
+  type CoverChange,
+  type TemplateDetailsValues,
+} from "@/components/template-details-dialog";
+import {
+  TEMPLATE_IMAGE_BUCKET,
+  builtinCoverPath,
+  catalogCoverObject,
+} from "@/lib/template-cover";
 import { toastError, toastSuccess } from "@/components/ui/toast";
 import { confirmDialog } from "@/components/ui/confirm-dialog";
 import {
@@ -66,6 +70,9 @@ type Template = {
   version: number;
   agent_instructions: string;
   file_count: number;
+  // US-118.1: the face
+  image_path: string | null;
+  updated_at: string;
 };
 
 type Section = {
@@ -85,11 +92,11 @@ export default function AdminProjectTemplatesPage() {
   // The selected template's tree is expanded by default; toggled shut here
   // without losing the selection or the editor on the right.
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState("");
-  const [renameKeyValue, setRenameKeyValue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  // US-118.1: the details dialog (name, key, category, description, cover)
+  // replaced the inline rename.
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const loadTemplates = useCallback(async () => {
     try {
@@ -206,25 +213,76 @@ export default function AdminProjectTemplatesPage() {
     }
   }
 
-  async function renameTemplate(t: Template) {
-    const name = renameValue.trim();
-    const key = renameKeyValue.trim();
-    if (!name || !key || (name === t.name && key === t.key)) {
-      setRenamingId(null);
-      return;
+  /** US-118.1: resolve the cover intent into an `image_path` for the row.
+   * Uploads go browser → Storage under RLS (the admin is an authenticated
+   * user; `is_platform_admin()` holds); the API only records the path. An
+   * uploaded object that is being replaced by a built-in, or removed, is
+   * deleted best-effort — never a hard failure, the row is what matters. */
+  async function resolveCatalogCover(
+    templateId: string,
+    current: string | null,
+    cover: CoverChange,
+  ): Promise<{ image_path?: string | null }> {
+    if (cover.kind === "keep") return {};
+    const supabase = createClient();
+    const objectPath = catalogCoverObject(templateId);
+    const hadUpload = current === objectPath;
+    if (cover.kind === "upload") {
+      const { error } = await supabase.storage
+        .from(TEMPLATE_IMAGE_BUCKET)
+        .upload(objectPath, cover.file, { upsert: true, contentType: cover.file.type });
+      if (error) throw new Error(`Upload failed: ${error.message}`);
+      return { image_path: objectPath };
     }
-    try {
+    if (hadUpload) {
+      await supabase.storage.from(TEMPLATE_IMAGE_BUCKET).remove([objectPath]).catch(() => null);
+    }
+    if (cover.kind === "builtin") return { image_path: builtinCoverPath(cover.name) };
+    return { image_path: null };
+  }
+
+  async function saveDetails(t: Template, values: TemplateDetailsValues, cover: CoverChange) {
+    const patch: Record<string, unknown> = {};
+    if (values.name !== t.name) patch.name = values.name;
+    if (values.key !== t.key) patch.key = values.key;
+    if (values.category !== t.category) patch.category = values.category;
+    if (values.description !== t.description) patch.description = values.description;
+    Object.assign(patch, await resolveCatalogCover(t.id, t.image_path, cover));
+    if (Object.keys(patch).length > 0) {
       await apiCall(`/api/v1/admin/project-templates/${t.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, key }),
+        body: JSON.stringify(patch),
       });
-      toastSuccess("Renamed", `Now called ${name} (${key}).`);
-      setRenamingId(null);
-      await loadTemplates();
-    } catch (e) {
-      toastError("Could not rename", (e as Error).message);
     }
+    toastSuccess("Saved", `${values.name} updated.`);
+    await loadTemplates();
+  }
+
+  async function createFromDetails(values: TemplateDetailsValues, cover: CoverChange) {
+    const created: Template = await apiCall("/api/v1/admin/project-templates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        key: values.key,
+        name: values.name,
+        category: values.category,
+        description: values.description,
+      }),
+    });
+    // A cover picked before Create is uploaded once the row exists, then
+    // patched on — the object path needs the id.
+    const coverPatch = await resolveCatalogCover(created.id, null, cover);
+    if (coverPatch.image_path !== undefined) {
+      await apiCall(`/api/v1/admin/project-templates/${created.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(coverPatch),
+      });
+    }
+    toastSuccess("Created", `${values.name} is ready to fill in.`);
+    await loadTemplates();
+    select(created.id, AGENTS_KEY);
   }
 
   /** Save one file. The document goes to the template row; a per-task file
@@ -303,6 +361,9 @@ export default function AdminProjectTemplatesPage() {
   }
 
   const selected = templates?.find((t) => t.id === selectedId) ?? null;
+  const categoriesInUse = Array.from(
+    new Set((templates ?? []).map((t) => t.category).filter(Boolean)),
+  ).sort();
   const contents: TemplateContents | null =
     selected && sections
       ? {
@@ -386,6 +447,7 @@ export default function AdminProjectTemplatesPage() {
                       ) : (
                         <ChevronRight className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
                       )}
+                      <TemplateThumb template={t} className="mt-px" />
                       <span className="flex-1">
                         <span className="flex flex-wrap items-center gap-1.5">
                           <span className="font-medium">{t.name}</span>
@@ -467,52 +529,12 @@ export default function AdminProjectTemplatesPage() {
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    {renamingId === selected.id ? (
-                      <>
-                        <input
-                          autoFocus
-                          value={renameValue}
-                          onChange={(e) => setRenameValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") void renameTemplate(selected);
-                            if (e.key === "Escape") setRenamingId(null);
-                          }}
-                          className="rounded-md border bg-background px-2 py-1 text-base font-semibold"
-                        />
-                        <input
-                          value={renameKeyValue}
-                          onChange={(e) => setRenameKeyValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") void renameTemplate(selected);
-                            if (e.key === "Escape") setRenamingId(null);
-                          }}
-                          placeholder="key"
-                          className="w-32 rounded-md border bg-background px-2 py-1 font-mono text-xs"
-                        />
-                        <Button size="sm" onClick={() => void renameTemplate(selected)}>
-                          Save
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => setRenamingId(null)}>
-                          Cancel
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <h2 className="text-base font-semibold">{selected.name}</h2>
-                        <Badge variant="outline" className="font-mono text-[11px]">{selected.key}</Badge>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setRenamingId(selected.id);
-                            setRenameValue(selected.name);
-                            setRenameKeyValue(selected.key);
-                          }}
-                        >
-                          Rename
-                        </Button>
-                      </>
-                    )}
+                    <TemplateThumb template={selected} />
+                    <h2 className="text-base font-semibold">{selected.name}</h2>
+                    <Badge variant="outline" className="font-mono text-[11px]">{selected.key}</Badge>
+                    <Button variant="ghost" size="sm" onClick={() => setDetailsOpen(true)}>
+                      Edit details
+                    </Button>
                     <Badge variant="secondary" className="text-[11px]">v{selected.version}</Badge>
                     {selected.is_default ? (
                       <Badge className="text-[11px]">Default</Badge>
@@ -535,10 +557,10 @@ export default function AdminProjectTemplatesPage() {
                     )}
                   </div>
                 </div>
-                {selected.description && (
-                  <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                {selected.description.trim() && (
+                  <MarkdownView className="mt-1 max-w-3xl text-muted-foreground">
                     {selected.description}
-                  </p>
+                  </MarkdownView>
                 )}
               </div>
 
@@ -562,121 +584,34 @@ export default function AdminProjectTemplatesPage() {
         </div>
       </div>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>New project template</DialogTitle>
-            <DialogDescription>
-              Starts with every file blank — write the Agent Instructions and
-              any per-task instructions from the editor.
-            </DialogDescription>
-          </DialogHeader>
-          <CreateForm
-            onCreated={async (id) => {
-              setCreateOpen(false);
-              await loadTemplates();
-              select(id, AGENTS_KEY);
-            }}
-            onCancel={() => setCreateOpen(false)}
-          />
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
-
-function CreateForm({
-  onCreated,
-  onCancel,
-}: {
-  onCreated: (id: string) => Promise<void>;
-  onCancel: () => void;
-}) {
-  const [key, setKey] = useState("");
-  const [name, setName] = useState("");
-  const [category, setCategory] = useState("");
-  const [description, setDescription] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  async function create() {
-    setSaving(true);
-    try {
-      const res = await apiCall("/api/v1/admin/project-templates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          key: key.trim(),
-          name: name.trim(),
-          category: category.trim(),
-          description,
-        }),
-      });
-      toastSuccess("Created", `${name} is ready to fill in.`);
-      await onCreated(res.id);
-    } catch (e) {
-      toastError("Could not create", (e as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="grid gap-4 pt-2 text-sm">
-      <label className="grid gap-1">
-        <span className="text-muted-foreground">Key</span>
-        <input
-          value={key}
-          maxLength={64}
-          autoComplete="off"
-          placeholder="web-app"
-          onChange={(e) => setKey(e.target.value)}
-          className="rounded-md border bg-background px-2 py-1 font-mono text-xs"
+      <TemplateDetailsDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        scope="catalog"
+        mode="create"
+        initial={{ name: "", key: "", category: "", description: "" }}
+        categories={categoriesInUse}
+        onSave={createFromDetails}
+      />
+      {selected && (
+        <TemplateDetailsDialog
+          open={detailsOpen}
+          onOpenChange={setDetailsOpen}
+          scope="catalog"
+          mode="edit"
+          initial={{
+            name: selected.name,
+            key: selected.key,
+            category: selected.category,
+            description: selected.description,
+          }}
+          imagePath={selected.image_path}
+          updatedAt={selected.updated_at}
+          isDefault={selected.is_default}
+          categories={categoriesInUse}
+          onSave={(values, cover) => saveDetails(selected, values, cover)}
         />
-      </label>
-      <label className="grid gap-1">
-        <span className="text-muted-foreground">Name</span>
-        <input
-          value={name}
-          maxLength={200}
-          autoComplete="off"
-          placeholder="Web app"
-          onChange={(e) => setName(e.target.value)}
-          className="rounded-md border bg-background px-2 py-1"
-        />
-      </label>
-      <label className="grid gap-1">
-        <span className="text-muted-foreground">Category</span>
-        <input
-          value={category}
-          maxLength={100}
-          autoComplete="off"
-          placeholder="Web app"
-          onChange={(e) => setCategory(e.target.value)}
-          className="rounded-md border bg-background px-2 py-1"
-        />
-      </label>
-      <label className="grid gap-1">
-        <span className="text-muted-foreground">Description</span>
-        <textarea
-          rows={2}
-          maxLength={2000}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          className="rounded-md border bg-background px-2 py-1 text-xs"
-        />
-      </label>
-      <DialogFooter>
-        <DialogClose render={<Button variant="outline" size="sm" onClick={onCancel} />}>
-          Cancel
-        </DialogClose>
-        <Button
-          size="sm"
-          disabled={saving || !key.trim() || !name.trim()}
-          onClick={() => void create()}
-        >
-          {saving ? "Creating…" : "Create"}
-        </Button>
-      </DialogFooter>
+      )}
     </div>
   );
 }

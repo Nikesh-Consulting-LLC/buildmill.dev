@@ -36,6 +36,19 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { MarkdownView } from "@/components/markdown-view";
+import { TemplateStaticRow, TemplateThumb } from "@/components/template-card";
+import {
+  TemplateDetailsDialog,
+  type CoverChange,
+  type TemplateDetailsValues,
+} from "@/components/template-details-dialog";
+import {
+  TEMPLATE_IMAGE_BUCKET,
+  builtinCoverPath,
+  isOwnOrgCover,
+  orgCoverObject,
+} from "@/lib/template-cover";
 import { toastError, toastSuccess } from "@/components/ui/toast";
 import { confirmDialog } from "@/components/ui/confirm-dialog";
 import {
@@ -60,6 +73,8 @@ type GlobalTemplate = {
   description: string;
   category: string;
   is_default: boolean;
+  image_path: string | null;
+  updated_at: string;
 };
 
 export type OrgTemplate = {
@@ -67,6 +82,10 @@ export type OrgTemplate = {
   template_key: string | null;
   name: string;
   description: string;
+  // US-118.1/118.2: the face
+  category: string;
+  image_path: string | null;
+  updated_at: string;
   is_default: boolean;
   is_available: boolean;
   archived_at: string | null;
@@ -80,7 +99,7 @@ type Section = {
 };
 
 const ORG_TEMPLATE_COLUMNS =
-  "id, template_key, name, description, is_default, is_available, archived_at, agent_instructions";
+  "id, template_key, name, description, category, image_path, updated_at, is_default, is_available, archived_at, agent_instructions";
 
 export function ProjectTemplatesClient({
   orgId,
@@ -107,9 +126,11 @@ export function ProjectTemplatesClient({
   const [counts, setCounts] = useState<Record<string, number>>(initialFileCounts);
   const [sections, setSections] = useState<Section[] | null>(null);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState("");
   const [catalogOpen, setCatalogOpen] = useState(false);
+  // US-118.2: the details dialog (name, category, description, cover) replaced
+  // the inline rename and the window.prompt behind "New custom template".
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const reloadTemplates = useCallback(async () => {
     const { data } = await supabase
@@ -209,6 +230,10 @@ export function ProjectTemplatesClient({
         template_key: null,
         name,
         description: t.description,
+        category: t.category,
+        // A built-in cover is a name and travels; an uploaded one is one
+        // row's object — the duplicate starts with the generated cover.
+        image_path: t.image_path?.startsWith("builtin/") ? t.image_path : null,
         agent_instructions: t.agent_instructions ?? "",
       })
       .select("id")
@@ -241,6 +266,9 @@ export function ProjectTemplatesClient({
       destructive: true,
     });
     if (!ok) return;
+    if (isOwnOrgCover(t.image_path, orgId)) {
+      await supabase.storage.from(TEMPLATE_IMAGE_BUCKET).remove([t.image_path!]).catch(() => null);
+    }
     const { error } = await supabase.from("org_project_templates").delete().eq("id", t.id);
     if (error) return toastError("Could not delete", error.message);
     toastSuccess("Deleted", `${t.name} is gone.`);
@@ -252,17 +280,71 @@ export function ProjectTemplatesClient({
     }
   }
 
-  async function renameTemplate(t: OrgTemplate) {
-    const name = renameValue.trim();
-    if (!name || name === t.name) {
-      setRenamingId(null);
-      return;
+  /** US-118.2: resolve the cover intent for an org copy. Uploads go to the
+   * org's own path under Storage RLS (`manage_project`); a copy that still
+   * points at the catalog's object is never deleted from here — Remove on it
+   * just means "no image". */
+  async function resolveOrgCover(
+    orgTemplateId: string,
+    current: string | null,
+    cover: CoverChange,
+  ): Promise<{ image_path?: string | null }> {
+    if (cover.kind === "keep") return {};
+    const own = orgCoverObject(orgId, orgTemplateId);
+    if (cover.kind === "upload") {
+      const { error } = await supabase.storage
+        .from(TEMPLATE_IMAGE_BUCKET)
+        .upload(own, cover.file, { upsert: true, contentType: cover.file.type });
+      if (error) throw new Error(`Upload failed: ${error.message}`);
+      return { image_path: own };
     }
-    const { error } = await supabase.from("org_project_templates").update({ name }).eq("id", t.id);
-    if (error) return toastError("Could not rename", error.message);
-    toastSuccess("Renamed", `Now called ${name}.`);
-    setRenamingId(null);
+    if (isOwnOrgCover(current, orgId)) {
+      await supabase.storage.from(TEMPLATE_IMAGE_BUCKET).remove([own]).catch(() => null);
+    }
+    if (cover.kind === "builtin") return { image_path: builtinCoverPath(cover.name) };
+    return { image_path: null };
+  }
+
+  async function saveDetails(t: OrgTemplate, values: TemplateDetailsValues, cover: CoverChange) {
+    const patch: Record<string, unknown> = {};
+    if (values.name !== t.name) patch.name = values.name;
+    if (values.category !== t.category) patch.category = values.category;
+    if (values.description !== t.description) patch.description = values.description;
+    Object.assign(patch, await resolveOrgCover(t.id, t.image_path, cover));
+    if (Object.keys(patch).length > 0) {
+      const { error } = await supabase.from("org_project_templates").update(patch).eq("id", t.id);
+      if (error) throw new Error(error.message);
+    }
+    toastSuccess("Saved", `${values.name} updated.`);
     await reloadTemplates();
+  }
+
+  async function createFromDetails(values: TemplateDetailsValues, cover: CoverChange) {
+    const { data: created, error } = await supabase
+      .from("org_project_templates")
+      .insert({
+        org_id: orgId,
+        template_key: null,
+        name: values.name,
+        category: values.category,
+        description: values.description,
+      })
+      .select("id")
+      .single();
+    if (error || !created) throw new Error(error?.message ?? "unknown error");
+    // A cover picked before Create is uploaded once the row exists — the
+    // object path needs the id.
+    const coverPatch = await resolveOrgCover(created.id, null, cover);
+    if (coverPatch.image_path !== undefined) {
+      const { error: patchError } = await supabase
+        .from("org_project_templates")
+        .update(coverPatch)
+        .eq("id", created.id);
+      if (patchError) throw new Error(patchError.message);
+    }
+    toastSuccess("Created", `${values.name} is ready to fill in.`);
+    await reloadTemplates();
+    select(created.id, AGENTS_KEY);
   }
 
   async function copyIn(t: GlobalTemplate) {
@@ -275,20 +357,6 @@ export function ProjectTemplatesClient({
     toastSuccess("Copied", `${t.name} is now in this org — fine-tune it on the left.`);
     setCatalogOpen(false);
     await reloadTemplates();
-  }
-
-  async function createCustom() {
-    const name = window.prompt("Name for the new template?");
-    if (!name?.trim()) return;
-    const { data: created, error } = await supabase
-      .from("org_project_templates")
-      .insert({ org_id: orgId, template_key: null, name: name.trim() })
-      .select("id")
-      .single();
-    if (error || !created) return toastError("Could not create template", error?.message ?? "unknown error");
-    toastSuccess("Created", `${name.trim()} is ready to fill in.`);
-    await reloadTemplates();
-    select(created.id, AGENTS_KEY);
   }
 
   /** Save one file. The document goes to the template row; a per-task file
@@ -386,6 +454,11 @@ export function ProjectTemplatesClient({
 
   const selected = templates.find((t) => t.id === selectedId) ?? null;
   const copiedKeys = new Set(templates.filter((t) => t.template_key).map((t) => t.template_key));
+  const categoriesInUse = Array.from(
+    new Set(
+      [...templates.map((t) => t.category), ...globalTemplates.map((t) => t.category)].filter(Boolean),
+    ),
+  ).sort();
   const contents: TemplateContents | null =
     selected && sections
       ? {
@@ -428,7 +501,7 @@ export function ProjectTemplatesClient({
             <Button variant="outline" size="sm" onClick={() => setCatalogOpen(true)}>
               Copy from Catalog
             </Button>
-            <Button size="sm" onClick={() => void createCustom()}>
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
               New custom template
             </Button>
           </div>
@@ -484,6 +557,7 @@ export function ProjectTemplatesClient({
                       ) : (
                         <ChevronRight className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
                       )}
+                      <TemplateThumb template={t} className="mt-px" />
                       <span className="flex-1">
                         <span className="flex flex-wrap items-center gap-1.5">
                           <span className="font-medium">{t.name}</span>
@@ -569,46 +643,17 @@ export function ProjectTemplatesClient({
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    {renamingId === selected.id ? (
-                      <>
-                        <input
-                          autoFocus
-                          value={renameValue}
-                          onChange={(e) => setRenameValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") void renameTemplate(selected);
-                            if (e.key === "Escape") setRenamingId(null);
-                          }}
-                          className="rounded-md border bg-background px-2 py-1 text-base font-semibold"
-                        />
-                        <Button size="sm" onClick={() => void renameTemplate(selected)}>
-                          Save
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => setRenamingId(null)}>
-                          Cancel
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <h2 className="text-base font-semibold">{selected.name}</h2>
-                        {selected.template_key && (
-                          <Badge variant="outline" className="font-mono text-[11px]">
-                            {selected.template_key}
-                          </Badge>
-                        )}
-                        {canManage && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setRenamingId(selected.id);
-                              setRenameValue(selected.name);
-                            }}
-                          >
-                            Rename
-                          </Button>
-                        )}
-                      </>
+                    <TemplateThumb template={selected} />
+                    <h2 className="text-base font-semibold">{selected.name}</h2>
+                    {selected.template_key && (
+                      <Badge variant="outline" className="font-mono text-[11px]">
+                        {selected.template_key}
+                      </Badge>
+                    )}
+                    {canManage && (
+                      <Button variant="ghost" size="sm" onClick={() => setDetailsOpen(true)}>
+                        Edit details
+                      </Button>
                     )}
                     {selected.is_default ? (
                       <Badge className="text-[11px]">Default</Badge>
@@ -638,10 +683,10 @@ export function ProjectTemplatesClient({
                     </div>
                   )}
                 </div>
-                {selected.description && (
-                  <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                {selected.description.trim() && (
+                  <MarkdownView className="mt-1 max-w-3xl text-muted-foreground">
                     {selected.description}
-                  </p>
+                  </MarkdownView>
                 )}
               </div>
 
@@ -680,23 +725,25 @@ export function ProjectTemplatesClient({
               <p className="text-sm text-muted-foreground">No templates published yet.</p>
             )}
             {globalTemplates.map((t) => (
-              <div key={t.id} className="flex items-center justify-between gap-2 rounded-md border p-2">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-sm font-medium">{t.name}</span>
-                    <Badge variant="outline" className="font-mono text-[11px]">{t.key}</Badge>
-                    {t.is_default && <Badge className="text-[11px]">Default</Badge>}
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={copiedKeys.has(t.key)}
-                  onClick={() => void copyIn(t)}
-                >
-                  {copiedKeys.has(t.key) ? "Copied" : "Copy"}
-                </Button>
-              </div>
+              <TemplateStaticRow
+                key={t.id}
+                template={t}
+                keyBadge={
+                  <Badge variant="outline" className="font-mono text-[10.5px]">
+                    {t.key}
+                  </Badge>
+                }
+                meta={
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={copiedKeys.has(t.key)}
+                    onClick={() => void copyIn(t)}
+                  >
+                    {copiedKeys.has(t.key) ? "Copied" : "Copy"}
+                  </Button>
+                }
+              />
             ))}
           </div>
           <DialogFooter>
@@ -704,6 +751,35 @@ export function ProjectTemplatesClient({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <TemplateDetailsDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        scope="org"
+        mode="create"
+        initial={{ name: "", key: "", category: "", description: "" }}
+        categories={categoriesInUse}
+        onSave={createFromDetails}
+      />
+      {selected && (
+        <TemplateDetailsDialog
+          open={detailsOpen}
+          onOpenChange={setDetailsOpen}
+          scope="org"
+          mode="edit"
+          initial={{
+            name: selected.name,
+            key: selected.template_key ?? "",
+            category: selected.category,
+            description: selected.description,
+          }}
+          imagePath={selected.image_path}
+          updatedAt={selected.updated_at}
+          isDefault={selected.is_default}
+          categories={categoriesInUse}
+          onSave={(values, cover) => saveDetails(selected, values, cover)}
+        />
+      )}
     </div>
   );
 }

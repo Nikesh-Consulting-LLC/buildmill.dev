@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ImageOff } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -127,13 +127,67 @@ function AttachmentImage(props: React.ComponentProps<"img">) {
   );
 }
 
+/** US-118.1: the subset of markdown a template card can hold. Block
+ * structure collapses to running text, links render as their text (a link
+ * inside a radio card is a trap), images render nothing; bold, italic,
+ * strikethrough and inline code keep their look. The caller clamps. */
+const Flat = ({ children }: { children?: React.ReactNode }) => <>{children} </>;
+const Gone = () => null;
+const INLINE_COMPONENTS: Components = {
+  p: Flat,
+  h1: Flat,
+  h2: Flat,
+  h3: Flat,
+  h4: Flat,
+  h5: Flat,
+  h6: Flat,
+  ul: Flat,
+  ol: Flat,
+  li: Flat,
+  blockquote: Flat,
+  pre: Flat,
+  table: Flat,
+  thead: Flat,
+  tbody: Flat,
+  tr: Flat,
+  th: Flat,
+  td: Flat,
+  br: () => <> </>,
+  hr: Gone,
+  img: Gone,
+  a: ({ children }) => <>{children}</>,
+  code: ({ children }) => (
+    <code className="rounded bg-muted px-1 text-[0.9em]">{children}</code>
+  ),
+  strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+};
+
 export function MarkdownView({
   children,
   className,
+  inline = false,
 }: {
   children: string;
   className?: string;
+  /** Render as running text with no block structure — for a card, a table
+   * cell, a one-line summary. Wrap in a `line-clamp-*` container to clamp. */
+  inline?: boolean;
 }) {
+  if (inline) {
+    return (
+      <div className={cn("min-w-0", className)}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={INLINE_COMPONENTS}
+          urlTransform={(url) =>
+            url.startsWith(ATTACHMENT_SCHEME) ? url : defaultUrlTransform(url)
+          }
+        >
+          {children}
+        </ReactMarkdown>
+      </div>
+    );
+  }
   return (
     <div className={cn(MD_PROSE, className)}>
       <ReactMarkdown

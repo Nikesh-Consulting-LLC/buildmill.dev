@@ -16,15 +16,16 @@ export default async function ProjectTemplatesPage() {
   const { supabase, user, orgId } = await requireOrg();
   const caps = await loadOrgCapabilities(supabase, orgId, user.id);
 
+  // US-118.1/118.2: the face — image_path, updated_at (cache-bust), category.
   const { data: globalTemplates } = await supabase
     .from("project_templates")
-    .select("id, key, name, description, category, is_default")
+    .select("id, key, name, description, category, is_default, image_path, updated_at")
     .order("sort_order", { ascending: true });
 
   const { data: orgTemplates } = await supabase
     .from("org_project_templates")
     .select(
-      "id, template_key, name, description, is_default, is_available, archived_at, agent_instructions",
+      "id, template_key, name, description, category, image_path, updated_at, is_default, is_available, archived_at, agent_instructions",
     )
     .eq("org_id", orgId)
     .order("sort_order", { ascending: true });

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { resolveActiveOrg } from "@/lib/active-org";
+import { loadOrgCapabilities } from "@/lib/permissions";
 import { githubRepoUrl } from "@/lib/factory-git";
 import { cn } from "@/lib/utils";
 import {
@@ -76,6 +77,9 @@ export default async function ProjectsPage({
   // US-9.7: scope to the active org.
   const { orgId } = await resolveActiveOrg(supabase, user.id);
   if (!orgId) redirect("/login");
+  // US-118.3: an org with no templates points a manager at where to add one.
+  const caps = await loadOrgCapabilities(supabase, orgId, user.id);
+  const canManageTemplates = caps.can("manage_project");
 
   const { data: projects } = await supabase
     .from("projects")
@@ -302,7 +306,7 @@ export default async function ProjectsPage({
       <PageHeader
         title="Projects"
         description="Each project links the factory to a GitHub repository."
-        actions={<ProjectDialog orgId={orgId} />}
+        actions={<ProjectDialog orgId={orgId} canManageTemplates={canManageTemplates} />}
       />
 
       {!githubLinked && (projects?.length ?? 0) > 0 && (

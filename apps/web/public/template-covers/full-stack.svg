@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 160" width="320" height="160" role="img" aria-label="">
+<rect width="320" height="160" fill="#e8ecf3"/>
+<rect x="24" y="22" width="128" height="116" rx="8" fill="#3a4150"/>
+<text x="40" y="56" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="15" fill="#e8ecf3" opacity=".95">&gt;_ pytest</text>
+<rect x="40" y="70" width="70" height="5" rx="2.5" fill="#e8ecf3" opacity=".45"/>
+<rect x="40" y="82" width="92" height="5" rx="2.5" fill="#e8ecf3" opacity=".45"/>
+<rect x="40" y="94" width="56" height="5" rx="2.5" fill="#e8ecf3" opacity=".45"/>
+<rect x="40" y="112" width="26" height="8" rx="2" fill="#e8b04c"/>
+<line x1="152" y1="80" x2="168" y2="80" stroke="#c9d0dc" stroke-width="3"/>
+<rect x="168" y="22" width="128" height="116" rx="8" fill="#ffffff" stroke="#c9d0dc"/>
+<polygon points="196,112 232,46 268,112" fill="none" stroke="#3a4150" stroke-width="7" stroke-linejoin="round"/>
+<line x1="232" y1="46" x2="268" y2="112" stroke="#5b8def" stroke-width="7" stroke-linecap="round"/>
+</svg>
