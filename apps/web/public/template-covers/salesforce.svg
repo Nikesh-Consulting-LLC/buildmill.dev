@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 160" width="320" height="160" role="img" aria-label="">
+<rect width="320" height="160" fill="#e8ecf3"/>
+<g fill="#5b8def">
+  <circle cx="72" cy="86" r="22"/>
+  <circle cx="98" cy="70" r="28"/>
+  <circle cx="126" cy="84" r="22"/>
+  <rect x="50" y="86" width="98" height="24" rx="12"/>
+</g>
+<line x1="164" y1="72" x2="196" y2="72" stroke="#3a4150" stroke-width="4" stroke-linecap="round"/>
+<polygon points="192,64 206,72 192,80" fill="#3a4150"/>
+<line x1="206" y1="96" x2="174" y2="96" stroke="#3a4150" stroke-width="4" stroke-linecap="round"/>
+<polygon points="178,88 164,96 178,104" fill="#3a4150"/>
+<rect x="222" y="48" width="70" height="72" rx="8" fill="#ffffff" stroke="#c9d0dc"/>
+<rect x="232" y="60" width="50" height="8" rx="3" fill="#d6dce7"/>
+<rect x="232" y="76" width="50" height="8" rx="3" fill="#d6dce7"/>
+<rect x="232" y="92" width="50" height="8" rx="3" fill="#d6dce7"/>
+<circle cx="276" cy="64" r="2.5" fill="#3fb3a3"/>
+<circle cx="276" cy="80" r="2.5" fill="#3fb3a3"/>
+<circle cx="276" cy="96" r="2.5" fill="#3fb3a3"/>
+</svg>

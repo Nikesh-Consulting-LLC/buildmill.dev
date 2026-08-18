@@ -169,7 +169,7 @@ export function TemplateDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl">
+      <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{mode === "create" ? "New template" : "Template details"}</DialogTitle>
           <DialogDescription>
@@ -332,13 +332,29 @@ export function TemplateDetailsDialog({
                           setFileProblem(null);
                         }}
                         className={cn(
-                          "w-[68px] overflow-hidden rounded-sm border outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                          on ? "border-primary ring-1 ring-primary" : "hover:border-ring/70",
+                          "grid w-[76px] gap-1 rounded-sm text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                         )}
                       >
-                        <TemplateCover
-                          template={{ name: c.label, image_path: builtinCoverPath(c.name) }}
-                        />
+                        <span
+                          className={cn(
+                            "block overflow-hidden rounded-sm border",
+                            on ? "border-primary ring-1 ring-primary" : "hover:border-ring/70",
+                          )}
+                        >
+                          <TemplateCover
+                            template={{ name: c.label, image_path: builtinCoverPath(c.name) }}
+                          />
+                        </span>
+                        {/* us-118.5: past a handful, an unlabeled thumbnail is a
+                            guessing game — the label is the name, one line. */}
+                        <span
+                          className={cn(
+                            "line-clamp-2 text-[10px] leading-tight",
+                            on ? "font-medium text-foreground" : "text-muted-foreground",
+                          )}
+                        >
+                          {c.label}
+                        </span>
                       </button>
                     );
                   })}
