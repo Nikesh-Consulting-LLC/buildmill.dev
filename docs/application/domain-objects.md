@@ -74,6 +74,28 @@ own row above.
 - `notification_endpoints`, `notifications` — where alerts get delivered, and per-principal delivery records
 - `project_build_config`, `project_guidelines`, `guideline_recommendations` — a project's build/gate config, its written guidelines, and worker-proposed edits to them
 - `project_learnings`, `learning_submissions` — a project's accepted learnings, and worker-submitted candidates awaiting a decision
+- `project_templates`, `project_template_sections` — the superadmin **catalog** of project
+  templates (migration 227): a template is the files a new project starts with — the Agent
+  Instructions document (`agent_instructions`, 265) plus one `worker_instruction` section per
+  task kind (retired `guideline`/`prompt` rows are rollback data). Not org-scoped; members read
+  the enabled rows, only the service role writes (`/admin/project-templates`). Exactly one
+  `is_default`. **Phase 118: a template has a face** — `description` (markdown, ≤ 2000, rendered
+  inline on cards and in full on the templates pages), `category` (what the New project chips
+  group by), and `image_path`, one of three shapes pinned by CHECK: `null` (the web draws a
+  generated cover — initials on a tint), `builtin/<name>` (a cover shipped with the web app,
+  `apps/web/public/template-covers/`), or `catalog/<id>/cover` (an object in the **public**
+  `template-images` bucket, uploaded from the browser under Storage RLS —
+  `template_image_writable(name)`: `catalog/…` for `is_platform_admin()`, `<org>/…` for
+  `has_org_capability(org, 'manage_project')`; a cover holds no secret, which is what makes
+  public acceptable here and not for `attachments`)
+- `org_project_templates`, `org_project_template_sections` — an org's **editable copies**
+  (`copy_project_template_into_org` carries description, category, cover, document and files;
+  `template_key` is provenance, null for a custom template), org-scoped under `manage_project`
+  RLS; `is_available` hides one from the New project row, `archived_at` retires it; one
+  `is_default` per org, which `default_project_org_template()` applies to a project inserted
+  without one and `seed_worker_instructions()` seeds from. `image_path` adds a fourth shape,
+  `<org_id>/<own id>/cover`, and may still point at the catalog's object it was copied from —
+  Remove on such a copy nulls the path and never deletes the catalog object
 - `worker_instructions` — per-project, per-run-kind instructions baked into a worker's prompt. Phase 96: the kind is type-differentiated through `instruction_kind_for` — a chore's code run reads `chore`, a bug's plan/code runs read `bug_rca`/`bug_fix`, a parentless story reads `standalone_plan`/`standalone_code`; feature children keep `plan`/`code`
 - `worker_capabilities`, `worker_capability_events` — the US-13.10 capability matrix: one row per
   (worker, project, capability) grant over seven named stages (`prd`, `breakdown`, `plan`, `code`,

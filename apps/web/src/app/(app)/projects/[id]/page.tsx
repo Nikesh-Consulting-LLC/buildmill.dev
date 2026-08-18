@@ -37,6 +37,7 @@ import { fetchActorNames } from "@/lib/approvals";
 import { ProjectDialog } from "../project-dialog";
 import { ProjectActions } from "../project-actions";
 import { StartNewEpicButton } from "./start-new-epic-button";
+import { TemplateThumb } from "@/components/template-card";
 import { ProjectSummaryCard } from "./project-summary-card";
 import { ProjectSetupReadinessCard } from "./project-setup-readiness-card";
 import { epicLabel, workItemDisplayId } from "@/lib/work-items";
@@ -99,7 +100,7 @@ export default async function ProjectDetailPage({
   const { data: projectTemplate } = project.org_template_id
     ? await supabase
         .from("org_project_templates")
-        .select("id, name, template_key, agent_instructions")
+        .select("id, name, template_key, agent_instructions, image_path, updated_at")
         .eq("id", project.org_template_id)
         .maybeSingle()
     : { data: null };
@@ -125,7 +126,7 @@ export default async function ProjectDetailPage({
   // filled-file counts — the same list the create dialog offers.
   const { data: orgTemplateRows } = await supabase
     .from("org_project_templates")
-    .select("id, name, template_key, is_default, agent_instructions")
+    .select("id, name, template_key, is_default, agent_instructions, description, image_path, updated_at")
     .eq("org_id", project.org_id)
     .eq("is_available", true)
     .is("archived_at", null)
@@ -148,6 +149,10 @@ export default async function ProjectDetailPage({
     name: t.name,
     template_key: t.template_key,
     is_default: t.is_default,
+    // US-118.4: the face, so Change template shows the same card
+    description: t.description,
+    image_path: t.image_path,
+    updated_at: t.updated_at,
     fileCount:
       (filledByTemplate[t.id] ?? 0) + ((t.agent_instructions ?? "").trim() ? 1 : 0),
   }));
@@ -512,8 +517,9 @@ export default async function ProjectDetailPage({
               edited sections one at a time; the tab is one document now
               (us-100.1), so the refresh lives beside it. */}
           {projectTemplate?.name && (
-            <p className="text-xs text-muted-foreground">
-              Created from template: {projectTemplate.name}
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <TemplateThumb template={projectTemplate} className="size-5" />
+              <span>Created from template: {projectTemplate.name}</span>
             </p>
           )}
           <ProjectSummaryCard

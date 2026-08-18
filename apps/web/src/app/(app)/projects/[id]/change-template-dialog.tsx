@@ -23,8 +23,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
 import { toastError, toastSuccess } from "@/components/ui/toast";
+import { TemplateCard } from "@/components/template-card";
 import { AGENTS_KEY, contentFor, totalFileCount, type TemplateContents } from "@/lib/template-files";
 import { KIND_FILES } from "@/lib/instruction-files";
 import { planImport, type ZipFile } from "@/lib/template-zip";
@@ -36,6 +36,10 @@ export type OrgTemplateOption = {
   is_default: boolean;
   /** Filled files: the document (if any) plus worker_instruction sections. */
   fileCount: number;
+  // US-118.4: the face — the row shows the same card New project chose from.
+  description?: string | null;
+  image_path?: string | null;
+  updated_at?: string | null;
 };
 
 /** The seventeen texts a template would write into a project. */
@@ -185,30 +189,21 @@ export function ChangeTemplateDialog({
             const isCurrent = t.id === currentTemplateId;
             const selected = t.id === chosen;
             return (
-              <button
+              <TemplateCard
                 key={t.id}
-                type="button"
+                variant="row"
+                template={t}
                 disabled={isCurrent || applying}
-                onClick={() => void choose(t.id)}
+                selected={selected}
                 aria-pressed={selected}
-                className={cn(
-                  "flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm",
-                  isCurrent && "cursor-default text-muted-foreground",
-                  selected && "border-primary ring-1 ring-primary",
-                  !isCurrent && !selected && "hover:bg-muted/50",
-                )}
-              >
-                <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-                  <span className="font-medium">{t.name}</span>
-                  <Badge variant="outline" className="font-mono text-[11px]">
+                onClick={() => void choose(t.id)}
+                keyBadge={
+                  <Badge variant="outline" className="font-mono text-[10.5px]">
                     {t.template_key ?? "custom"}
                   </Badge>
-                  {t.is_default && <Badge className="text-[10px]">Default</Badge>}
-                </span>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {isCurrent ? "current" : `${t.fileCount} of ${totalFileCount()} files`}
-                </span>
-              </button>
+                }
+                meta={isCurrent ? "current" : `${t.fileCount} of ${totalFileCount()} files`}
+              />
             );
           })}
         </div>
