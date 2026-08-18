@@ -313,22 +313,39 @@ def _update_run(settings: Settings, run_id: str, fields: dict[str, Any]) -> None
         conn.commit()
 
 
+REAPED_NOTE = "interrupted by API server restart"
+
+# US-120.1: the sweep's grace beyond a deployment's own run_timeout_minutes
+# before it declares a queued/running run with no live pipeline dead. The
+# pipeline's own wait_for fires first whenever the process is alive; this
+# only ever catches a run whose process is not.
+STRANDED_GRACE_MINUTES = 5
+
+
 def reap_orphaned_runs(settings: Settings) -> int:
     """Fail runs stranded by an api crash/restart (US-1.32).
 
     Called on startup: nothing can legitimately be queued/running before
     this process existed, so anything live is an orphan. Releases the
     single-flight lock by moving the run to a terminal status.
+
+    US-120.1: a reaped run that a release fired (`release_id` set) settles
+    the release too. Before this, the row went `failed` and the release
+    stayed `deploying` — `_settle_release_deploy` lived only inside
+    `run_pipeline`'s terminal branches, which a restart skips — and from
+    `deploying` there was no legal move (2026.08.18.2, nine and a half
+    hours, the project frozen by migrations 215/275).
     """
     with _connect(settings) as conn:
         rows = conn.execute(
             """
             update public.deployment_runs
             set status = 'failed', finished_at = now(),
-                log = log || E'\n[interrupted by API server restart]'
+                log = coalesce(log, '') || %s
             where status in ('queued', 'running')
-            returning id, org_id
-            """
+            returning id, org_id, release_id
+            """,
+            (f"\n[{REAPED_NOTE}]",),
         ).fetchall()
         for row in rows:
             conn.execute(
@@ -340,7 +357,137 @@ def reap_orphaned_runs(settings: Settings) -> int:
                 (row["org_id"], row["id"]),
             )
         conn.commit()
-        return len(rows)
+    for row in rows:
+        if row.get("release_id"):
+            _settle_release_deploy(
+                settings,
+                str(row["id"]),
+                "failed",
+                f"the UAT deploy was {REAPED_NOTE}",
+            )
+    return len(rows)
+
+
+def settle_stranded_release_deploys(settings: Settings) -> list[dict[str, Any]]:
+    """US-120.1: re-read every `deploying` release from its own deploy run.
+
+    The reaper and the pipeline settle the release on the paths they own;
+    this is the belt to those braces, run from sweeps.lease_sweep_tick — at
+    startup and every 30 s. It exists because a release can be stranded by a path
+    that never reaches either — the reaper skipped at startup because the
+    database was unreachable, a settle swallowed by a DB hiccup, a second
+    API process sharing the database, or the old code — and because
+    2026.08.18.2 was already stranded on prod when this was written and had
+    to be repaired by the code rather than by a hand in the database.
+
+    Per `deploying` release, by its `uat_deployment_run_id` run:
+      - missing (no id, or the row is gone)   → uat-deploy-failed
+      - failed / cancelled                     → uat-deploy-failed
+      - succeeded                              → uat-deployed
+      - queued / running, NOT live in this process's `_RUNNING`, and older
+        than the deployment's run_timeout_minutes (default 30) + grace
+                                               → the run is failed, then
+                                                 uat-deploy-failed
+      - queued / running otherwise             → left alone: a live task
+        owns its own wait_for; a young one may still be starting.
+    Returns one dict per release it changed.
+    """
+    with _connect(settings) as conn:
+        rows = conn.execute(
+            """
+            select r.id as release_id, r.version, r.uat_deployment_run_id,
+                   dr.id as run_id, dr.org_id, dr.status as run_status,
+                   dr.created_at as run_created_at, dr.finished_at as run_finished_at,
+                   dr.log as run_log,
+                   coalesce(d.run_timeout_minutes, 30) as timeout_minutes,
+                   extract(epoch from (now() - dr.created_at)) / 60 as run_age_minutes
+            from public.releases r
+            left join public.deployment_runs dr on dr.id = r.uat_deployment_run_id
+            left join public.deployments d on d.id = dr.deployment_id
+            where r.status = 'deploying'
+            """
+        ).fetchall()
+
+    settled: list[dict[str, Any]] = []
+    for row in rows:
+        release_id = str(row["release_id"])
+        run_id = str(row["run_id"]) if row.get("run_id") else None
+        run_status = row.get("run_status")
+        landed: str | None = None
+        reason: str | None = None
+
+        if run_id is None:
+            landed = "uat-deploy-failed"
+            reason = "the UAT deploy run no longer exists"
+        elif run_status in ("failed", "cancelled"):
+            landed = "uat-deploy-failed"
+            reason = f"the UAT deploy {run_status}" + _last_log_line(row.get("run_log"))
+        elif run_status == "succeeded":
+            landed = "uat-deployed"
+        elif run_status in ("queued", "running"):
+            task = _RUNNING.get(run_id)
+            if task is not None and not task.done():
+                continue  # live here; its own wait_for owns it
+            age = float(row.get("run_age_minutes") or 0)
+            limit = int(row.get("timeout_minutes") or 30) + STRANDED_GRACE_MINUTES
+            if age < limit:
+                continue
+            note = (
+                f"timed out: no pipeline reported for {int(age)} minutes "
+                f"(limit {int(row.get('timeout_minutes') or 30)}); the API "
+                "restarted or the run was lost"
+            )
+            with _connect(settings) as conn:
+                conn.execute(
+                    """
+                    update public.deployment_runs
+                    set status = 'failed', finished_at = now(),
+                        log = coalesce(log, '') || %s
+                    where id = %s and status in ('queued', 'running')
+                    """,
+                    (f"\n[{note}]", run_id),
+                )
+                conn.execute(
+                    """
+                    insert into public.deployment_run_events
+                      (org_id, run_id, phase, message)
+                    values (%s, %s, 'error', %s)
+                    """,
+                    (row["org_id"], run_id, "Run " + note),
+                )
+                conn.commit()
+            landed = "uat-deploy-failed"
+            reason = f"the UAT deploy {note}"
+        else:
+            continue  # an unknown status is not ours to interpret
+
+        if landed == "uat-deployed":
+            _settle_release_status(
+                settings, release_id, "uat-deployed", None,
+                deployed_at=row.get("run_finished_at"),
+            )
+        else:
+            _settle_release_status(settings, release_id, landed, reason)
+        settled.append(
+            {
+                "release_id": release_id,
+                "version": row.get("version"),
+                "run_id": run_id,
+                "from_run_status": run_status,
+                "landed": landed,
+                "reason": reason,
+            }
+        )
+    return settled
+
+
+def _last_log_line(log: str | None) -> str:
+    """The pipeline's own last word on a run, for a release's failure_reason:
+    ' — [interrupted by API server restart]' or ''."""
+    if not log:
+        return ""
+    lines = [l.strip() for l in str(log).splitlines() if l.strip()]
+    return f" — {lines[-1][:300]}" if lines else ""
 
 
 def upsert_env_var(
@@ -590,7 +737,9 @@ def record_auto_rollback(
         return rb_id
 
 
-def _settle_release_deploy(settings: Settings, run_id: str, outcome: str) -> None:
+def _settle_release_deploy(
+    settings: Settings, run_id: str, outcome: str, reason: str | None = None
+) -> None:
     """US-63.2: the last thing every terminal branch of both pipelines does.
     A no-op unless this run's deployment_runs.release_id is set (only true
     for a run launch_release_uat_deploy created) — deploy.py otherwise knows
@@ -598,38 +747,69 @@ def _settle_release_deploy(settings: Settings, run_id: str, outcome: str) -> Non
     late callback (already-cancelled release, etc.) never clobbers a state
     a human has since moved past.
 
+    US-120.1: also called by every OTHER writer that ends a release-linked
+    run — the startup reaper and request_cancel's no-live-task branch — and
+    carries the writer's reason onto `releases.failure_reason`, which the
+    release page renders and `retry` clears. `succeeded` writes no reason.
+
     Every exception is swallowed: this call sits inside each pipeline's
     already-terminal success/failure handling, so a DB hiccup here must never
     override the deployment's own true outcome — an ordinary (non-release)
     run has no release_id and would otherwise pay for this table even
     existing."""
     try:
-        _settle_release_deploy_unsafe(settings, run_id, outcome)
+        _settle_release_deploy_unsafe(settings, run_id, outcome, reason)
     except Exception:  # noqa: BLE001 — see docstring
         logger.warning("could not settle release status for run %s", run_id, exc_info=True)
 
 
-def _settle_release_deploy_unsafe(settings: Settings, run_id: str, outcome: str) -> None:
-    status = "uat-deployed" if outcome == "succeeded" else "uat-deploy-failed"
+def _settle_release_deploy_unsafe(
+    settings: Settings, run_id: str, outcome: str, reason: str | None = None
+) -> None:
     with _connect(settings) as conn:
         row = conn.execute(
             "select release_id from public.deployment_runs where id = %s",
             (run_id,),
         ).fetchone()
-        if not row or not row["release_id"]:
-            return
-        conn.execute(
+    if not row or not row["release_id"]:
+        return
+    if outcome == "succeeded":
+        _settle_release_status(settings, str(row["release_id"]), "uat-deployed", None)
+    else:
+        _settle_release_status(
+            settings, str(row["release_id"]), "uat-deploy-failed", reason
+        )
+
+
+def _settle_release_status(
+    settings: Settings,
+    release_id: str,
+    status: str,
+    reason: str | None,
+    deployed_at: Any | None = None,
+) -> bool:
+    """The one UPDATE behind every deploy-side release settle (US-63.2,
+    US-120.1). Guarded to `deploying`: whoever moved the release off it first
+    wins, and a late writer is a no-op. Returns whether a row moved."""
+    with _connect(settings) as conn:
+        row = conn.execute(
             """
             update public.releases
             set status = %s,
-                uat_deployed_at = case when %s = 'succeeded' then now()
-                                       else uat_deployed_at end,
+                uat_deployed_at = case
+                    when %s = 'uat-deployed' then coalesce(%s, now())
+                    else uat_deployed_at end,
+                failure_reason = case
+                    when %s = 'uat-deployed' then failure_reason
+                    else coalesce(left(%s, 500), failure_reason) end,
                 updated_at = now()
             where id = %s and status = 'deploying'
+            returning id
             """,
-            (status, outcome, row["release_id"]),
-        )
+            (status, status, deployed_at, status, reason, release_id),
+        ).fetchone()
         conn.commit()
+    return row is not None
 
 
 async def _launch_release_suites_if_any(settings: Settings, run_id: str) -> None:
@@ -1007,12 +1187,22 @@ def request_cancel(
             """
             update public.deployment_runs
             set status = 'cancelled', finished_at = now(),
-                log = log || E'\n[cancelled — no live pipeline; nothing to stop]'
+                log = coalesce(log, '') || E'\n[cancelled — no live pipeline; nothing to stop]'
             where id = %s and status in ('queued', 'running')
             """,
             (run_id,),
         )
         conn.commit()
+    # US-120.1: this branch ends a run without the pipeline, so it settles
+    # the release itself — the pipeline's CancelledError handler does it for
+    # the signalled branch above.
+    _settle_release_deploy(
+        settings,
+        run_id,
+        "cancelled",
+        f"the UAT deploy was cancelled by {by_email or 'the manager'}; "
+        "no pipeline was running",
+    )
     return "marked"
 
 
@@ -1145,7 +1335,13 @@ async def run_pipeline(settings: Settings, ctx: dict[str, Any]) -> None:
                 run_id,
                 {"status": "cancelled", "finished_at": _now()},
             )
-            await asyncio.to_thread(_settle_release_deploy, settings, run_id, "cancelled")
+            await asyncio.to_thread(
+                _settle_release_deploy,
+                settings,
+                run_id,
+                "cancelled",
+                "the UAT deploy was cancelled",
+            )
             await event("error", "Run cancelled")
             send_notification("cancelled", "cancelled", int(time.monotonic() - started))
         except Exception:
@@ -1157,7 +1353,9 @@ async def run_pipeline(settings: Settings, ctx: dict[str, Any]) -> None:
         await asyncio.to_thread(
             _update_run, settings, run_id, {"status": "failed", "finished_at": _now()}
         )
-        await asyncio.to_thread(_settle_release_deploy, settings, run_id, "failed")
+        await asyncio.to_thread(
+            _settle_release_deploy, settings, run_id, "failed", f"the UAT deploy {note[0].lower()}{note[1:]}"
+        )
         await event("error", note)
         send_notification("failed", "failed", int(time.monotonic() - started))
     except Exception as e:  # noqa: BLE001 — a run must always reach a terminal state
@@ -1171,7 +1369,10 @@ async def run_pipeline(settings: Settings, ctx: dict[str, Any]) -> None:
                 run_id,
                 {"status": "failed", "finished_at": _now()},
             )
-            await asyncio.to_thread(_settle_release_deploy, settings, run_id, "failed")
+            # US-120.1: the pipeline's own last word reaches the release page.
+            await asyncio.to_thread(
+                _settle_release_deploy, settings, run_id, "failed", f"the UAT deploy failed: {note}"
+            )
             await event("error", note)
             send_notification("failed", "failed", int(time.monotonic() - started))
         except Exception:
@@ -1810,7 +2011,13 @@ async def run_merge_pipeline(settings: Settings, ctx: dict[str, Any]) -> None:
                 run_id,
                 {"status": "cancelled", "finished_at": _now()},
             )
-            await asyncio.to_thread(_settle_release_deploy, settings, run_id, "cancelled")
+            await asyncio.to_thread(
+                _settle_release_deploy,
+                settings,
+                run_id,
+                "cancelled",
+                "the UAT deploy was cancelled",
+            )
             await event("error", "Run cancelled")
             send_notification("cancelled", "cancelled", int(time.monotonic() - started))
         except Exception:
@@ -1822,7 +2029,9 @@ async def run_merge_pipeline(settings: Settings, ctx: dict[str, Any]) -> None:
         await asyncio.to_thread(
             _update_run, settings, run_id, {"status": "failed", "finished_at": _now()}
         )
-        await asyncio.to_thread(_settle_release_deploy, settings, run_id, "failed")
+        await asyncio.to_thread(
+            _settle_release_deploy, settings, run_id, "failed", f"the UAT deploy {note[0].lower()}{note[1:]}"
+        )
         await event("error", note)
         send_notification("failed", "failed", int(time.monotonic() - started))
     except Exception as e:  # noqa: BLE001 — a run must always reach a terminal state
@@ -1839,7 +2048,9 @@ async def run_merge_pipeline(settings: Settings, ctx: dict[str, Any]) -> None:
                 run_id,
                 {"status": "failed", "finished_at": _now()},
             )
-            await asyncio.to_thread(_settle_release_deploy, settings, run_id, "failed")
+            await asyncio.to_thread(
+                _settle_release_deploy, settings, run_id, "failed", f"the UAT deploy failed: {note}"
+            )
             await event("error", note)
             if pr_url:
                 await event("error", f"Pull request left open: {pr_url}")

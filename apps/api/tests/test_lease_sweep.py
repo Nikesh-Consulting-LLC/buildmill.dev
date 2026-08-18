@@ -162,10 +162,14 @@ def test_the_sweep_ticks_first_then_waits():
     assert started and started[0] - t0 < 0.5
 
 
-def test_one_tick_runs_the_three_sweeps_off_the_loop(monkeypatch):
-    """The tick calls exactly the three sweeps, and the two synchronous ones
-    through `asyncio.to_thread` (the AST guard pins the source; this pins
-    the behaviour: they run, and their results are reported)."""
+def test_one_tick_runs_the_four_sweeps_off_the_loop(monkeypatch):
+    """The tick calls exactly the four sweeps (US-120.1 added the fourth: a
+    `deploying` release re-read from its dead UAT deploy run), and the
+    synchronous ones through `asyncio.to_thread` (the AST guard pins the
+    source; this pins the behaviour: they run, and their results are
+    reported)."""
+    from app import deploy
+
     calls = []
     monkeypatch.setattr(db, "requeue_expired_claims", lambda s: calls.append("requeue") or 2)
 
@@ -180,9 +184,22 @@ def test_one_tick_runs_the_three_sweeps_off_the_loop(monkeypatch):
         lambda s: calls.append("reap")
         or [{"version": "v1", "worker": "w", "held_minutes": 3}],
     )
+    monkeypatch.setattr(
+        deploy,
+        "settle_stranded_release_deploys",
+        lambda s: calls.append("settle")
+        or [
+            {
+                "version": "2026.08.18.2",
+                "run_id": "dr-1",
+                "from_run_status": "failed",
+                "landed": "uat-deploy-failed",
+            }
+        ],
+    )
     out = asyncio.run(sweeps.lease_sweep_tick(object()))
-    assert calls == ["requeue", "reconcile", "reap"]
-    assert out == {"requeued": 2, "reconciled": 1, "reaped": 1}
+    assert calls == ["requeue", "reconcile", "reap", "settle"]
+    assert out == {"requeued": 2, "reconciled": 1, "reaped": 1, "settled_releases": 1}
 
 
 # ---------------------------------------------------------------- AC4

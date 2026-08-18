@@ -42,31 +42,63 @@ org side, 118.3 the New project row, 118.4 Change template. Phase 119 (three
 stories, requested 2026-08-18) is why Costs takes four to ten seconds to show
 three sub-millisecond aggregates: 119.1 takes the runner-polling paths' database
 calls off the event loop, 119.2 makes a poll cost one query, 119.3 has the page
-ask once.
+ask once. Phase 120 (requested 2026-08-18, from the 2026.08.18.2 incident) goes
+first: a release whose UAT deploy died sat at `deploying` all day with no legal
+exit, freezing the project — 120.1 makes every writer that ends a deploy settle
+the release, adds a sweep, and lets Stop reach `deploying`; 120.2 drafts the
+`promoting` twin for agreement.
 
 | Order | Story | Title | Status |
 |---|---|---|---|
-| 1 | [us-117.3](us-117.3-a-prep-resolves-its-model-like-a-run.md) | A release prep resolves its model like a run does | Testing |
-| 2 | [us-117.2](us-117.2-start-is-reachable.md) | Start is reachable | Testing |
-| 3 | [us-117.1](us-117.1-a-transient-fault-reads-as-transient.md) | A transient fault reads as transient | Testing |
-| 4 | [us-115.1](us-115.1-the-agent-reads-its-own-config.md) | The interactive agent's tools come from its own config | Testing |
-| 5 | [us-116.3](us-116.3-a-session-opens-through-the-runs-own-door.md) | A session opens through the run's own door | Testing |
-| 6 | [us-116.1](us-116.1-a-session-picks-a-model-the-agent-has.md) | A session picks a model the agent actually has | Testing |
-| 7 | [us-116.2](us-116.2-an-agent-shows-what-it-is-missing.md) | An agent shows what it is missing | Testing |
-| 8 | [us-116.7](us-116.7-the-orgs-default-model-counts.md) | The org's default model counts | Testing |
-| 9 | [us-116.4](us-116.4-team-and-the-machine-page-say-the-same-thing.md) | Team and the machine page say the same thing | Testing |
-| 10 | [us-116.5](us-116.5-start-means-start.md) | Start means start | Testing |
-| 11 | [us-116.6](us-116.6-a-new-agent-starts-ready.md) | A new agent starts ready | Testing |
-| 12 | [us-116.8](us-116.8-the-fleet-says-when-it-goes-dark.md) | The fleet says when it goes dark, and says a standing fault once | Testing |
-| 13 | [us-118.1](us-118.1-a-template-carries-a-description-and-a-cover.md) | A template carries a description and a cover | Testing |
-| 14 | [us-118.2](us-118.2-an-orgs-copy-can-change-its-face.md) | An org's copy can change its face | Testing |
-| 15 | [us-118.3](us-118.3-a-new-project-is-chosen-from-cards.md) | A new project is chosen from cards | Testing |
-| 16 | [us-118.4](us-118.4-change-template-shows-the-same-card.md) | Change template shows the same card | Testing |
-| 17 | [us-118.5](us-118.5-the-built-in-covers-depict-the-work.md) | The built-in covers depict the work | Testing |
-| 18 | [us-118.6](us-118.6-the-catalog-carries-the-cre-demo-templates.md) | The catalog carries the five CRE demo templates | Testing |
-| 19 | [us-119.1](us-119.1-a-database-call-never-holds-the-event-loop.md) | A database call never holds the event loop | Testing |
-| 20 | [us-119.2](us-119.2-a-poll-costs-one-query.md) | A poll costs one query | Testing |
-| 21 | [us-119.3](us-119.3-costs-loads-in-one-round-trip.md) | Costs loads in one round trip | Testing |
+| 1 | [us-120.1](us-120.1-a-dead-uat-deploy-settles-the-release.md) | A dead UAT deploy settles the release | Testing |
+| 2 | [us-120.2](us-120.2-a-dead-production-deploy-settles-the-release.md) | A dead production deploy settles the release | New |
+| 3 | [us-117.3](us-117.3-a-prep-resolves-its-model-like-a-run.md) | A release prep resolves its model like a run does | Testing |
+| 4 | [us-117.2](us-117.2-start-is-reachable.md) | Start is reachable | Testing |
+| 5 | [us-117.1](us-117.1-a-transient-fault-reads-as-transient.md) | A transient fault reads as transient | Testing |
+| 6 | [us-115.1](us-115.1-the-agent-reads-its-own-config.md) | The interactive agent's tools come from its own config | Testing |
+| 7 | [us-116.3](us-116.3-a-session-opens-through-the-runs-own-door.md) | A session opens through the run's own door | Testing |
+| 8 | [us-116.1](us-116.1-a-session-picks-a-model-the-agent-has.md) | A session picks a model the agent actually has | Testing |
+| 9 | [us-116.2](us-116.2-an-agent-shows-what-it-is-missing.md) | An agent shows what it is missing | Testing |
+| 10 | [us-116.7](us-116.7-the-orgs-default-model-counts.md) | The org's default model counts | Testing |
+| 11 | [us-116.4](us-116.4-team-and-the-machine-page-say-the-same-thing.md) | Team and the machine page say the same thing | Testing |
+| 12 | [us-116.5](us-116.5-start-means-start.md) | Start means start | Testing |
+| 13 | [us-116.6](us-116.6-a-new-agent-starts-ready.md) | A new agent starts ready | Testing |
+| 14 | [us-116.8](us-116.8-the-fleet-says-when-it-goes-dark.md) | The fleet says when it goes dark, and says a standing fault once | Testing |
+| 15 | [us-118.1](us-118.1-a-template-carries-a-description-and-a-cover.md) | A template carries a description and a cover | Testing |
+| 16 | [us-118.2](us-118.2-an-orgs-copy-can-change-its-face.md) | An org's copy can change its face | Testing |
+| 17 | [us-118.3](us-118.3-a-new-project-is-chosen-from-cards.md) | A new project is chosen from cards | Testing |
+| 18 | [us-118.4](us-118.4-change-template-shows-the-same-card.md) | Change template shows the same card | Testing |
+| 19 | [us-118.5](us-118.5-the-built-in-covers-depict-the-work.md) | The built-in covers depict the work | Testing |
+| 20 | [us-118.6](us-118.6-the-catalog-carries-the-cre-demo-templates.md) | The catalog carries the five CRE demo templates | Testing |
+| 21 | [us-119.1](us-119.1-a-database-call-never-holds-the-event-loop.md) | A database call never holds the event loop | Testing |
+| 22 | [us-119.2](us-119.2-a-poll-costs-one-query.md) | A poll costs one query | Testing |
+| 23 | [us-119.3](us-119.3-costs-loads-in-one-round-trip.md) | Costs loads in one round trip | Testing |
+
+**Phase 120 — A deploy that dies settles the release** (requested 2026-08-18,
+from the 2026.08.18.2 incident on prod). Phase 103 made a release unable to
+get stuck in its *prep* leg; the *deploy* leg still could. The release's UAT
+deploy fired at 12:26:27 UTC and the API process restarted eight seconds
+later; US-1.32's startup reaper failed the `deployment_runs` row, but
+`_settle_release_deploy` (US-63.2) lives only inside `run_pipeline`'s
+terminal branches, so the release stayed `deploying` for nine and a half
+hours — Stop refused it (*"let it finish"*), Retry took only failed states,
+the release page offered no button, and migrations 215/275 froze every cut
+and every `plan`/`code` dispatch on the project. The pipeline's own
+30-minute `run_timeout_minutes` was never the gap; a deploy with no pipeline
+was. **us-120.1** makes every writer that ends a release-linked deploy run
+settle the release with a reason (the reaper, `request_cancel`'s no-live-task
+branch, the pipeline's own failure note), adds
+`settle_stranded_release_deploys` — startup and the 60-second loop — which
+re-reads a `deploying` release from its run and fails a run past its
+deployment's timeout that no process holds, and lets Stop reach `deploying`
+(cancelling the deploy run cooperatively, US-1.35's rule that work already on
+the server is not undone; Reject at `deploying` ends the run too). No
+migration, no new status; the stranded prod release is repaired by the code
+at the first restart. **us-120.2** (drafted, not built) carries the
+`promoting` twin: a dead production deploy has the same hole and needs a
+landing-state decision first. Deliberately not in the phase: a lease on
+`deployment_runs`, a second "stop the deploy, keep the release" button, the
+cause of the 12:26 restart itself.
 
 **Phase 119 — The API answers while the runners poll** (requested
 2026-08-18). The Costs page reads three aggregates over 153 `llm_usage` rows;

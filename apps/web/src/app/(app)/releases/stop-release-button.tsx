@@ -49,6 +49,11 @@ export function StopReleaseButton({
   // An agent is holding the job in these two; the wording should say so,
   // because stopping then ends a session that is (or looked) live.
   const held = status === "running" || status === "notes-ready";
+  // US-120.1: at `deploying` the job is the UAT deploy pipeline. Stopping
+  // cancels it — cooperatively if it is live — and US-1.35's rule applies:
+  // what already reached the server is not undone. Said here, before the
+  // click, because that is the one thing the manager cannot see afterwards.
+  const deploying = status === "deploying";
 
   async function stop() {
     setBusy(true);
@@ -77,9 +82,11 @@ export function StopReleaseButton({
         <DialogHeader>
           <DialogTitle>Stop release {version}?</DialogTitle>
           <DialogDescription>
-            {held
-              ? "The agent preparing it is released from the job, and anything it hands back afterwards is refused. "
-              : "Its queued job is removed. "}
+            {deploying
+              ? "The UAT deploy is cancelled. Files already transferred and script steps already run on the UAT server are not undone. "
+              : held
+                ? "The agent preparing it is released from the job, and anything it hands back afterwards is refused. "
+                : "Its queued job is removed. "}
             The release is marked stopped and the project is freed immediately,
             so you can cut a replacement at once. The version {version} is not
             reused — a version names exactly one build — and the git tag is left
@@ -91,6 +98,14 @@ export function StopReleaseButton({
           Stop says <strong>this attempt</strong> failed — nothing was learned
           about the build. If testing found the build itself bad, reject it
           instead: that is a verdict on the build and it is final.
+          {deploying && (
+            <>
+              {" "}
+              To retry the deploy on this same version instead, cancel the run
+              on the deployment page — the release then reads{" "}
+              <em>UAT deploy failed</em> and offers Retry.
+            </>
+          )}
         </p>
         <Textarea
           value={reason}
