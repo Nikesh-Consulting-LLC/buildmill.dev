@@ -198,7 +198,7 @@ async def reject(
         user.email or "the manager",
         f"release rejected: {body.comment.strip()}",
     )
-    # US-119.1: the same hole for the deploy leg — a rejected release must
+    # US-120.1: the same hole for the deploy leg — a rejected release must
     # not keep deploying to UAT.
     deploy_run = await _stop_uat_deploy(settings, release, user)
 
@@ -220,7 +220,7 @@ async def reject(
 # lifecycle — the action that DOES apply, because a refusal that only says no
 # is what sent the manager to the database on 2026-08-16.
 #
-# US-119.1 adds `deploying`. Its refusal used to read "let it finish, then
+# US-120.1 adds `deploying`. Its refusal used to read "let it finish, then
 # stop or reject" — right for a pipeline that is running, and a dead end for
 # one that is not: 2026.08.18.2's deploy was reaped eight seconds in and the
 # release sat at `deploying` for nine and a half hours with no button on its
@@ -295,7 +295,7 @@ async def _stop_prep_runs(
 async def _stop_uat_deploy(
     settings: Settings, release: dict[str, Any], user: AuthUser
 ) -> str:
-    """US-119.1: end the UAT deploy run when a verdict lands on a `deploying`
+    """US-120.1: end the UAT deploy run when a verdict lands on a `deploying`
     release — the same argument US-103.3 made for the prep job: Stop or
     Reject ends the release's job with the release, or a zombie pipeline
     keeps writing to UAT after the release is gone.
@@ -360,7 +360,7 @@ async def cancel(
     counts = await _stop_prep_runs(
         settings, user.token, str(release_id), user.email or "the manager", reason
     )
-    # US-119.1: at `deploying` the job is the deploy pipeline, not a prep.
+    # US-120.1: at `deploying` the job is the deploy pipeline, not a prep.
     # Ended BEFORE the release row moves, so a cancel that cannot reach the
     # run surfaces as the error rather than leaving a stopped release with a
     # deploy still writing to UAT. The pipeline's own late settle is guarded

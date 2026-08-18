@@ -38,17 +38,20 @@ same day). Build order is the hotfix first (us-116.3), then the model side
 fleet alarm (116.8). Phase 118 (four stories, requested 2026-08-17) follows:
 templates get a description and a cover, and a new project is chosen from a
 row of cards — 118.1 lays the data, bucket and shared form, then 118.2 the
-org side, 118.3 the New project row, 118.4 Change template. Phase 119
-(requested 2026-08-18, from the 2026.08.18.2 incident) goes first: a release
-whose UAT deploy died sat at `deploying` all day with no legal exit, freezing
-the project — 119.1 makes every writer that ends a deploy settle the release,
-adds a sweep, and lets Stop reach `deploying`; 119.2 drafts the `promoting`
-twin for agreement.
+org side, 118.3 the New project row, 118.4 Change template. Phase 119 (three
+stories, requested 2026-08-18) is why Costs takes four to ten seconds to show
+three sub-millisecond aggregates: 119.1 takes the runner-polling paths' database
+calls off the event loop, 119.2 makes a poll cost one query, 119.3 has the page
+ask once. Phase 120 (requested 2026-08-18, from the 2026.08.18.2 incident) goes
+first: a release whose UAT deploy died sat at `deploying` all day with no legal
+exit, freezing the project — 120.1 makes every writer that ends a deploy settle
+the release, adds a sweep, and lets Stop reach `deploying`; 120.2 drafts the
+`promoting` twin for agreement.
 
 | Order | Story | Title | Status |
 |---|---|---|---|
-| 1 | [us-119.1](us-119.1-a-dead-uat-deploy-settles-the-release.md) | A dead UAT deploy settles the release | Testing |
-| 2 | [us-119.2](us-119.2-a-dead-production-deploy-settles-the-release.md) | A dead production deploy settles the release | New |
+| 1 | [us-120.1](us-120.1-a-dead-uat-deploy-settles-the-release.md) | A dead UAT deploy settles the release | Testing |
+| 2 | [us-120.2](us-120.2-a-dead-production-deploy-settles-the-release.md) | A dead production deploy settles the release | New |
 | 3 | [us-117.3](us-117.3-a-prep-resolves-its-model-like-a-run.md) | A release prep resolves its model like a run does | Testing |
 | 4 | [us-117.2](us-117.2-start-is-reachable.md) | Start is reachable | Testing |
 | 5 | [us-117.1](us-117.1-a-transient-fault-reads-as-transient.md) | A transient fault reads as transient | Testing |
@@ -67,8 +70,11 @@ twin for agreement.
 | 18 | [us-118.4](us-118.4-change-template-shows-the-same-card.md) | Change template shows the same card | Testing |
 | 19 | [us-118.5](us-118.5-the-built-in-covers-depict-the-work.md) | The built-in covers depict the work | Testing |
 | 20 | [us-118.6](us-118.6-the-catalog-carries-the-cre-demo-templates.md) | The catalog carries the five CRE demo templates | Testing |
+| 21 | [us-119.1](us-119.1-a-database-call-never-holds-the-event-loop.md) | A database call never holds the event loop | Testing |
+| 22 | [us-119.2](us-119.2-a-poll-costs-one-query.md) | A poll costs one query | Testing |
+| 23 | [us-119.3](us-119.3-costs-loads-in-one-round-trip.md) | Costs loads in one round trip | Testing |
 
-**Phase 119 — A deploy that dies settles the release** (requested 2026-08-18,
+**Phase 120 — A deploy that dies settles the release** (requested 2026-08-18,
 from the 2026.08.18.2 incident on prod). Phase 103 made a release unable to
 get stuck in its *prep* leg; the *deploy* leg still could. The release's UAT
 deploy fired at 12:26:27 UTC and the API process restarted eight seconds
@@ -79,7 +85,7 @@ hours — Stop refused it (*"let it finish"*), Retry took only failed states,
 the release page offered no button, and migrations 215/275 froze every cut
 and every `plan`/`code` dispatch on the project. The pipeline's own
 30-minute `run_timeout_minutes` was never the gap; a deploy with no pipeline
-was. **us-119.1** makes every writer that ends a release-linked deploy run
+was. **us-120.1** makes every writer that ends a release-linked deploy run
 settle the release with a reason (the reaper, `request_cancel`'s no-live-task
 branch, the pipeline's own failure note), adds
 `settle_stranded_release_deploys` — startup and the 60-second loop — which
@@ -88,11 +94,40 @@ deployment's timeout that no process holds, and lets Stop reach `deploying`
 (cancelling the deploy run cooperatively, US-1.35's rule that work already on
 the server is not undone; Reject at `deploying` ends the run too). No
 migration, no new status; the stranded prod release is repaired by the code
-at the first restart. **us-119.2** (drafted, not built) carries the
+at the first restart. **us-120.2** (drafted, not built) carries the
 `promoting` twin: a dead production deploy has the same hole and needs a
 landing-state decision first. Deliberately not in the phase: a lease on
 `deployment_runs`, a second "stop the deploy, keep the release" button, the
 cause of the 12:26 restart itself.
+
+**Phase 119 — The API answers while the runners poll** (requested
+2026-08-18). The Costs page reads three aggregates over 153 `llm_usage` rows;
+each executes in under a millisecond, and each API call takes 1.5–1.9 s at the
+median (p95 9.4 s) — of which ~150 ms is the database. `api_request_log` says
+where the rest goes: `db.py` is synchronous psycopg and 178 of its call sites
+run directly inside `async def` handlers, on uvicorn's event loop; the
+runner-facing paths (`worker.py` 54, `runner_socket.py` 30) do it ~80,000
+times a day, and every other request in the process waits behind them
+(`/auth/me`, which touches no database, is a steady 170 ms — the floor). The
+box is an `n2d-standard-4` with three idle cores, and `--workers` is not the
+answer: the runner socket registry is process-local. **us-119.1** moves those
+paths' calls to `asyncio.to_thread`, sizes the executor and the pool for I/O,
+audits claim/resume-claim/submit/heartbeat for any check-then-act that the
+blocked loop had been serialising by accident, and pins it with an AST guard
+in Essential. **us-119.2** takes the reconciler and the release-prep reaper
+off the per-poll path onto a 30 s single-flight, time-boxed sweep — and
+deliberately defers the two other per-request costs it measured (the checkout
+ping on every lease, the fresh TLS handshake per PostgREST call) because each
+opens an edge case us-117.1 just documented. **us-119.3** gives Costs one
+endpoint that answers breakdown, trend, summary and the subscription count
+together, fires it without the serial Supabase count in front, keeps the
+figures on screen while a filter refetches, and sequences requests so a slow
+response never paints over a fast one. Each story's UAT is a query on
+`api_request_log` the day after release. Deliberately not in the phase:
+`uvicorn --workers`, the ~90 direct calls in the manager-facing routers (a
+follow-up extends the guard's list), `/agents/idle-reasons` at p50 43 s,
+push-over-the-socket instead of polling, the idle-aware ping and shared HTTP
+client, and a server-side initial fetch for Costs.
 
 **Phase 118 — A template shows its face** (requested 2026-08-17; design
 reference [docs/design/template-cards.html](../docs/design/template-cards.html),

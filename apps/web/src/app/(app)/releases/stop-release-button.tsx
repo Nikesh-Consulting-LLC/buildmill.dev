@@ -49,7 +49,7 @@ export function StopReleaseButton({
   // An agent is holding the job in these two; the wording should say so,
   // because stopping then ends a session that is (or looked) live.
   const held = status === "running" || status === "notes-ready";
-  // US-119.1: at `deploying` the job is the UAT deploy pipeline. Stopping
+  // US-120.1: at `deploying` the job is the UAT deploy pipeline. Stopping
   // cancels it — cooperatively if it is live — and US-1.35's rule applies:
   // what already reached the server is not undone. Said here, before the
   // click, because that is the one thing the manager cannot see afterwards.

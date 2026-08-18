@@ -315,7 +315,7 @@ def _update_run(settings: Settings, run_id: str, fields: dict[str, Any]) -> None
 
 REAPED_NOTE = "interrupted by API server restart"
 
-# US-119.1: the sweep's grace beyond a deployment's own run_timeout_minutes
+# US-120.1: the sweep's grace beyond a deployment's own run_timeout_minutes
 # before it declares a queued/running run with no live pipeline dead. The
 # pipeline's own wait_for fires first whenever the process is alive; this
 # only ever catches a run whose process is not.
@@ -329,7 +329,7 @@ def reap_orphaned_runs(settings: Settings) -> int:
     this process existed, so anything live is an orphan. Releases the
     single-flight lock by moving the run to a terminal status.
 
-    US-119.1: a reaped run that a release fired (`release_id` set) settles
+    US-120.1: a reaped run that a release fired (`release_id` set) settles
     the release too. Before this, the row went `failed` and the release
     stayed `deploying` — `_settle_release_deploy` lived only inside
     `run_pipeline`'s terminal branches, which a restart skips — and from
@@ -369,7 +369,7 @@ def reap_orphaned_runs(settings: Settings) -> int:
 
 
 def settle_stranded_release_deploys(settings: Settings) -> list[dict[str, Any]]:
-    """US-119.1: re-read every `deploying` release from its own deploy run.
+    """US-120.1: re-read every `deploying` release from its own deploy run.
 
     The reaper and the pipeline settle the release on the paths they own;
     this is the belt to those braces, run at startup and on the 60-second
@@ -747,7 +747,7 @@ def _settle_release_deploy(
     late callback (already-cancelled release, etc.) never clobbers a state
     a human has since moved past.
 
-    US-119.1: also called by every OTHER writer that ends a release-linked
+    US-120.1: also called by every OTHER writer that ends a release-linked
     run — the startup reaper and request_cancel's no-live-task branch — and
     carries the writer's reason onto `releases.failure_reason`, which the
     release page renders and `retry` clears. `succeeded` writes no reason.
@@ -789,7 +789,7 @@ def _settle_release_status(
     deployed_at: Any | None = None,
 ) -> bool:
     """The one UPDATE behind every deploy-side release settle (US-63.2,
-    US-119.1). Guarded to `deploying`: whoever moved the release off it first
+    US-120.1). Guarded to `deploying`: whoever moved the release off it first
     wins, and a late writer is a no-op. Returns whether a row moved."""
     with _connect(settings) as conn:
         row = conn.execute(
@@ -1193,7 +1193,7 @@ def request_cancel(
             (run_id,),
         )
         conn.commit()
-    # US-119.1: this branch ends a run without the pipeline, so it settles
+    # US-120.1: this branch ends a run without the pipeline, so it settles
     # the release itself — the pipeline's CancelledError handler does it for
     # the signalled branch above.
     _settle_release_deploy(
@@ -1369,7 +1369,7 @@ async def run_pipeline(settings: Settings, ctx: dict[str, Any]) -> None:
                 run_id,
                 {"status": "failed", "finished_at": _now()},
             )
-            # US-119.1: the pipeline's own last word reaches the release page.
+            # US-120.1: the pipeline's own last word reaches the release page.
             await asyncio.to_thread(
                 _settle_release_deploy, settings, run_id, "failed", f"the UAT deploy failed: {note}"
             )

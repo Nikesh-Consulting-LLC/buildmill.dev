@@ -13,7 +13,7 @@
 // module with no "use client" directive. Components may be imported across
 // that boundary; data may not.
 //
-// US-119.1 adds `deploying`: a release whose UAT deploy died sat there all
+// US-120.1 adds `deploying`: a release whose UAT deploy died sat there all
 // day on 2026-08-18 with no button on any page. Stop at `deploying` cancels
 // the deploy run (cooperatively when it is live) and stops the release.
 // Mirrors STOPPABLE in apps/api/app/routers/releases.py.

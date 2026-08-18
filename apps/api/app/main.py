@@ -84,7 +84,7 @@ async def lifespan(app: FastAPI):
             logger.warning("Reaped %d orphaned deployment run(s)", reaped)
     except Exception as e:  # DB unreachable — don't block startup
         logger.warning("Orphaned-run reaper skipped: %s", e)
-    # US-119.1: a release at `deploying` is re-read from its own run — the
+    # US-120.1: a release at `deploying` is re-read from its own run — the
     # reaper above now settles the release for the runs it reaps, and this
     # catches everything the reaper cannot see: a release the old code
     # stranded, a settle that a DB hiccup swallowed, a run another process
@@ -198,7 +198,7 @@ async def lifespan(app: FastAPI):
                         r["worker"],
                         r["held_minutes"],
                     )
-                # US-119.1: the deploy leg's twin — a `deploying` release
+                # US-120.1: the deploy leg's twin — a `deploying` release
                 # whose run is terminal, missing, or past its deployment's
                 # own timeout with no live pipeline settles here, on the
                 # same cadence, so it cannot sit until the next restart.

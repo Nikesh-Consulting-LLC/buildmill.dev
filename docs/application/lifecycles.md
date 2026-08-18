@@ -153,14 +153,14 @@ second. `commit_sha` keeps its meaning — the *source* commit — because
 | (none) | `queued` | Manager triggers a run — `POST /deployments/{id}/run`, `/zip`, `/redeploy-zip`, `/runs/{rid}/redeploy`, `/runs/{rid}/promote`, or `/rollback` | Manager (web); owners-only when the deployment is `protected` | A `deployment_runs` row inserted; single-flight — a deployment can't have two `queued`/`running` rows at once |
 | `queued` | `running` | The launched pipeline picks the run up | System (`deploy.launch`) | `started_at` set |
 | `running` | `succeeded` | The pipeline completes without error | System | `finished_at` set; `deployments.current_run_id` updated |
-| `running` | `failed` | The pipeline raises or hits the deployment's `run_timeout_minutes` (default 30); the API process restarts mid-run (`reap_orphaned_runs`, startup); or — US-119.1 — `settle_stranded_release_deploys` finds a release-linked run past that timeout plus five minutes with no live task in the process | System | `finished_at` set; log annotated |
-| `queued` / `running` | `cancelled` | Manager cancels (`POST /deployments/{id}/runs/{rid}/cancel`), or — US-119.1 — stops/rejects the release the run belongs to (`POST /releases/{id}/cancel` / `/reject` at `deploying`) | Manager (web); owners-only when `protected` | If a live pipeline task exists it's cancelled cooperatively; otherwise the row is flipped directly |
+| `running` | `failed` | The pipeline raises or hits the deployment's `run_timeout_minutes` (default 30); the API process restarts mid-run (`reap_orphaned_runs`, startup); or — US-120.1 — `settle_stranded_release_deploys` finds a release-linked run past that timeout plus five minutes with no live task in the process | System | `finished_at` set; log annotated |
+| `queued` / `running` | `cancelled` | Manager cancels (`POST /deployments/{id}/runs/{rid}/cancel`), or — US-120.1 — stops/rejects the release the run belongs to (`POST /releases/{id}/cancel` / `/reject` at `deploying`) | Manager (web); owners-only when `protected` | If a live pipeline task exists it's cancelled cooperatively; otherwise the row is flipped directly |
 
 `promote_run` and `rollback_deployment` both refuse to act on a source run that isn't already
 `succeeded` — promotion and rollback replay a known-good run's payload onto another deployment,
 they don't reach into an in-flight one.
 
-**A release-linked run settles its release (US-63.2, made total by US-119.1).** A run with
+**A release-linked run settles its release (US-63.2, made total by US-120.1).** A run with
 `deployment_runs.release_id` set is the release's UAT deploy leg, and *every* writer that ends
 it moves `releases.status` off `deploying` — `succeeded` → `uat-deployed`, anything else →
 `uat-deploy-failed` with the writer's reason on `releases.failure_reason`: the pipeline's four
@@ -169,11 +169,11 @@ guarded to `status = 'deploying'`, so whoever moved the release first wins and a
 a no-op. `deploy.settle_stranded_release_deploys` (startup, and the 60-second liveness loop)
 re-reads any release still at `deploying` from its run — terminal or missing run → settled to
 match; a `queued`/`running` run older than the deployment's timeout + 5 min that this process
-does not hold is failed and settled; a young or live one is left alone. Before US-119.1 the
+does not hold is failed and settled; a young or live one is left alone. Before US-120.1 the
 reaper flipped only the run, and a release whose deploy died with the process (2026.08.18.2,
 2026-08-18) stayed `deploying` with no legal exit while migrations 215/275 froze its project.
 The production leg (`promoting`, `prod_deployment_run_id`) is **not** linked this way — see
-US-119.2.
+US-120.2.
 
 ### Epic status
 

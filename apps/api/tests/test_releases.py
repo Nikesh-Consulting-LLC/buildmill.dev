@@ -467,7 +467,7 @@ def test_stop_accepts_every_state_that_needs_it(
     assert resp.json()["status"] == "cancelled"
 
 
-# --- US-119.1: Stop (and Reject) at `deploying` end the UAT deploy run --------
+# --- US-120.1: Stop (and Reject) at `deploying` end the UAT deploy run --------
 
 
 DEPLOY_RUN_ID = str(uuid.uuid4())

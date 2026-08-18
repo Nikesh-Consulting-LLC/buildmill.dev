@@ -34,7 +34,7 @@ import { duration } from "./release-liveness";
 import type { ReleaseSuggestion } from "./data";
 
 // The release lifecycle in plain words, for the line under the version.
-// US-119.1: the three split-lifecycle states (US-63.2) had no words and
+// US-120.1: the three split-lifecycle states (US-63.2) had no words and
 // printed the raw status — `deploying` is exactly the one that needs a
 // manager when it goes wrong.
 const FLIGHT_WORDS: Record<string, string> = {

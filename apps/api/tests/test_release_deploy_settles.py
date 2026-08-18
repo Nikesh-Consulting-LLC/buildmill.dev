@@ -1,4 +1,4 @@
-"""US-119.1: a dead UAT deploy settles the release.
+"""US-120.1: a dead UAT deploy settles the release.
 
 On 2026-08-18 release 2026.08.18.2's UAT deploy fired at 12:26:27 UTC and the
 API process restarted eight seconds later. The startup reaper failed the
