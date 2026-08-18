@@ -198,6 +198,9 @@ async def reject(
         user.email or "the manager",
         f"release rejected: {body.comment.strip()}",
     )
+    # US-120.1: the same hole for the deploy leg — a rejected release must
+    # not keep deploying to UAT.
+    deploy_run = await _stop_uat_deploy(settings, release, user)
 
     await postgrest_patch(
         settings,
@@ -210,17 +213,22 @@ async def reject(
             "rejected_reason": body.comment.strip(),
         },
     )
-    return {"ok": True, "status": "rejected", **counts}
+    return {"ok": True, "status": "rejected", "deploy_run": deploy_run, **counts}
 
 
 # US-103.3: the states a Stop can end, and — for everything else in the
 # lifecycle — the action that DOES apply, because a refusal that only says no
 # is what sent the manager to the database on 2026-08-16.
-STOPPABLE = ("queued", "running", "notes-ready", "uat-deploy-failed")
+#
+# US-120.1 adds `deploying`. Its refusal used to read "let it finish, then
+# stop or reject" — right for a pipeline that is running, and a dead end for
+# one that is not: 2026.08.18.2's deploy was reaped eight seconds in and the
+# release sat at `deploying` for nine and a half hours with no button on its
+# page. Stop at `deploying` cancels the deploy run (cooperatively when it is
+# live) and stops the release, one meaning everywhere.
+STOPPABLE = ("queued", "running", "notes-ready", "deploying", "uat-deploy-failed")
 
 _STOP_REFUSALS = {
-    "deploying": "the UAT deploy is running — let it finish, then stop or "
-    "reject the release",
     "uat-deployed": "this build is on UAT — reject it if testing found it "
     "bad; stop is for an attempt that never got there",
     "uat-signed-off": "this build is signed off — reject it if you no longer "
@@ -284,6 +292,34 @@ async def _stop_prep_runs(
     return {"runs_removed": removed, "runs_stopped": stopped}
 
 
+async def _stop_uat_deploy(
+    settings: Settings, release: dict[str, Any], user: AuthUser
+) -> str:
+    """US-120.1: end the UAT deploy run when a verdict lands on a `deploying`
+    release — the same argument US-103.3 made for the prep job: Stop or
+    Reject ends the release's job with the release, or a zombie pipeline
+    keeps writing to UAT after the release is gone.
+
+    Goes through `deploy.request_cancel`, so a live pipeline is cancelled
+    cooperatively (US-1.35: files already transferred and script steps
+    already run are NOT undone) and a dead one is marked. Returns the
+    outcome word — `signalled`, `marked`, or `not-active` — and never raises
+    for a release with no run to stop.
+    """
+    if release.get("status") != "deploying":
+        return "not-active"
+    run_id = release.get("uat_deployment_run_id")
+    if not run_id:
+        return "not-active"
+    return await asyncio.to_thread(
+        deploy.request_cancel,
+        settings,
+        str(run_id),
+        user.id,
+        user.email or "",
+    )
+
+
 @router.post("/{release_id}/cancel")
 async def cancel(
     release_id: UUID,
@@ -324,6 +360,12 @@ async def cancel(
     counts = await _stop_prep_runs(
         settings, user.token, str(release_id), user.email or "the manager", reason
     )
+    # US-120.1: at `deploying` the job is the deploy pipeline, not a prep.
+    # Ended BEFORE the release row moves, so a cancel that cannot reach the
+    # run surfaces as the error rather than leaving a stopped release with a
+    # deploy still writing to UAT. The pipeline's own late settle is guarded
+    # to `deploying` and becomes a no-op once the row below lands.
+    deploy_run = await _stop_uat_deploy(settings, release, user)
 
     await postgrest_patch(
         settings,
@@ -338,7 +380,7 @@ async def cancel(
             "rejected_reason": reason,
         },
     )
-    return {"ok": True, "status": "cancelled", **counts}
+    return {"ok": True, "status": "cancelled", "deploy_run": deploy_run, **counts}
 
 
 @router.post("/{release_id}/retry")

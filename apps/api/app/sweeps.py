@@ -9,7 +9,10 @@ Three sweeps keep the factory honest about work nobody is doing any more:
   pushed work auto-submits, so a human who pushed and closed the laptop
   still lands in review (US-3.4);
 * ``db.reap_expired_release_preps`` — an abandoned release prep fails
-  itself and frees the project's one in-flight release slot (US-103.1).
+  itself and frees the project's one in-flight release slot (US-103.1);
+* ``deploy.settle_stranded_release_deploys`` — a release whose UAT deploy
+  run ended without its pipeline (or is long past its timeout with no live
+  task) leaves ``deploying`` and says why (US-120.1).
 
 Until this story each of them also ran *lazily*: the first two before every
 ``GET /worker/pool``, the third before every ``GET /worker/release-prep`` —
@@ -37,7 +40,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from . import db, reconcile
+from . import db, deploy, reconcile
 from .config import Settings
 
 logger = logging.getLogger("uvicorn.error")
@@ -71,6 +74,22 @@ async def lease_sweep_tick(settings: Settings) -> dict[str, int]:
             r["held_minutes"],
         )
     out["reaped"] = len(reaped)
+    # US-120.1: the deploy leg's twin of the prep reaper above. A `deploying`
+    # release whose UAT deploy run is terminal, missing, or past its
+    # deployment's own timeout with no live pipeline in this process settles
+    # here — first tick at startup (right after deploy.reap_orphaned_runs in
+    # the lifespan), then every tick — so it cannot sit until a restart, and
+    # a release the old code stranded (2026.08.18.2) is repaired by the code.
+    settled = await asyncio.to_thread(deploy.settle_stranded_release_deploys, settings)
+    for r in settled:
+        logger.warning(
+            "Settled stranded release %s: deploy run %s was %s → %s",
+            r["version"],
+            r["run_id"],
+            r["from_run_status"],
+            r["landed"],
+        )
+    out["settled_releases"] = len(settled)
     return out
 
 
