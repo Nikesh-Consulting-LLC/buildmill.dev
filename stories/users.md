@@ -64,9 +64,9 @@ ask once.
 | 16 | [us-118.4](us-118.4-change-template-shows-the-same-card.md) | Change template shows the same card | Testing |
 | 17 | [us-118.5](us-118.5-the-built-in-covers-depict-the-work.md) | The built-in covers depict the work | Testing |
 | 18 | [us-118.6](us-118.6-the-catalog-carries-the-cre-demo-templates.md) | The catalog carries the five CRE demo templates | Testing |
-| 19 | [us-119.1](us-119.1-a-database-call-never-holds-the-event-loop.md) | A database call never holds the event loop | New |
-| 20 | [us-119.2](us-119.2-a-poll-costs-one-query.md) | A poll costs one query | New |
-| 21 | [us-119.3](us-119.3-costs-loads-in-one-round-trip.md) | Costs loads in one round trip | New |
+| 19 | [us-119.1](us-119.1-a-database-call-never-holds-the-event-loop.md) | A database call never holds the event loop | Testing |
+| 20 | [us-119.2](us-119.2-a-poll-costs-one-query.md) | A poll costs one query | Testing |
+| 21 | [us-119.3](us-119.3-costs-loads-in-one-round-trip.md) | Costs loads in one round trip | Testing |
 
 **Phase 119 — The API answers while the runners poll** (requested
 2026-08-18). The Costs page reads three aggregates over 153 `llm_usage` rows;
