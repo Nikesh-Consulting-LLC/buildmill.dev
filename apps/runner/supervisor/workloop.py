@@ -937,16 +937,22 @@ class Supervisor:
             return
         module = modules.get(name)
 
-        # US-63.x follow-up: `release_prep` has no `run_routes`/`model_routes`
-        # entry of its own (it is not a ROUTE_KINDS member — see
-        # select_release_prep_module), so passing empty resolved settings left
-        # the env provider's `model` fall through to "" and, from there, to
-        # whatever the org default happened to be — not this agent's own
-        # configured model. Reuse the same model this agent already uses for
-        # its other kinds, preferring the closest analog (`release`, `code`),
-        # so this job runs under a model the manager actually picked.
+        # us-117.3: the SERVER resolves this now, at claim, through the same
+        # resolver a run uses — `claimed["model"]`.
+        #
+        # US-63.x followed the env provider's fall-through to "whatever the org
+        # default happened to be" and fixed it here, by reading the agent's own
+        # `model_overrides` and nothing else. That kept the agent's pin winning
+        # (still true, it is the first step of the server's precedence) but cut
+        # off every fallback below it — including the floor us-116.7 later added.
+        # An agent with no per-role pin could then never run a prep, whatever
+        # the org configured: DevOps failed exactly this way on 16, 17 and 18
+        # August while the org's default provider named `grok-4.6` throughout.
+        #
+        # The local overrides stay as the fallback for an API that predates the
+        # field, so a deploy-skewed runner keeps working.
         overrides = config.get("model_overrides") or {}
-        model = (
+        model = (claimed or {}).get("model") or (
             overrides.get("release_prep")
             or overrides.get("release")
             or overrides.get("code")

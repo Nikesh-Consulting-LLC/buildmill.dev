@@ -39,17 +39,18 @@ fleet alarm (116.8).
 
 | Order | Story | Title | Status |
 |---|---|---|---|
-| 1 | [us-117.2](us-117.2-start-is-reachable.md) | Start is reachable | Testing |
-| 2 | [us-117.1](us-117.1-a-transient-fault-reads-as-transient.md) | A transient fault reads as transient | Testing |
-| 3 | [us-115.1](us-115.1-the-agent-reads-its-own-config.md) | The interactive agent's tools come from its own config | Testing |
-| 4 | [us-116.3](us-116.3-a-session-opens-through-the-runs-own-door.md) | A session opens through the run's own door | Testing |
-| 5 | [us-116.1](us-116.1-a-session-picks-a-model-the-agent-has.md) | A session picks a model the agent actually has | Testing |
-| 6 | [us-116.2](us-116.2-an-agent-shows-what-it-is-missing.md) | An agent shows what it is missing | Testing |
-| 7 | [us-116.7](us-116.7-the-orgs-default-model-counts.md) | The org's default model counts | Testing |
-| 8 | [us-116.4](us-116.4-team-and-the-machine-page-say-the-same-thing.md) | Team and the machine page say the same thing | Testing |
-| 9 | [us-116.5](us-116.5-start-means-start.md) | Start means start | Testing |
-| 10 | [us-116.6](us-116.6-a-new-agent-starts-ready.md) | A new agent starts ready | Testing |
-| 11 | [us-116.8](us-116.8-the-fleet-says-when-it-goes-dark.md) | The fleet says when it goes dark, and says a standing fault once | Testing |
+| 1 | [us-117.3](us-117.3-a-prep-resolves-its-model-like-a-run.md) | A release prep resolves its model like a run does | Testing |
+| 2 | [us-117.2](us-117.2-start-is-reachable.md) | Start is reachable | Testing |
+| 3 | [us-117.1](us-117.1-a-transient-fault-reads-as-transient.md) | A transient fault reads as transient | Testing |
+| 4 | [us-115.1](us-115.1-the-agent-reads-its-own-config.md) | The interactive agent's tools come from its own config | Testing |
+| 5 | [us-116.3](us-116.3-a-session-opens-through-the-runs-own-door.md) | A session opens through the run's own door | Testing |
+| 6 | [us-116.1](us-116.1-a-session-picks-a-model-the-agent-has.md) | A session picks a model the agent actually has | Testing |
+| 7 | [us-116.2](us-116.2-an-agent-shows-what-it-is-missing.md) | An agent shows what it is missing | Testing |
+| 8 | [us-116.7](us-116.7-the-orgs-default-model-counts.md) | The org's default model counts | Testing |
+| 9 | [us-116.4](us-116.4-team-and-the-machine-page-say-the-same-thing.md) | Team and the machine page say the same thing | Testing |
+| 10 | [us-116.5](us-116.5-start-means-start.md) | Start means start | Testing |
+| 11 | [us-116.6](us-116.6-a-new-agent-starts-ready.md) | A new agent starts ready | Testing |
+| 12 | [us-116.8](us-116.8-the-fleet-says-when-it-goes-dark.md) | The fleet says when it goes dark, and says a standing fault once | Testing |
 
 **Phase 116 — An agent says what it is missing, and starts when told**
 (requested 2026-08-17; the manager's direction was *reliability over

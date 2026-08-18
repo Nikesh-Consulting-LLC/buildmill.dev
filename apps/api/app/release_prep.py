@@ -72,8 +72,38 @@ async def claim(
         "ok": True,
         "id": prep_id,
         "release_id": str(row["release_id"]),
+        # us-117.3: the model, resolved HERE. The runner used to pick one out
+        # of the agent's own `model_overrides` and nothing else, so an agent
+        # that pinned no model per role could never run a prep — whatever the
+        # org configured. us-116.7's floor (the org default provider's model)
+        # lives in this resolver and the runner cannot see it, which is how a
+        # release cut refused on 2026-08-18 while the org's default provider
+        # named `grok-4.6` all along. `null` still means nobody chose
+        # anywhere, and the runner's own refusal stands.
+        "model": resolved_model(settings, worker),
         **briefing(settings, prep_id, worker),
     }
+
+
+def resolved_model(settings: Settings, worker: dict[str, Any]) -> str | None:
+    """The model a release prep should reason with.
+
+    Release prep is not a `ROUTE_KINDS` member, so it has no route of its own
+    to resolve. It borrows the agent's `release` resolution — the closest
+    analog and the role it must hold to be offered the work at all — which
+    means it inherits the whole precedence chain: the agent's own pin first
+    (US-63.x's intent, unchanged), then the preset, then us-116.7's floor.
+    """
+    from . import model_resolution
+
+    config = db.get_runner_config(settings, str(worker["id"])) or {}
+    inputs = model_resolution.load_inputs(
+        settings, str(worker["org_id"]), config=config
+    )
+    picked = model_resolution.resolve_for_kind(inputs, "release")
+    # The model lives in `values`, the same place `resolve_session` reads it.
+    model = str(picked.values.get("model") or "").strip()
+    return model or None
 
 
 def not_running_error(status: str) -> str:
