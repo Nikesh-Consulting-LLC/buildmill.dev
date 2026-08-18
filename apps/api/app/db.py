@@ -2471,22 +2471,6 @@ def worker_session_declares_auth(settings: Settings, worker_id: str) -> bool:
     return bool(row)
 
 
-def worker_is_paused(settings: Settings, worker_id: str) -> bool:
-    """US-26.5: pause without revoking.
-
-    workers.status is only active|revoked, and revoking would invalidate the
-    token written to the agent machine — the agent would drop off entirely and
-    could not be resumed without a re-provision. So pause is its own column,
-    read here on every pool listing and every claim.
-    """
-    with _connect(settings) as conn:
-        row = conn.execute(
-            "select paused from public.runner_config where worker_id = %s",
-            (worker_id,),
-        ).fetchone()
-    return bool(row and row["paused"])
-
-
 def get_runner_config(settings: Settings, worker_id: str) -> dict[str, Any]:
     """Resolved server-side config for a runner, defaults when unset (US-10.2)."""
     with _connect(settings) as conn:
@@ -4769,19 +4753,21 @@ def list_worker_pool(
     settings: Settings,
     worker: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """The claimable runs this worker may take. Sweeps expired claims back
-    into the pool first, so the listing is self-healing without a background
-    scheduler. Capability filter (US-31.3, fail-closed): only allow-listed
-    project+kind runs are offered — a worker with zero capability rows is
-    offered nothing. us-110.1: that predicate is now the ONLY project filter.
-    The old second one (US-3.14's URL scope, then workers.project_id) is gone,
-    so a worker is offered every project it was granted and nothing else.
-    US-26.5: a paused runner is offered nothing at all — an agent that has
-    just been installed, or one drained for an update, stays connected and
-    configured but takes no work."""
-    requeue_expired_claims(settings)
-    if worker_is_paused(settings, str(worker["id"])):
-        return []
+    """The claimable runs this worker may take. Capability filter (US-31.3,
+    fail-closed): only allow-listed project+kind runs are offered — a worker
+    with zero capability rows is offered nothing. us-110.1: that predicate is
+    now the ONLY project filter. The old second one (US-3.14's URL scope, then
+    workers.project_id) is gone, so a worker is offered every project it was
+    granted and nothing else. US-26.5: a paused runner is offered nothing at
+    all — an agent that has just been installed, or one drained for an update,
+    stays connected and configured but takes no work.
+
+    us-119.2: this used to sweep expired claims back into the pool first
+    ("self-healing without a background scheduler") and read the paused flag
+    on a second connection. The sweep runs every 30 s from `sweeps.py` now,
+    and the paused check is a predicate of the one listing query — a poll
+    costs one query, and a runner sees a requeued claim within half a minute
+    rather than on its next poll."""
     with _connect(settings) as conn:
         return conn.execute(
             """
@@ -4810,6 +4796,12 @@ def list_worker_pool(
               limit 1
             ) prev on true
             where r.org_id = %(org)s and r.status = 'queued'
+              -- US-26.5 / us-119.2: a paused runner is offered nothing.
+              -- Was a separate read before the listing; now a predicate.
+              and not exists (
+                select 1 from public.runner_config rc
+                where rc.worker_id = %(worker)s::uuid and rc.paused
+              )
               -- US-31.3: fail-closed, through the ONE shared predicate.
               -- Zero access rows means this offers nothing — not everything.
               -- US-55.1: the predicate is project ACCESS plus the agent's own
@@ -5621,13 +5613,10 @@ def get_release_uat_deployment_id(settings: Settings, project_id: str) -> str | 
 
 
 def list_release_prep_pool(settings: Settings, org_id: str) -> list[dict[str, Any]]:
-    # US-103.1: the lazy sweep, mirroring requeue_expired_claims running
-    # before a run-pool listing. A runner asking for work also clears the
-    # corpse that is blocking the project from cutting anything new.
-    try:
-        reap_expired_release_preps(settings)
-    except Exception:  # noqa: BLE001 — a listing must not fail over the sweep
-        logger.warning("Release-prep reaper skipped during pool listing", exc_info=True)
+    # us-119.2: the listing only lists. US-103.1 had it run
+    # `reap_expired_release_preps` first, mirroring the run pool's lazy sweep;
+    # both sweeps run every 30 s from `sweeps.py` now, so an abandoned prep is
+    # cleared within half a minute whether or not anyone is polling.
     return _list_release_prep_pool(settings, org_id)
 
 
@@ -8083,9 +8072,10 @@ def requeue_stale_heartbeats(settings: Settings) -> int:
 
 def requeue_expired_claims(settings: Settings) -> int:
     """Expired claims return to the pool (running → queued) — abandoned
-    work is retryable, not dead (US-3.2). Runs at startup and before
-    every pool listing. Expired claims WITH pushed work are the
-    reconciler's business (US-3.4 auto-submit) and are skipped here.
+    work is retryable, not dead (US-3.2). Runs every 30 s from `sweeps.py`
+    (us-119.2; it used to run at startup and before every pool listing).
+    Expired claims WITH pushed work are the reconciler's business (US-3.4
+    auto-submit) and are skipped here.
     US-31.2: the stale-heartbeat sweep rides along, so every caller that
     reclaims lease-expired work also notices dead agents."""
     requeue_stale_heartbeats(settings)

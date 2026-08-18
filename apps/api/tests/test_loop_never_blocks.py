@@ -26,6 +26,8 @@ COVERED = (
     "routers/worker.py",
     "routers/runner_socket.py",
     "reconcile.py",
+    # us-119.2: the sweep the poll path's lazy reapers moved onto.
+    "sweeps.py",
 )
 
 # Sync dependencies FastAPI itself runs on its threadpool: a plain `def`

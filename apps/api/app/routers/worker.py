@@ -28,7 +28,6 @@ from .. import (
     mcp_tools,
     model_resolution,
     project_env,
-    reconcile,
     release_prep,
     validation,
 )
@@ -262,12 +261,10 @@ async def pool(
     worker: dict = Depends(verify_worker),
     settings: Settings = Depends(get_settings),
 ):
-    # expired-with-pushes claims auto-submit before the pool is listed —
-    # the listing stays self-healing without a background scheduler
-    try:
-        await reconcile.reconcile_pushed_expired_claims(settings)
-    except Exception:  # noqa: BLE001 — a reconciler hiccup never blocks the pool
-        pass
+    # us-119.2: a poll only lists. The lease sweeps that used to run here
+    # first — the pushed-claim reconciler (US-3.4) and, inside
+    # list_worker_pool, the expired-claim requeue (US-3.2) — run every 30 s
+    # from sweeps.py instead, so ~40,000 polls a day stop paying for them.
     runs = await asyncio.to_thread(db.list_worker_pool, settings, worker)
     # US-59.9: this worker's own parked runs ride the same response as the
     # ordinary pool — the runner checks these FIRST (resume before claiming
