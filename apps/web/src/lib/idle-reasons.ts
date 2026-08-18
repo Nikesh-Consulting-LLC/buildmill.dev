@@ -206,3 +206,20 @@ export function notReadySummary(states: string[]): string {
     .map(([s, n]) => `${n} ${STATUS_LABELS[s]?.toLowerCase() ?? s}`);
   return `${notReady.length} ${notReady.length === 1 ? "agent" : "agents"} not ready (${parts.join(", ")})`;
 }
+
+
+/** us-117.2: does the roster's toggle offer **Start** for this agent?
+ *
+ *  Reads the manager's own last instruction (`agent_slots.desired_state`), not
+ *  the agent's status. It used to be `agentState === "stopped"` — and
+ *  `agentState` is one of nine words, so every other one rendered Stop. An
+ *  agent that was paused AND offline / no-model / no-roles / no-grants /
+ *  queue-held therefore could not be started from the roster at all, which is
+ *  exactly the set most likely to need starting. It also inherited
+ *  `stateFor`'s optimistic "ready" default, so a stopped agent showed Stop
+ *  until the status poll landed, and never flipped if that call was slow.
+ *
+ *  Intent and status are different questions; only intent has two answers. */
+export function showsStart(desiredState: string | null | undefined): boolean {
+  return desiredState === "paused";
+}

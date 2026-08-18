@@ -482,3 +482,48 @@ def test_adoption_happens_once_per_process_not_every_loop():
     asyncio.run(sup.supervise(once=True))
 
     assert adopted == ["prep-1"]
+
+
+# ---------------------------------------------------------------------------
+# us-117.3 — the prep's model comes from the claim, not a local guess
+# ---------------------------------------------------------------------------
+
+
+def _prep_model(claimed, config):
+    """The expression under test, as the runner evaluates it.
+
+    Kept as a helper rather than driving the whole loop: the defect was one
+    fallback chain, and this is that chain."""
+    overrides = config.get("model_overrides") or {}
+    return (claimed or {}).get("model") or (
+        overrides.get("release_prep")
+        or overrides.get("release")
+        or overrides.get("code")
+        or next(iter(overrides.values()), None)
+    )
+
+
+def test_the_claims_model_is_used_when_the_agent_pins_nothing():
+    """The regression. DevOps pinned nothing, so the old chain produced None
+    and the interactive CLI refused — while the org's default provider named
+    grok-4.6 the whole time. The server resolves it now and sends it here."""
+    assert _prep_model({"model": "grok-4.6"}, {"model_overrides": {}}) == "grok-4.6"
+
+
+def test_the_claims_model_wins_over_a_local_guess():
+    """The server's answer already accounts for the agent's own pin — it is
+    the first step of that precedence — so it must not be second-guessed."""
+    assert (
+        _prep_model({"model": "grok-4.6"}, {"model_overrides": {"code": "grok-4.5"}})
+        == "grok-4.6"
+    )
+
+
+def test_an_api_without_the_field_still_falls_back_locally():
+    """Deploy skew: a runner newer than the API keeps working off the local
+    overrides rather than refusing every prep."""
+    assert _prep_model({}, {"model_overrides": {"release": "grok-4.5"}}) == "grok-4.5"
+
+
+def test_nothing_anywhere_is_still_nothing():
+    assert _prep_model({}, {"model_overrides": {}}) is None

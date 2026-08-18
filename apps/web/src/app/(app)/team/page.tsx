@@ -164,7 +164,10 @@ export default async function TeamPage({
   const { data: agentSlots } = await supabase
     .from("agent_slots")
     .select(
-      "id, principal_id, slot_index, agent_server_id, worker_id, agent_servers(id, servers(id, name))"
+      // us-117.2: `desired_state` too — the Start/Stop toggle asks whether the
+      // manager stopped this agent, which is a different question from what
+      // the agent is currently doing, and the only one with two answers.
+      "id, principal_id, slot_index, agent_server_id, worker_id, desired_state, agent_servers(id, servers(id, name))"
     )
     .eq("org_id", orgId)
     .eq("status", "active");
@@ -173,7 +176,14 @@ export default async function TeamPage({
   // deliberate — collapsing them would break one caller or the other.
   const hostByPrincipal: Record<
     string,
-    { hostId: string; serverId: string | null; hostName: string; slotIndex: number; slotId: string }
+    {
+      hostId: string;
+      serverId: string | null;
+      hostName: string;
+      slotIndex: number;
+      slotId: string;
+      desiredState: string | null;
+    }
   > = {};
   type Embedded = {
     servers?: { id?: string; name?: string } | { id?: string; name?: string }[] | null;
@@ -185,6 +195,7 @@ export default async function TeamPage({
     slot_index: number;
     agent_server_id: string;
     worker_id: string | null;
+    desired_state: string | null;
     // PostgREST embeds arrive as an object or a one-element array depending on
     // the relationship the type generator inferred; unwrap both.
     agent_servers: Embedded | Embedded[] | null;
@@ -198,6 +209,7 @@ export default async function TeamPage({
       hostName: srv?.name ?? "a machine",
       slotIndex: s.slot_index,
       slotId: s.id,
+      desiredState: s.desired_state,
     };
     if (s.worker_id) workerIdByPrincipal[s.principal_id] = s.worker_id;
   }

@@ -230,3 +230,79 @@ def test_a_stopped_prep_refuses_a_full_valid_submit(monkeypatch):
         )
     )
     assert "the manager stopped this release" in result["error"]
+
+
+# ---------------------------------------------------------------------------
+# us-117.3 — a prep resolves its model like a run does
+# ---------------------------------------------------------------------------
+
+
+def test_the_claim_carries_a_model_resolved_from_the_org_floor(monkeypatch):
+    """The agent pins nothing, the default preset names nothing, and the org's
+    default LLM provider names `grok-4.6` — us-116.7's floor.
+
+    The runner used to read only `model_overrides`, so this agent got no model
+    at all and the interactive CLI refused: "this agent has no model to reason
+    with … or set a default model on the org's default LLM provider" — advice
+    the manager had already followed. DevOps failed exactly this way on 16, 17
+    and 18 August."""
+    from app import release_prep
+
+    monkeypatch.setattr(
+        release_prep.db, "get_runner_config",
+        lambda s, w: {"enabled_kinds": ["test", "release", "deploy"],
+                      "model_overrides": {}},
+    )
+    monkeypatch.setattr(release_prep.db, "presets_by_id", lambda s, o: {})
+    monkeypatch.setattr(
+        release_prep.db, "org_default_preset",
+        lambda s, o: {"id": "preset-1", "name": "Balanced", "model": None,
+                      "settings": {}, "version": 1, "tool_grants": []},
+    )
+    monkeypatch.setattr(
+        release_prep.db, "org_default_provider_model", lambda s, o: "grok-4.6"
+    )
+
+    model = release_prep.resolved_model(
+        object(), {"id": "w-1", "org_id": "org-1"}
+    )
+    assert model == "grok-4.6"
+
+
+def test_the_agents_own_pin_still_wins(monkeypatch):
+    """US-63.x's intent, unchanged: a manager who pinned a model for this
+    agent gets that model, not the org's."""
+    from app import release_prep
+
+    monkeypatch.setattr(
+        release_prep.db, "get_runner_config",
+        lambda s, w: {"model_overrides": {"release": "grok-4.5"}},
+    )
+    monkeypatch.setattr(release_prep.db, "presets_by_id", lambda s, o: {})
+    monkeypatch.setattr(release_prep.db, "org_default_preset", lambda s, o: None)
+    monkeypatch.setattr(
+        release_prep.db, "org_default_provider_model", lambda s, o: "grok-4.6"
+    )
+
+    assert release_prep.resolved_model(
+        object(), {"id": "w-1", "org_id": "org-1"}
+    ) == "grok-4.5"
+
+
+def test_nobody_chose_anywhere_still_resolves_to_nothing(monkeypatch):
+    """The refusal must survive: `None` here is what makes the runner say
+    "nothing was spent" rather than starting on a model nobody picked."""
+    from app import release_prep
+
+    monkeypatch.setattr(
+        release_prep.db, "get_runner_config", lambda s, w: {"model_overrides": {}}
+    )
+    monkeypatch.setattr(release_prep.db, "presets_by_id", lambda s, o: {})
+    monkeypatch.setattr(release_prep.db, "org_default_preset", lambda s, o: None)
+    monkeypatch.setattr(
+        release_prep.db, "org_default_provider_model", lambda s, o: None
+    )
+
+    assert release_prep.resolved_model(
+        object(), {"id": "w-1", "org_id": "org-1"}
+    ) is None
