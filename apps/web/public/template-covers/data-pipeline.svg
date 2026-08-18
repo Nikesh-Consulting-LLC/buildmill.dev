@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 160" width="320" height="160" role="img" aria-label="">
+<rect width="320" height="160" fill="#e8ecf3"/>
+<rect x="30" y="30" width="84" height="100" rx="6" fill="#ffffff" stroke="#c9d0dc"/>
+<rect x="42" y="46" width="60" height="6" rx="3" fill="#3a4150" opacity=".85"/>
+<rect x="42" y="60" width="52" height="5" rx="2.5" fill="#c9d0dc"/>
+<rect x="42" y="72" width="60" height="5" rx="2.5" fill="#c9d0dc"/>
+<rect x="42" y="84" width="44" height="5" rx="2.5" fill="#c9d0dc"/>
+<rect x="42" y="96" width="56" height="5" rx="2.5" fill="#c9d0dc"/>
+<rect x="42" y="108" width="36" height="5" rx="2.5" fill="#c9d0dc"/>
+<line x1="122" y1="80" x2="164" y2="80" stroke="#c9d0dc" stroke-width="3"/>
+<polygon points="164,74 176,80 164,86" fill="#c9d0dc"/>
+<rect x="188" y="30" width="102" height="100" rx="6" fill="#ffffff" stroke="#c9d0dc"/>
+<rect x="188" y="30" width="102" height="20" rx="6" fill="#3a4150"/>
+<rect x="188" y="42" width="102" height="8" fill="#3a4150"/>
+<line x1="222" y1="50" x2="222" y2="130" stroke="#d6dce7" stroke-width="2"/>
+<line x1="256" y1="50" x2="256" y2="130" stroke="#d6dce7" stroke-width="2"/>
+<line x1="188" y1="70" x2="290" y2="70" stroke="#d6dce7" stroke-width="2"/>
+<line x1="188" y1="90" x2="290" y2="90" stroke="#d6dce7" stroke-width="2"/>
+<line x1="188" y1="110" x2="290" y2="110" stroke="#d6dce7" stroke-width="2"/>
+<circle cx="273" cy="120" r="7" fill="#3fb3a3"/>
+<polyline points="269,120 272,123 278,117" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

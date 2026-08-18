@@ -36,6 +36,12 @@ export const BUILTIN_COVERS = [
   { name: "service", label: "Service" },
   { name: "site", label: "Site" },
   { name: "mobile-app", label: "Mobile app" },
+  // us-118.6: the CRE demo templates' faces — generic enough to reuse.
+  { name: "data-pipeline", label: "Data pipeline" },
+  { name: "bi-model", label: "BI model" },
+  { name: "spreadsheet", label: "Spreadsheet" },
+  { name: "finance-model", label: "Finance model" },
+  { name: "assistant", label: "Assistant" },
   // us-118.5: the kinds of project the factory actually builds.
   { name: "python-react", label: "Python + React app" },
   { name: "database", label: "Database project" },

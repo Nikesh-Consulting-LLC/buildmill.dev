@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 160" width="320" height="160" role="img" aria-label="">
+<rect width="320" height="160" fill="#e8ecf3"/>
+<rect x="40" y="26" width="150" height="40" rx="12" fill="#5b8def"/>
+<polygon points="56,66 52,78 70,66" fill="#5b8def"/>
+<rect x="56" y="40" width="96" height="6" rx="3" fill="#ffffff" opacity=".9"/>
+<rect x="56" y="52" width="60" height="6" rx="3" fill="#ffffff" opacity=".6"/>
+<rect x="130" y="80" width="150" height="56" rx="12" fill="#ffffff" stroke="#c9d0dc"/>
+<polygon points="264,136 268,148 250,136" fill="#ffffff"/>
+<line x1="265" y1="137" x2="268" y2="148" stroke="#c9d0dc" stroke-width="1"/>
+<text x="146" y="104" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="12" fill="#3a4150" opacity=".9">SELECT sum(noi)</text>
+<rect x="146" y="112" width="70" height="5" rx="2.5" fill="#c9d0dc"/>
+<rect x="146" y="122" width="52" height="5" rx="2.5" fill="#c9d0dc"/>
+<circle cx="256" cy="120" r="8" fill="#3fb3a3"/>
+<polyline points="252,120 255,123 261,117" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
