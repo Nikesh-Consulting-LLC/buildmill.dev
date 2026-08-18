@@ -84,6 +84,22 @@ async def lifespan(app: FastAPI):
             logger.warning("Reaped %d orphaned deployment run(s)", reaped)
     except Exception as e:  # DB unreachable — don't block startup
         logger.warning("Orphaned-run reaper skipped: %s", e)
+    # US-119.1: a release at `deploying` is re-read from its own run — the
+    # reaper above now settles the release for the runs it reaps, and this
+    # catches everything the reaper cannot see: a release the old code
+    # stranded, a settle that a DB hiccup swallowed, a run another process
+    # left behind. It also runs on the liveness loop below.
+    try:
+        for r in deploy.settle_stranded_release_deploys(get_settings()):
+            logger.warning(
+                "Settled stranded release %s: deploy run %s was %s → %s",
+                r["version"],
+                r["run_id"],
+                r["from_run_status"],
+                r["landed"],
+            )
+    except Exception as e:
+        logger.warning("Stranded-release sweep skipped: %s", e)
     # US-81.2: suite runs stranded the same way hold the per-suite
     # single-flight lock forever — same rule, same moment.
     try:
@@ -181,6 +197,20 @@ async def lifespan(app: FastAPI):
                         r["version"],
                         r["worker"],
                         r["held_minutes"],
+                    )
+                # US-119.1: the deploy leg's twin — a `deploying` release
+                # whose run is terminal, missing, or past its deployment's
+                # own timeout with no live pipeline settles here, on the
+                # same cadence, so it cannot sit until the next restart.
+                for r in await asyncio.to_thread(
+                    deploy.settle_stranded_release_deploys, get_settings()
+                ):
+                    logger.warning(
+                        "Settled stranded release %s: deploy run %s was %s → %s",
+                        r["version"],
+                        r["run_id"],
+                        r["from_run_status"],
+                        r["landed"],
                     )
                 # US-26.7: agent-server health rides this loop rather than
                 # bringing its own scheduler — each host is probed roughly

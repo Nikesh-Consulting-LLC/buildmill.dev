@@ -34,10 +34,16 @@ import { duration } from "./release-liveness";
 import type { ReleaseSuggestion } from "./data";
 
 // The release lifecycle in plain words, for the line under the version.
+// US-119.1: the three split-lifecycle states (US-63.2) had no words and
+// printed the raw status — `deploying` is exactly the one that needs a
+// manager when it goes wrong.
 const FLIGHT_WORDS: Record<string, string> = {
   queued: "cut — waiting for an agent to prepare it",
-  running: "being prepared — notes, UAT deploy, health checks",
+  running: "being prepared — notes and test cases",
+  "notes-ready": "notes written — the UAT deploy is about to start",
+  deploying: "deploying to UAT",
   "uat-deployed": "on UAT — waiting on test results and sign-off",
+  "uat-deploy-failed": "UAT deploy failed — retry it, or stop the release",
   "uat-signed-off": "signed off — ready to promote to production",
   promoting: "promoting to production",
 };

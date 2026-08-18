@@ -456,7 +456,7 @@ def test_stop_ends_a_claimed_but_still_queued_run(client, make_token, monkeypatc
 
 
 @pytest.mark.parametrize(
-    "status", ["queued", "running", "notes-ready", "uat-deploy-failed"]
+    "status", ["queued", "running", "notes-ready", "deploying", "uat-deploy-failed"]
 )
 def test_stop_accepts_every_state_that_needs_it(
     client, make_token, monkeypatch, status
@@ -467,10 +467,124 @@ def test_stop_accepts_every_state_that_needs_it(
     assert resp.json()["status"] == "cancelled"
 
 
+# --- US-119.1: Stop (and Reject) at `deploying` end the UAT deploy run --------
+
+
+DEPLOY_RUN_ID = str(uuid.uuid4())
+
+
+def _wire_deploying(monkeypatch, *, run_id=DEPLOY_RUN_ID, outcome="signalled"):
+    """A `deploying` release with its UAT deploy run, and deploy.request_cancel
+    faked to record the call and answer `outcome`."""
+    from app.routers import releases as rel_router
+
+    captured = _wire_cancel(monkeypatch, status="deploying")
+    # _wire_cancel's release row has no run id; add it through the same fake.
+    orig_get = rel_router.postgrest_get
+
+    async def fake_get(settings, token, table, params):
+        rows = await orig_get(settings, token, table, params)
+        if table == "releases":
+            return [{**rows[0], "uat_deployment_run_id": run_id}]
+        return rows
+
+    monkeypatch.setattr(rel_router, "postgrest_get", fake_get)
+    cancels: list[tuple] = []
+    monkeypatch.setattr(
+        rel_router.deploy,
+        "request_cancel",
+        lambda s, rid, by, email: cancels.append((rid, by, email)) or outcome,
+    )
+    captured["cancels"] = cancels
+    return captured
+
+
+def test_stop_at_deploying_cancels_the_uat_deploy_run_then_the_release(
+    client, make_token, monkeypatch
+):
+    """2026.08.18.2 sat at `deploying` all day because Stop said "let it
+    finish" to a pipeline that had died with the process. Now Stop ends the
+    deploy run — cooperatively when it is live — and stops the release."""
+    captured = _wire_deploying(monkeypatch)
+    resp = client.post(
+        f"/api/v1/releases/{RELEASE_ID}/cancel",
+        headers=_auth(make_token, sub="manager-1"),
+        json={"comment": "the API restarted mid-deploy"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "cancelled"
+    assert body["deploy_run"] == "signalled"
+    assert captured["cancels"] == [
+        (DEPLOY_RUN_ID, "manager-1", "kaushlesh@nikesh.llc")
+    ]
+    assert captured["patched"]["status"] == "cancelled"
+    assert captured["patched"]["rejected_reason"] == "the API restarted mid-deploy"
+
+
+def test_stop_at_deploying_with_a_dead_run_reports_marked(
+    client, make_token, monkeypatch
+):
+    captured = _wire_deploying(monkeypatch, outcome="marked")
+    resp = client.post(f"/api/v1/releases/{RELEASE_ID}/cancel", headers=_auth(make_token))
+    assert resp.status_code == 200
+    assert resp.json()["deploy_run"] == "marked"
+    assert captured["patched"]["status"] == "cancelled"
+
+
+def test_stop_at_deploying_without_a_run_id_still_stops_the_release(
+    client, make_token, monkeypatch
+):
+    captured = _wire_deploying(monkeypatch, run_id=None)
+    resp = client.post(f"/api/v1/releases/{RELEASE_ID}/cancel", headers=_auth(make_token))
+    assert resp.status_code == 200
+    assert resp.json()["deploy_run"] == "not-active"
+    assert captured["cancels"] == []  # nothing to reach for
+    assert captured["patched"]["status"] == "cancelled"
+
+
+def test_stop_elsewhere_never_reaches_for_a_deploy_run(client, make_token, monkeypatch):
+    """A `running` release's job is the prep, not a deploy — the deploy
+    cancel must not fire on a run id that happens to be on the row."""
+    captured = _wire_deploying(monkeypatch)
+    from app.routers import releases as rel_router
+
+    orig_get = rel_router.postgrest_get
+
+    async def as_running(settings, token, table, params):
+        rows = await orig_get(settings, token, table, params)
+        if table == "releases":
+            return [{**rows[0], "status": "running"}]
+        return rows
+
+    monkeypatch.setattr(rel_router, "postgrest_get", as_running)
+    resp = client.post(f"/api/v1/releases/{RELEASE_ID}/cancel", headers=_auth(make_token))
+    assert resp.status_code == 200
+    assert resp.json()["deploy_run"] == "not-active"
+    assert captured["cancels"] == []
+
+
+def test_reject_at_deploying_ends_the_uat_deploy_run_too(
+    client, make_token, monkeypatch
+):
+    """US-103.3 AC5's argument, for the deploy leg: a verdict on the release
+    ends its job, or a zombie pipeline keeps writing to UAT afterwards."""
+    captured = _wire_deploying(monkeypatch)
+    resp = client.post(
+        f"/api/v1/releases/{RELEASE_ID}/reject",
+        headers=_auth(make_token),
+        json={"comment": "wrong build"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "rejected"
+    assert resp.json()["deploy_run"] == "signalled"
+    assert [c[0] for c in captured["cancels"]] == [DEPLOY_RUN_ID]
+    assert captured["patched"]["status"] == "rejected"
+
+
 @pytest.mark.parametrize(
     ("status", "guidance"),
     [
-        ("deploying", "let it finish"),
         ("uat-deployed", "reject it if testing found it bad"),
         ("uat-signed-off", "reject it if you no longer want it"),
         ("promoting", "roll it back"),
