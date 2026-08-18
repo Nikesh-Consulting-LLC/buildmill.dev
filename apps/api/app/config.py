@@ -22,11 +22,29 @@ class Settings(BaseSettings):
     # server components and any direct session — so exhausting it is a worse
     # outage than the connection churn pooling replaces. Raise deliberately,
     # with the whole fleet counted, not because a graph looked busy.
+    #
+    # us-119.1: 10 -> 20. The runner-facing handlers now run their database
+    # calls on the executor below instead of the event loop, so up to
+    # `db_executor_threads` of them can want a connection at once, and a pool
+    # of 10 would just move the queue from the loop to the pool. 20 assumes
+    # DATABASE_URL points at Supabase's transaction pooler (Supavisor, the
+    # `pgbouncer.get_auth` evidence in pool.py) — where 20 client connections
+    # are cheap. Against the direct 5432 port it would be a fifth of the
+    # database's whole budget; do not raise it there.
     db_pool_min_size: int = 1
-    db_pool_max_size: int = 10
+    db_pool_max_size: int = 20
     # Seconds a caller waits for a free slot before erroring rather than
     # hanging. Must stay under the request timeout it sits inside.
     db_pool_timeout_s: float = 10.0
+    # us-119.1: the default executor `asyncio.to_thread` runs database calls
+    # on. asyncio's own default is min(32, cpu + 4) — 8 threads on the prod
+    # box — sized for CPU work; these calls are network waits, and eight of
+    # them holding threads means the ninth request queues exactly as it used
+    # to queue on the loop. 32 is asyncio's own ceiling. Kept above
+    # `db_pool_max_size` on purpose: a thread that cannot get a connection
+    # waits `db_pool_timeout_s` and fails with the pool's message, which is
+    # a diagnosable event; a request that cannot get a thread just waits.
+    db_executor_threads: int = 32
     # Recycle connections: a pooler or middlebox drops long-idle TCP
     # sessions, and a connection that dies in a caller's hands is a 500.
     db_pool_max_lifetime_s: float = 30 * 60.0

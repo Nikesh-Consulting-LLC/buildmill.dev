@@ -37,6 +37,14 @@ across everything that dials it — this API, the web app's server
 components, and any direct session. ``max_size`` defaults deliberately
 low and is configurable, because exhausting the database's connections is a
 worse outage than the churn this replaces.
+
+us-119.1 raised the default from 10 to 20, and sized the executor that
+``asyncio.to_thread`` runs on (``db_executor_threads``, 32) above it. The
+reasoning is in ``config.py`` beside the two settings; the short form is
+that the runner-facing handlers no longer serialise their database calls on
+the event loop, so several can want a connection at once, and 20 through
+the transaction pooler is cheap while a thread that cannot get one fails
+with this pool's own timeout message rather than waiting silently.
 """
 
 from __future__ import annotations

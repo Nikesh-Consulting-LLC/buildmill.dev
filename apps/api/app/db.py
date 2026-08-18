@@ -2471,22 +2471,6 @@ def worker_session_declares_auth(settings: Settings, worker_id: str) -> bool:
     return bool(row)
 
 
-def worker_is_paused(settings: Settings, worker_id: str) -> bool:
-    """US-26.5: pause without revoking.
-
-    workers.status is only active|revoked, and revoking would invalidate the
-    token written to the agent machine — the agent would drop off entirely and
-    could not be resumed without a re-provision. So pause is its own column,
-    read here on every pool listing and every claim.
-    """
-    with _connect(settings) as conn:
-        row = conn.execute(
-            "select paused from public.runner_config where worker_id = %s",
-            (worker_id,),
-        ).fetchone()
-    return bool(row and row["paused"])
-
-
 def get_runner_config(settings: Settings, worker_id: str) -> dict[str, Any]:
     """Resolved server-side config for a runner, defaults when unset (US-10.2)."""
     with _connect(settings) as conn:
@@ -3733,6 +3717,68 @@ def work_summary(
     }
 
 
+def subscription_run_count(settings: Settings, org_id: str, *, days: int = 30) -> int:
+    """US-52.4 / us-119.3: runs billed to a Claude subscription in the window.
+
+    They bypass the gateway, so they appear in NO spend figure — the Costs
+    page names them as a separate line rather than letting them read as a
+    metering fault. The page used to count them itself with a browser-side
+    Supabase query, serially, before asking for anything else; now the count
+    rides the same `/costs` answer as the breakdown, over the same
+    `created_at > now() - N days` predicate the breakdown uses.
+    """
+    if not (org_id and _valid_uuid(org_id)):
+        return 0
+    try:
+        window = max(1, min(int(days), 366))
+    except (TypeError, ValueError):
+        window = 30
+    with _connect(settings) as conn:
+        row = conn.execute(
+            f"""
+            select count(*) as n from public.runs
+            where org_id = %s and billing = 'subscription'
+              and created_at > now() - interval '{window} days'
+            """,
+            (org_id,),
+        ).fetchone()
+    return int(row["n"]) if row else 0
+
+
+def costs_slice(
+    settings: Settings,
+    org_id: str,
+    *,
+    group_by: str = "project",
+    days: int = 30,
+    project_id: str | None = None,
+    worker_id: str | None = None,
+    item_type: str | None = None,
+) -> dict[str, Any]:
+    """us-119.3: everything the Costs page shows, in one answer.
+
+    The four figures are the four existing reads, verbatim — `breakdown` is
+    `spend_breakdown`'s body, `trend` is `spend_trend`'s (or None for a
+    one-day window, where the page draws no curve), `summary` is
+    `work_summary`'s, `subscription_runs` the US-52.4 count — so putting them
+    in one envelope changes no number. One source of dollars (us-91.11 AC4)
+    is untouched: the page reads tokens and cost off `breakdown.totals`.
+    """
+    try:
+        window = max(1, min(int(days), 366))
+    except (TypeError, ValueError):
+        window = 30
+    common = dict(
+        days=window, project_id=project_id, worker_id=worker_id, item_type=item_type
+    )
+    return {
+        "breakdown": spend_breakdown(settings, org_id, group_by=group_by, **common),
+        "trend": spend_trend(settings, org_id, **common) if window > 1 else None,
+        "summary": work_summary(settings, org_id, **common),
+        "subscription_runs": subscription_run_count(settings, org_id, days=window),
+    }
+
+
 def preset_outcomes(
     settings: Settings, org_id: str, days: int = 90
 ) -> list[dict[str, Any]]:
@@ -4769,19 +4815,21 @@ def list_worker_pool(
     settings: Settings,
     worker: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """The claimable runs this worker may take. Sweeps expired claims back
-    into the pool first, so the listing is self-healing without a background
-    scheduler. Capability filter (US-31.3, fail-closed): only allow-listed
-    project+kind runs are offered — a worker with zero capability rows is
-    offered nothing. us-110.1: that predicate is now the ONLY project filter.
-    The old second one (US-3.14's URL scope, then workers.project_id) is gone,
-    so a worker is offered every project it was granted and nothing else.
-    US-26.5: a paused runner is offered nothing at all — an agent that has
-    just been installed, or one drained for an update, stays connected and
-    configured but takes no work."""
-    requeue_expired_claims(settings)
-    if worker_is_paused(settings, str(worker["id"])):
-        return []
+    """The claimable runs this worker may take. Capability filter (US-31.3,
+    fail-closed): only allow-listed project+kind runs are offered — a worker
+    with zero capability rows is offered nothing. us-110.1: that predicate is
+    now the ONLY project filter. The old second one (US-3.14's URL scope, then
+    workers.project_id) is gone, so a worker is offered every project it was
+    granted and nothing else. US-26.5: a paused runner is offered nothing at
+    all — an agent that has just been installed, or one drained for an update,
+    stays connected and configured but takes no work.
+
+    us-119.2: this used to sweep expired claims back into the pool first
+    ("self-healing without a background scheduler") and read the paused flag
+    on a second connection. The sweep runs every 30 s from `sweeps.py` now,
+    and the paused check is a predicate of the one listing query — a poll
+    costs one query, and a runner sees a requeued claim within half a minute
+    rather than on its next poll."""
     with _connect(settings) as conn:
         return conn.execute(
             """
@@ -4810,6 +4858,12 @@ def list_worker_pool(
               limit 1
             ) prev on true
             where r.org_id = %(org)s and r.status = 'queued'
+              -- US-26.5 / us-119.2: a paused runner is offered nothing.
+              -- Was a separate read before the listing; now a predicate.
+              and not exists (
+                select 1 from public.runner_config rc
+                where rc.worker_id = %(worker)s::uuid and rc.paused
+              )
               -- US-31.3: fail-closed, through the ONE shared predicate.
               -- Zero access rows means this offers nothing — not everything.
               -- US-55.1: the predicate is project ACCESS plus the agent's own
@@ -5453,8 +5507,6 @@ def claim_run(
     stale run id could otherwise walk straight past."""
     if not _valid_uuid(run_id):
         return None
-    if worker_is_paused(settings, str(worker["id"])):
-        return None
     lease = _LEASES.get(worker["type"], _LEASES["autonomous"])
     with _connect(settings) as conn:
         run = conn.execute(
@@ -5487,6 +5539,14 @@ def claim_run(
                 last_heartbeat_at = now(),
                 provider = case when %s = 'human' then 'human' else provider end
             where id = %s and org_id = %s and status = 'queued'
+              -- US-26.5 / us-119.1 AC2: a paused worker claims nothing. This
+              -- used to be a separate read before the update; folded into
+              -- the same statement so a pause landing between the two cannot
+              -- hand a drained agent one more run.
+              and not exists (
+                select 1 from public.runner_config rc
+                where rc.worker_id = %s and rc.paused
+              )
               -- US-15.3 + US-17.2/17.3: a held run (sibling still being
               -- curated, or the feature/epic build-mode phase batch holds it)
               -- is never claimable, even on a direct race — the pool won't have
@@ -5519,6 +5579,7 @@ def claim_run(
                 worker["type"],
                 run_id,
                 worker["org_id"],
+                worker["id"],
             ),
         ).fetchone()
         if not run:
@@ -5614,13 +5675,10 @@ def get_release_uat_deployment_id(settings: Settings, project_id: str) -> str | 
 
 
 def list_release_prep_pool(settings: Settings, org_id: str) -> list[dict[str, Any]]:
-    # US-103.1: the lazy sweep, mirroring requeue_expired_claims running
-    # before a run-pool listing. A runner asking for work also clears the
-    # corpse that is blocking the project from cutting anything new.
-    try:
-        reap_expired_release_preps(settings)
-    except Exception:  # noqa: BLE001 — a listing must not fail over the sweep
-        logger.warning("Release-prep reaper skipped during pool listing", exc_info=True)
+    # us-119.2: the listing only lists. US-103.1 had it run
+    # `reap_expired_release_preps` first, mirroring the run pool's lazy sweep;
+    # both sweeps run every 30 s from `sweeps.py` now, so an abandoned prep is
+    # cleared within half a minute whether or not anyone is polling.
     return _list_release_prep_pool(settings, org_id)
 
 
@@ -7499,17 +7557,27 @@ def pause_run(
         # lose (its own `status = 'running'` guard would already be gone).
         return False, "exhausted", attempts, cap
     with _connect(settings) as conn:
-        conn.execute(
+        # us-119.1 AC2: the read above and this write are two statements on
+        # two leased connections, and nothing serialises what lands between
+        # them — a manager's cancel, a heartbeat-expiry requeue, a completed
+        # submit. The status guard makes this the same conditional transition
+        # every other run write is; a lost race lands nothing and reports it,
+        # instead of overwriting a terminal status with 'paused'.
+        landed = conn.execute(
             """
             update public.runs
             set status = 'paused', resume_reason = %s, stdout = %s,
                 claude_session_id = coalesce(%s, claude_session_id),
                 resume_attempts = resume_attempts + 1, resume_state_at = now(),
                 claimed_at = null, claim_expires_at = null, last_heartbeat_at = null
-            where id = %s
+            where id = %s and status = 'running'
+            returning id
             """,
             (reason, stdout, claude_session_id, run_id),
-        )
+        ).fetchone()
+        if not landed:
+            conn.rollback()
+            return False, "", attempts, cap
         if run["issue_id"]:
             conn.execute(
                 """
@@ -8066,9 +8134,10 @@ def requeue_stale_heartbeats(settings: Settings) -> int:
 
 def requeue_expired_claims(settings: Settings) -> int:
     """Expired claims return to the pool (running → queued) — abandoned
-    work is retryable, not dead (US-3.2). Runs at startup and before
-    every pool listing. Expired claims WITH pushed work are the
-    reconciler's business (US-3.4 auto-submit) and are skipped here.
+    work is retryable, not dead (US-3.2). Runs every 30 s from `sweeps.py`
+    (us-119.2; it used to run at startup and before every pool listing).
+    Expired claims WITH pushed work are the reconciler's business (US-3.4
+    auto-submit) and are skipped here.
     US-31.2: the stale-heartbeat sweep rides along, so every caller that
     reclaims lease-expired work also notices dead agents."""
     requeue_stale_heartbeats(settings)

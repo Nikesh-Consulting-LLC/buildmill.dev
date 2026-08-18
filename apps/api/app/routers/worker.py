@@ -8,6 +8,7 @@ the factory opens the PR and pulls the diff itself; workers never hold
 GitHub credentials (the git remote is US-3.8).
 """
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any
@@ -27,7 +28,6 @@ from .. import (
     mcp_tools,
     model_resolution,
     project_env,
-    reconcile,
     release_prep,
     validation,
 )
@@ -261,19 +261,17 @@ async def pool(
     worker: dict = Depends(verify_worker),
     settings: Settings = Depends(get_settings),
 ):
-    # expired-with-pushes claims auto-submit before the pool is listed —
-    # the listing stays self-healing without a background scheduler
-    try:
-        await reconcile.reconcile_pushed_expired_claims(settings)
-    except Exception:  # noqa: BLE001 — a reconciler hiccup never blocks the pool
-        pass
-    runs = db.list_worker_pool(settings, worker)
+    # us-119.2: a poll only lists. The lease sweeps that used to run here
+    # first — the pushed-claim reconciler (US-3.4) and, inside
+    # list_worker_pool, the expired-claim requeue (US-3.2) — run every 30 s
+    # from sweeps.py instead, so ~40,000 polls a day stop paying for them.
+    runs = await asyncio.to_thread(db.list_worker_pool, settings, worker)
     # US-59.9: this worker's own parked runs ride the same response as the
     # ordinary pool — the runner checks these FIRST (resume before claiming
     # fresh work), so a paused run is never left waiting behind an endless
     # stream of new items landing on the same machine.
     try:
-        resumable = db.list_worker_resumable(settings, worker)
+        resumable = await asyncio.to_thread(db.list_worker_resumable, settings, worker)
     except Exception:  # noqa: BLE001 — the ordinary pool still answers
         logger.warning("could not list resumable runs for worker %s", worker["id"])
         resumable = []
@@ -315,7 +313,7 @@ async def resume_claim(
     is affinity-scoped (only the owning worker_id may call it) rather than
     org-scoped-and-first-come, and it never touches issue status (the work
     was never released, only parked)."""
-    run = db.resume_claim(settings, run_id, worker)
+    run = await asyncio.to_thread(db.resume_claim, settings, run_id, worker)
     if run:
         return {
             "run": {
@@ -339,16 +337,16 @@ async def claim(
     # US-31.3: fail-closed capability gate — the refusal names exactly which
     # grant is missing, because "not on the project" and "on the project but
     # not for this kind" have different fixes.
-    refusal = db.worker_run_refusal(settings, str(worker["id"]), run_id)
+    refusal = await asyncio.to_thread(db.worker_run_refusal, settings, str(worker["id"]), run_id)
     if refusal:
         raise HTTPException(status_code=403, detail=refusal)
-    run = db.claim_run(settings, run_id, worker)
+    run = await asyncio.to_thread(db.claim_run, settings, run_id, worker)
     if run:
         # US-32.7: resolve the run's settings ONCE, here, and stamp them. Work
         # is claimed from a pool, so the same story handed to two agents can
         # run two different ways — nothing else would say which.
         try:
-            stamp_run_settings(settings, run, worker)
+            await asyncio.to_thread(stamp_run_settings, settings, run, worker)
         except HTTPException:
             # US-32.8's unroutable-model refusal is deliberate — the run has
             # already been failed with the reason, and the agent must hear it.
@@ -362,7 +360,7 @@ async def claim(
                 "claim_expires_at": _iso(run["claim_expires_at"]),
             }
         }
-    existing = db.get_worker_run(settings, run_id, str(worker["org_id"]))
+    existing = await asyncio.to_thread(db.get_worker_run, settings, run_id, str(worker["org_id"]))
     if existing:
         raise HTTPException(
             status_code=409, detail="someone else took it — list the pool again"
@@ -377,26 +375,26 @@ async def context(
     worker: dict = Depends(verify_worker),
     settings: Settings = Depends(get_settings),
 ):
-    run = db.get_worker_run(settings, run_id, str(worker["org_id"]))
+    run = await asyncio.to_thread(db.get_worker_run, settings, run_id, str(worker["org_id"]))
     if not run:
         raise HTTPException(status_code=404, detail="run not found")
     if str(run.get("worker_id") or "") != str(worker["id"]):
         raise HTTPException(
             status_code=409, detail="you do not hold this run — claim it first"
         )
-    db.extend_claim(settings, run_id, str(worker["id"]))
+    await asyncio.to_thread(db.extend_claim, settings, run_id, str(worker["id"]))
 
     ic = run.get("input_context") or {}
     # US-5.14: instructions = code-generated mechanics (always present,
     # edit-proof) + the project's editable behavioral template, read live.
-    template = db.get_worker_instruction(
+    template = await asyncio.to_thread(db.get_worker_instruction,
         settings,
         str(run.get("project_id") or ""),
         run["kind"],
         issue_id=str(run.get("issue_id") or "") or None,
     )
     # US-5.12: the work item's comment thread, oldest first.
-    comments = db.list_issue_comments_for_run(
+    comments = await asyncio.to_thread(db.list_issue_comments_for_run,
         settings, run_id, str(worker["org_id"])
     )
     if run["kind"] == "prd":
@@ -423,9 +421,9 @@ async def context(
 
     base = str(request.base_url).rstrip("/")
     # US-7.3: strategy-resolved working branch, stored for hand-back matching.
-    branch, _dev_strategy, submit_mode = db.resolve_working_branch(settings, run)
+    branch, _dev_strategy, submit_mode = await asyncio.to_thread(db.resolve_working_branch, settings, run)
     if run["kind"] == "code":
-        db.set_run_branch_ref(settings, str(run["id"]), branch)
+        await asyncio.to_thread(db.set_run_branch_ref, settings, str(run["id"]), branch)
     mechanics = (
         f"Clone the factory git remote (HTTP Basic auth — password is this "
         f"same worker token), work on branch '{branch}', push it, then "
@@ -455,7 +453,7 @@ async def context(
         # US-39.2: read from the claim's own `claim_expires_at`, not recomputed.
         # A parallel calculation here would tell the runner it has time the
         # claim will not honour once the claim scales with the work.
-        "lease_seconds": db.worker_lease_seconds(
+        "lease_seconds": await asyncio.to_thread(db.worker_lease_seconds,
             settings,
             str(worker["id"]),
             worker.get("type") or "autonomous",
@@ -473,7 +471,7 @@ async def context(
         # US-34.2/34.3: the tool servers this run was granted, and a key worth
         # exactly this run. The credential for each one stays in the factory —
         # the agent gets a proxy URL and a scoped key, never a secret.
-        **_tool_bundle(settings, request, run, worker),
+        **await asyncio.to_thread(_tool_bundle, settings, request, run, worker),
         # US-89.2: the project's defined environment, resolved for this
         # agent (agent-scoped entries win). Becomes real process env at CLI
         # spawn on the runner — never a file in the workspace.
@@ -508,7 +506,7 @@ async def heartbeat(
     worker: dict = Depends(verify_worker),
     settings: Settings = Depends(get_settings),
 ):
-    if not db.extend_claim(settings, run_id, str(worker["id"])):
+    if not await asyncio.to_thread(db.extend_claim, settings, run_id, str(worker["id"])):
         raise HTTPException(
             status_code=409, detail="no live claim on this run to extend"
         )
@@ -527,15 +525,15 @@ async def perform_add_comment(
     lease, same as a heartbeat."""
     if not body.strip():
         raise HTTPException(status_code=422, detail="comment body is required")
-    run = db.get_worker_run(settings, run_id, str(worker["org_id"]))
+    run = await asyncio.to_thread(db.get_worker_run, settings, run_id, str(worker["org_id"]))
     if not run:
         raise HTTPException(status_code=404, detail="run not found")
     if str(run.get("worker_id") or "") != str(worker["id"]):
         raise HTTPException(
             status_code=409, detail="you do not hold this run — claim it first"
         )
-    db.extend_claim(settings, run_id, str(worker["id"]))
-    row = db.add_worker_comment(settings, run, worker, body.strip())
+    await asyncio.to_thread(db.extend_claim, settings, run_id, str(worker["id"]))
+    row = await asyncio.to_thread(db.add_worker_comment, settings, run, worker, body.strip())
     return {"ok": True, "comment_id": str(row["id"])}
 
 
@@ -683,10 +681,10 @@ async def _attribute_branch_coverage(
         if not (sha and named):
             continue
         # An id that is not in this run is dropped rather than guessed at.
-        resolved, _unknown = db.resolve_member_ids(members, named)
+        resolved, _unknown = await asyncio.to_thread(db.resolve_member_ids, members, named)
         if not resolved:
             continue
-        written += db.record_changeset_coverage(
+        written += await asyncio.to_thread(db.record_changeset_coverage,
             settings,
             run_id,
             org_id,
@@ -738,18 +736,18 @@ async def _maybe_auto_approve(
     kind = run["kind"]
     if kind not in ("prd", "plan", "code"):
         return None
-    flags = db.get_project_auto_flags(settings, str(run["project_id"]))
+    flags = await asyncio.to_thread(db.get_project_auto_flags, settings, str(run["project_id"]))
     if not flags.get(kind):
         return None
     issue_id = str(run["issue_id"])
     try:
         if kind == "prd":
-            return db.auto_approve_prd(settings, issue_id)
+            return await asyncio.to_thread(db.auto_approve_prd, settings, issue_id)
         if kind == "plan":
-            summary = db.auto_approve_plan(settings, issue_id)
+            summary = await asyncio.to_thread(db.auto_approve_plan, settings, issue_id)
             if body.test_plan:
                 cases = artifacts_sim.parse_test_plan_cases(body.test_plan)
-                summary["materialized_test_cases"] = db.materialize_test_cases(
+                summary["materialized_test_cases"] = await asyncio.to_thread(db.materialize_test_cases,
                     settings,
                     str(run["org_id"]),
                     str(run["project_id"]),
@@ -767,12 +765,12 @@ async def _maybe_auto_approve(
             _o, _r, number = github.parse_pr_url(pr_url)
             sha = await github.merge_pull_request(token, owner, repo, number)
             if sha:
-                db.set_run_merge_sha(settings, str(run["id"]), sha)
+                await asyncio.to_thread(db.set_run_merge_sha, settings, str(run["id"]), sha)
                 merged = "merged"
-        db.auto_approve_code(settings, str(run["id"]))
+        await asyncio.to_thread(db.auto_approve_code, settings, str(run["id"]))
         # US-81.5: a real merge applies the run's case→spec map.
         if merged == "merged":
-            db.apply_spec_map(settings, str(run["id"]))
+            await asyncio.to_thread(db.apply_spec_map, settings, str(run["id"]))
         return {"gate": "code", "merged": merged}
     except Exception as e:  # noqa: BLE001 — never fail the submit on auto-approve
         logger.warning(
@@ -794,7 +792,7 @@ async def perform_submit(
     """The submit contract, shared by the REST endpoint, the MCP tools
     (US-3.3), and the lease-expiry reconciler (US-3.4). Raises
     HTTPException with actionable detail."""
-    run = db.get_worker_run(settings, run_id, str(worker["org_id"]))
+    run = await asyncio.to_thread(db.get_worker_run, settings, run_id, str(worker["org_id"]))
     if not run:
         raise HTTPException(status_code=404, detail="run not found")
     if run.get("worker_id") is None and run.get("status") == "queued":
@@ -826,7 +824,7 @@ async def perform_submit(
     # is fire-and-forget by design — this write is the one that has to survive.
     for line in (body.settings_not_delivered or [])[:20]:
         try:
-            db.record_run_trace(
+            await asyncio.to_thread(db.record_run_trace,
                 settings, run_id, str(worker["id"]), "settings", str(line)[:400]
             )
         except Exception:  # noqa: BLE001 — never fail a hand-back over a note
@@ -836,7 +834,7 @@ async def perform_submit(
     # already refuses a key whose run is not running — this closes the window
     # between the hand-back and that status change.
     try:
-        db.revoke_mcp_keys_for_run(settings, run_id)
+        await asyncio.to_thread(db.revoke_mcp_keys_for_run, settings, run_id)
     except Exception:  # noqa: BLE001 — expiry and the status check both still hold
         logger.warning("could not revoke the MCP keys for %s", run_id)
 
@@ -852,8 +850,8 @@ async def perform_submit(
         # before the turn-limit/stopped-ceiling reads below because "waiting
         # on a human" is the more actionable fact when both are true (the
         # agent asked, then kept working into its own turn cap).
-        if db.has_pending_clarification(settings, run):
-            ok = db.awaiting_input_run(
+        if await asyncio.to_thread(db.has_pending_clarification, settings, run):
+            ok = await asyncio.to_thread(db.awaiting_input_run,
                 settings,
                 run_id,
                 claude_session_id=body.claude_session_id,
@@ -875,7 +873,7 @@ async def perform_submit(
         # attempt cap, so this never loops forever even if the runner keeps
         # reporting the same thing.
         if body.pause_reason == "turn_limit" and not run.get("stopped_reason"):
-            _accepted, landed, attempts, cap = db.pause_run(
+            _accepted, landed, attempts, cap = await asyncio.to_thread(db.pause_run,
                 settings,
                 run_id,
                 reason="turn_limit",
@@ -917,13 +915,13 @@ async def perform_submit(
         # nothing has ever kept. It is what decides whether the next attempt
         # escalates or repeats.
         try:
-            db.record_run_fault_class(settings, run_id, body.fault_class)
+            await asyncio.to_thread(db.record_run_fault_class, settings, run_id, body.fault_class)
         except Exception:  # noqa: BLE001 — never fail a hand-back over a label
             logger.warning("could not record the fault class for %s", run_id)
         # failure report — the issue returns to 'failed' for re-dispatch,
         # and a synced GitHub issue closes (US-1.20), as the old callback did
         try:
-            ok = db.complete_run(
+            ok = await asyncio.to_thread(db.complete_run,
                 settings,
                 run_id,
                 outcome,
@@ -951,7 +949,7 @@ async def perform_submit(
                 "recording the failure via the minimal path",
                 run_id,
             )
-            ok = db.fail_run_minimal(
+            ok = await asyncio.to_thread(db.fail_run_minimal,
                 settings, run_id, error_text, worker_name=worker["name"]
             )
         if not ok:
@@ -965,7 +963,7 @@ async def perform_submit(
         # record it and ping the org's managers so a broken runner is fixable.
         if body.fault_class == "runner-fault":
             try:
-                db.record_runner_incident(
+                await asyncio.to_thread(db.record_runner_incident,
                     settings,
                     str(run["org_id"]),
                     str(worker["id"]),
@@ -973,7 +971,7 @@ async def perform_submit(
                     "runner-fault",
                     body.error,
                 )
-                db.notify_org_managers(
+                await asyncio.to_thread(db.notify_org_managers,
                     settings,
                     str(run["org_id"]),
                     "runner_fault",
@@ -993,7 +991,7 @@ async def perform_submit(
         # US-5.21: structural findings ride the response as warnings —
         # signal for the worker loop, never a new rejection path.
         warnings = validation.validate_prd(body.prd)
-        ok = db.complete_run(
+        ok = await asyncio.to_thread(db.complete_run,
             settings,
             run_id,
             "succeeded",
@@ -1012,7 +1010,7 @@ async def perform_submit(
             raise HTTPException(
                 status_code=409, detail="run is not claimed — claim it and retry"
             )
-        _store_handback_notes(settings, run, worker, run_id, body.notes)
+        await asyncio.to_thread(_store_handback_notes, settings, run, worker, run_id, body.notes)
         out = {"ok": True, "issue_status": "prd-review"}
         if warnings:
             out["warnings"] = warnings
@@ -1028,7 +1026,7 @@ async def perform_submit(
         if not body.stories:
             raise HTTPException(status_code=422, detail="stories are required")
         warnings = validation.validate_stories(body.stories)
-        ok = db.complete_run(
+        ok = await asyncio.to_thread(db.complete_run,
             settings,
             run_id,
             "succeeded",
@@ -1052,7 +1050,7 @@ async def perform_submit(
         try:
             from .. import complexity
 
-            for cid in db.child_story_ids(settings, str(run["issue_id"])):
+            for cid in await asyncio.to_thread(db.child_story_ids, settings, str(run["issue_id"])):
                 await complexity.score_and_store_issue(
                     settings, cid, basis="story"
                 )
@@ -1061,7 +1059,7 @@ async def perform_submit(
                 "story complexity scoring failed for feature %s",
                 run.get("issue_id"),
             )
-        _store_handback_notes(settings, run, worker, run_id, body.notes)
+        await asyncio.to_thread(_store_handback_notes, settings, run, worker, run_id, body.notes)
         out = {"ok": True, "issue_status": "ready", "story_count": len(body.stories)}
         if warnings:
             out["warnings"] = warnings
@@ -1071,7 +1069,7 @@ async def perform_submit(
         if not body.plan:
             raise HTTPException(status_code=422, detail="plan markdown is required")
         warnings = validation.validate_plan(body.plan, body.test_plan)
-        ok = db.complete_run(
+        ok = await asyncio.to_thread(db.complete_run,
             settings,
             run_id,
             "succeeded",
@@ -1096,7 +1094,7 @@ async def perform_submit(
             # materialize nothing — the plan-review page reads this event.
             # Best-effort: the submit already succeeded.
             try:
-                db.record_issue_event(
+                await asyncio.to_thread(db.record_issue_event,
                     settings,
                     str(run["org_id"]),
                     str(run["issue_id"]),
@@ -1119,7 +1117,7 @@ async def perform_submit(
             logger.warning(
                 "complexity refine failed for issue %s", run.get("issue_id")
             )
-        _store_handback_notes(settings, run, worker, run_id, body.notes)
+        await asyncio.to_thread(_store_handback_notes, settings, run, worker, run_id, body.notes)
         out = {"ok": True, "issue_status": "plan-review"}
         if warnings:
             out["warnings"] = warnings
@@ -1138,7 +1136,7 @@ async def perform_submit(
                 status_code=422,
                 detail="the factory opens PRs itself — submit the branch_ref",
             )
-        ok = db.complete_run(
+        ok = await asyncio.to_thread(db.complete_run,
             settings,
             run_id,
             "succeeded",
@@ -1157,7 +1155,7 @@ async def perform_submit(
             raise HTTPException(
                 status_code=409, detail="run is not claimed — claim it and retry"
             )
-        _store_handback_notes(settings, run, worker, run_id, body.notes)
+        await asyncio.to_thread(_store_handback_notes, settings, run, worker, run_id, body.notes)
         return {"ok": True, "pr_url": body.pr_url, "issue_status": "in-review"}
 
     if not body.branch_ref:
@@ -1171,7 +1169,7 @@ async def perform_submit(
     default_branch = run.get("default_branch") or ic.get("default_branch") or "main"
     # US-7.15: in `direct` (main-strategy) mode the work was committed to the
     # default branch — no PR to open, the review gate is bypassed.
-    _branch, _strategy, submit_mode = db.resolve_working_branch(settings, run)
+    _branch, _strategy, submit_mode = await asyncio.to_thread(db.resolve_working_branch, settings, run)
     direct = submit_mode == "direct"
 
     # US-5.24: credential problems are never worker-fixable — the detail
@@ -1261,7 +1259,7 @@ async def perform_submit(
     # branch to compare and nothing to attribute — don't even ask for the
     # membership. (Multi-story attribution in direct mode is out of scope:
     # see us-40.2. It behaves as it did before this story.)
-    members = [] if direct else db.run_members(settings, run_id)
+    members = [] if direct else await asyncio.to_thread(db.run_members, settings, run_id)
     if len(members) > 1:
         await _attribute_branch_coverage(
             settings,
@@ -1284,7 +1282,7 @@ async def perform_submit(
         # which both transports write: the walk seeds it for git-native
         # hand-backs, apply_changeset already wrote it for MCP ones.
         covered = any(
-            m.get("landed") for m in db.run_members(settings, run_id)
+            m.get("landed") for m in await asyncio.to_thread(db.run_members, settings, run_id)
         )
         if not covered:
             # Refused rather than accepted-and-emptied. The same shape as the
@@ -1307,7 +1305,7 @@ async def perform_submit(
             )
             raise exc
 
-    ok = db.complete_run(
+    ok = await asyncio.to_thread(db.complete_run,
         settings,
         run_id,
         "succeeded",
@@ -1327,7 +1325,7 @@ async def perform_submit(
         raise HTTPException(
             status_code=409, detail="run is not claimed — claim it and retry"
         )
-    _store_handback_notes(settings, run, worker, run_id, body.notes)
+    await asyncio.to_thread(_store_handback_notes, settings, run, worker, run_id, body.notes)
     out = {
         "ok": True,
         "pr_url": pr_url,
@@ -1371,7 +1369,7 @@ async def release(
     worker: dict = Depends(verify_worker),
     settings: Settings = Depends(get_settings),
 ):
-    if not db.release_claim(settings, run_id, worker, note=body.note):
+    if not await asyncio.to_thread(db.release_claim, settings, run_id, worker, note=body.note):
         raise HTTPException(
             status_code=409, detail="no live claim on this run to release"
         )
@@ -1393,7 +1391,7 @@ async def list_release_prep(
     worker: dict = Depends(verify_worker),
     settings: Settings = Depends(get_settings),
 ):
-    rows = db.list_release_prep_pool(settings, str(worker["org_id"]))
+    rows = await asyncio.to_thread(db.list_release_prep_pool, settings, str(worker["org_id"]))
     return {"items": rows}
 
 
@@ -1412,7 +1410,7 @@ async def list_held_release_prep(
     claim, and a reaped or stopped prep is no longer `running`, so it is never
     returned and never resumed.
     """
-    rows = db.list_held_release_preps(
+    rows = await asyncio.to_thread(db.list_held_release_preps,
         settings, str(worker["id"]), str(worker["org_id"])
     )
     return {
@@ -1447,7 +1445,7 @@ async def get_release_prep_status(
     reached 'succeeded'/'failed' rather than trusting a clean CLI exit — an
     agent that exits 0 without calling submit_release_notes must not read as
     done."""
-    row = db.get_release_prep(settings, prep_id, str(worker["org_id"]))
+    row = await asyncio.to_thread(db.get_release_prep, settings, prep_id, str(worker["org_id"]))
     if not row:
         raise HTTPException(status_code=404, detail="release prep not found")
     return {"id": str(row["id"]), "status": row["status"]}
@@ -1471,10 +1469,10 @@ async def heartbeat_release_prep(
     worker: dict = Depends(verify_worker),
     settings: Settings = Depends(get_settings),
 ):
-    if not db.heartbeat_release_prep(settings, prep_id, str(worker["id"])):
+    if not await asyncio.to_thread(db.heartbeat_release_prep, settings, prep_id, str(worker["id"])):
         # us-103.3: an agent whose release was stopped under it learns why
         # here, on its next beat, rather than reading "no live claim".
-        row = db.get_release_prep(settings, prep_id, str(worker["org_id"]))
+        row = await asyncio.to_thread(db.get_release_prep, settings, prep_id, str(worker["org_id"]))
         raise HTTPException(
             status_code=409,
             detail=(
@@ -1516,7 +1514,7 @@ async def submit_release_prep(
     settings: Settings = Depends(get_settings),
 ):
     if body.error:
-        row = db.fail_release_prep(settings, prep_id, body.error)
+        row = await asyncio.to_thread(db.fail_release_prep, settings, prep_id, body.error)
         if not row:
             raise HTTPException(status_code=409, detail="release prep is not claimed")
         return {"ok": True, "run_status": "failed"}
@@ -1563,7 +1561,7 @@ async def upload_run_document(
 ):
     """Agent upload mid-run: the document lands attached to the run's
     work item (source = 'agent'). Same filename replaces in place."""
-    run = _owned_active_run(settings, run_id, worker)
+    run = await asyncio.to_thread(_owned_active_run, settings, run_id, worker)
     if run["status"] != "running":
         raise HTTPException(status_code=409, detail="run is not active")
 
@@ -1598,7 +1596,7 @@ async def fetch_run_document(
     """Byte-fetch for the context bundle's `documents` entries: the run's
     own work-item attachments plus its governing PRD's documents
     (US-2.22). Anything else is a 404 — never leak existence."""
-    run = _owned_active_run(settings, run_id, worker)
+    run = await asyncio.to_thread(_owned_active_run, settings, run_id, worker)
     doc = documents.get_document(settings, document_id)
     if not doc or str(doc["org_id"]) != str(run["org_id"]):
         raise HTTPException(status_code=404, detail="document not found")

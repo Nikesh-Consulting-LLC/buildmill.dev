@@ -789,3 +789,40 @@ async def org_work_summary(
         worker_id=worker_id,
         item_type=item_type,
     )
+
+
+@router.get("/orgs/{org_id}/costs")
+async def org_costs(
+    org_id: str,
+    group_by: str = "project",
+    days: int = 30,
+    project_id: str | None = None,
+    worker_id: str | None = None,
+    item_type: str | None = None,
+    user: AuthUser = Depends(verify_token),
+    settings: Settings = Depends(get_settings),
+):
+    """us-119.3: everything the Costs page shows, in one round trip.
+
+    `{breakdown, trend, summary, subscription_runs}` — the bodies of /spend,
+    /spend-trend (null for a one-day window), /work-summary and the US-52.4
+    subscription count, under the same four parameters, computed by the same
+    functions. The page used to make four network round trips for these
+    (one of them serial, one a browser-side Supabase count) and gate its whole
+    render on the slowest; now it asks once. The three endpoints above stay:
+    the project card and the agent page read /spend under a member gate.
+
+    Gated like the section's own endpoints (us-95.1): `view_costs`,
+    verified server-side, 403 to a member without it.
+    """
+    await _require_view_costs(org_id, user, settings)
+    return await asyncio.to_thread(
+        db.costs_slice,
+        settings,
+        org_id,
+        group_by=group_by,
+        days=days,
+        project_id=project_id,
+        worker_id=worker_id,
+        item_type=item_type,
+    )
