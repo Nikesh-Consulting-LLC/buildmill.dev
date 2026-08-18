@@ -1,0 +1,836 @@
+<meta charset="utf-8">
+<title>Template Cards</title>
+<style>
+  :root {
+    --bg: oklch(1 0 0);
+    --fg: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-fg: oklch(0.556 0 0);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+    --primary: oklch(0.205 0 0);
+    --primary-fg: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-fg: oklch(0.205 0 0);
+    --create: oklch(0.705 0.191 42);
+    --create-fg: oklch(0.99 0 0);
+    --success: oklch(0.6 0.16 145);
+    --destructive: oklch(0.577 0.245 27.325);
+    --ring: oklch(0.708 0 0);
+    --overlay: oklch(0.145 0 0 / 0.55);
+    --doc-note: oklch(0.97 0.012 42);
+    --radius: 0.625rem;
+    --r-sm: calc(var(--radius) * 0.6);
+    --r-md: calc(var(--radius) * 0.8);
+    --r-lg: var(--radius);
+    --r-xl: calc(var(--radius) * 1.4);
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Menlo, Consolas, monospace;
+    /* generated-cover tints (light) */
+    --tint-a: oklch(0.93 0.04 250);
+    --tint-a-fg: oklch(0.45 0.09 250);
+    --tint-b: oklch(0.93 0.05 42);
+    --tint-b-fg: oklch(0.5 0.13 42);
+    --tint-c: oklch(0.93 0.04 160);
+    --tint-c-fg: oklch(0.45 0.09 160);
+    /* cover illustration palette */
+    --ill-ground: oklch(0.965 0.006 250);
+    --ill-line: oklch(0.86 0.012 250);
+    --ill-block: oklch(0.90 0.02 250);
+    --ill-ink: oklch(0.32 0.03 250);
+    --ill-accent: oklch(0.72 0.12 250);
+    --ill-warm: oklch(0.85 0.06 60);
+    --ill-teal: oklch(0.78 0.09 185);
+    --ill-violet: oklch(0.80 0.08 300);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: oklch(0.145 0 0);
+      --fg: oklch(0.985 0 0);
+      --card: oklch(0.205 0 0);
+      --muted: oklch(0.269 0 0);
+      --muted-fg: oklch(0.708 0 0);
+      --border: oklch(1 0 0 / 10%);
+      --input: oklch(1 0 0 / 15%);
+      --primary: oklch(0.922 0 0);
+      --primary-fg: oklch(0.205 0 0);
+      --secondary: oklch(0.269 0 0);
+      --secondary-fg: oklch(0.985 0 0);
+      --create: oklch(0.665 0.191 42);
+      --success: oklch(0.64 0.16 145);
+      --destructive: oklch(0.704 0.191 22.216);
+      --ring: oklch(0.556 0 0);
+      --overlay: oklch(0 0 0 / 0.6);
+      --doc-note: oklch(0.24 0.02 42);
+      --tint-a: oklch(0.32 0.05 250); --tint-a-fg: oklch(0.85 0.06 250);
+      --tint-b: oklch(0.32 0.06 42);  --tint-b-fg: oklch(0.86 0.09 42);
+      --tint-c: oklch(0.32 0.05 160); --tint-c-fg: oklch(0.85 0.07 160);
+      --ill-ground: oklch(0.26 0.01 250);
+      --ill-line: oklch(0.36 0.015 250);
+      --ill-block: oklch(0.33 0.02 250);
+      --ill-ink: oklch(0.88 0.02 250);
+      --ill-accent: oklch(0.7 0.12 250);
+      --ill-warm: oklch(0.6 0.08 60);
+      --ill-teal: oklch(0.6 0.09 185);
+      --ill-violet: oklch(0.62 0.09 300);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: oklch(0.145 0 0);
+    --fg: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-fg: oklch(0.708 0 0);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --primary: oklch(0.922 0 0);
+    --primary-fg: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-fg: oklch(0.985 0 0);
+    --create: oklch(0.665 0.191 42);
+    --success: oklch(0.64 0.16 145);
+    --destructive: oklch(0.704 0.191 22.216);
+    --ring: oklch(0.556 0 0);
+    --overlay: oklch(0 0 0 / 0.6);
+    --doc-note: oklch(0.24 0.02 42);
+    --tint-a: oklch(0.32 0.05 250); --tint-a-fg: oklch(0.85 0.06 250);
+    --tint-b: oklch(0.32 0.06 42);  --tint-b-fg: oklch(0.86 0.09 42);
+    --tint-c: oklch(0.32 0.05 160); --tint-c-fg: oklch(0.85 0.07 160);
+    --ill-ground: oklch(0.26 0.01 250);
+    --ill-line: oklch(0.36 0.015 250);
+    --ill-block: oklch(0.33 0.02 250);
+    --ill-ink: oklch(0.88 0.02 250);
+    --ill-accent: oklch(0.7 0.12 250);
+    --ill-warm: oklch(0.6 0.08 60);
+    --ill-teal: oklch(0.6 0.09 185);
+    --ill-violet: oklch(0.62 0.09 300);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+  code { background: var(--muted); padding: 0.1em 0.35em; border-radius: var(--r-sm); }
+
+  /* ---------- document chrome ---------- */
+  .doc { max-width: 1040px; margin: 0 auto; padding: 48px 28px 96px; }
+  .doc-head { display: grid; gap: 10px; margin-bottom: 40px; max-width: 64ch; }
+  .eyebrow {
+    font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted-fg); font-weight: 600;
+  }
+  h1 { font-size: 30px; line-height: 1.15; margin: 0; letter-spacing: -0.01em; text-wrap: balance; font-weight: 650; }
+  h2 { font-size: 20px; margin: 0; letter-spacing: -0.005em; text-wrap: balance; font-weight: 650; }
+  h3 { font-size: 15px; margin: 0; font-weight: 650; }
+  p { margin: 0; }
+  .lede { color: var(--muted-fg); font-size: 16px; }
+  .prose { max-width: 66ch; display: grid; gap: 10px; }
+  .prose p, .prose li { color: var(--fg); }
+  .prose ul { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }
+  .section { display: grid; gap: 18px; padding: 36px 0; border-top: 1px solid var(--border); }
+  .section-head { display: grid; gap: 6px; max-width: 66ch; }
+  .section-head p { color: var(--muted-fg); }
+  .muted { color: var(--muted-fg); }
+  .small { font-size: 13px; }
+  .note {
+    background: var(--doc-note); border: 1px solid var(--border);
+    border-radius: var(--r-md); padding: 10px 14px; font-size: 13.5px; max-width: 66ch;
+  }
+  .note strong { font-weight: 650; }
+  .caption { font-size: 13px; color: var(--muted-fg); max-width: 72ch; }
+  .caption b { color: var(--fg); font-weight: 600; }
+  .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; align-items: start; }
+  .callouts { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+  .callout {
+    border: 1px solid var(--border); border-radius: var(--r-md); padding: 12px 14px;
+    display: grid; gap: 4px; background: var(--card);
+  }
+  .callout h3 { font-size: 13.5px; }
+  .callout p { font-size: 13px; color: var(--muted-fg); }
+
+  table.spec { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  table.spec th, table.spec td { text-align: left; vertical-align: top; padding: 9px 12px; border-top: 1px solid var(--border); }
+  table.spec th { color: var(--muted-fg); font-weight: 600; white-space: nowrap; width: 160px; }
+  table.spec tr:first-child th, table.spec tr:first-child td { border-top: 0; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--r-md); }
+  .roles { border-collapse: collapse; width: 100%; font-size: 13.5px; min-width: 620px; }
+  .roles th, .roles td { padding: 9px 12px; border-top: 1px solid var(--border); text-align: left; vertical-align: top; }
+  .roles thead th { border-top: 0; color: var(--muted-fg); font-weight: 600; background: var(--muted); }
+  .roles td:first-child { font-weight: 600; white-space: nowrap; }
+  .yes { color: var(--success); font-weight: 600; }
+  .no { color: var(--muted-fg); }
+
+  /* ---------- app-like primitives (mirror Tailwind tokens) ---------- */
+  .stage {
+    background: var(--muted); border: 1px solid var(--border); border-radius: var(--r-xl);
+    padding: 28px; display: grid; place-items: start center; overflow-x: auto;
+  }
+  .stage.overlay { background: var(--overlay); }
+  .dialog {
+    background: var(--card); color: var(--fg); border: 1px solid var(--border);
+    border-radius: var(--r-lg); box-shadow: 0 20px 60px oklch(0 0 0 / 0.18);
+    width: 100%; display: grid; gap: 16px; padding: 24px;
+  }
+  .dialog-title { font-size: 18px; font-weight: 650; line-height: 1.2; }
+  .dialog-desc { font-size: 14px; color: var(--muted-fg); }
+  .field { display: grid; gap: 8px; }
+  .label { font-size: 14px; font-weight: 500; }
+  .label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .input, .select, .textarea {
+    width: 100%; height: 36px; border: 1px solid var(--input); background: transparent; color: var(--fg);
+    border-radius: var(--r-md); padding: 0 12px; font: inherit; font-size: 14px; outline: none;
+  }
+  .input:focus-visible, .select:focus-visible, .textarea:focus-visible, .btn:focus-visible, .chip:focus-visible, .tcard:focus-visible, .trow:focus-visible, .tab:focus-visible {
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent);
+    border-color: var(--ring);
+  }
+  .input::placeholder { color: var(--muted-fg); }
+  .select {
+    display: flex; align-items: center; justify-content: space-between; cursor: default;
+  }
+  .select .chev { color: var(--muted-fg); }
+  .textarea { height: auto; min-height: 88px; padding: 8px 12px; resize: vertical; line-height: 1.5; font-family: var(--font-mono); font-size: 13px; }
+  .help { font-size: 12px; color: var(--muted-fg); }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 16px;
+    border-radius: var(--r-md); border: 1px solid transparent; font: inherit; font-size: 14px; font-weight: 500;
+    cursor: pointer; background: var(--primary); color: var(--primary-fg); white-space: nowrap;
+  }
+  .btn.sm { height: 32px; padding: 0 12px; font-size: 13px; }
+  .btn.xs { height: 24px; padding: 0 8px; font-size: 12px; }
+  .btn.outline { background: transparent; border-color: var(--border); color: var(--fg); }
+  .btn.ghost { background: transparent; color: var(--muted-fg); }
+  .btn.ghost:hover, .btn.outline:hover { background: var(--muted); }
+  .btn.create { background: var(--create); color: var(--create-fg); }
+  .btn.destructive { background: color-mix(in oklch, var(--destructive) 12%, transparent); color: var(--destructive); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .footer { display: flex; justify-content: flex-end; gap: 8px; }
+  .badge {
+    display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 500; white-space: nowrap; border: 1px solid transparent; line-height: 1;
+  }
+  .badge.default { background: var(--primary); color: var(--primary-fg); }
+  .badge.secondary { background: var(--secondary); color: var(--secondary-fg); }
+  .badge.outline { border-color: var(--border); color: var(--fg); }
+  .badge.mono { font-family: var(--font-mono); font-size: 10.5px; }
+  .icon { width: 16px; height: 16px; flex: none; }
+  .icon.s { width: 14px; height: 14px; }
+
+  /* ---------- chips ---------- */
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border);
+    background: transparent; color: var(--muted-fg); font: inherit; font-size: 12.5px; cursor: pointer;
+  }
+  .chip[aria-pressed="true"] { background: var(--primary); color: var(--primary-fg); border-color: var(--primary); }
+  .chip:hover:not([aria-pressed="true"]) { background: var(--muted); color: var(--fg); }
+
+  /* ---------- template card row (carousel) ---------- */
+  /* The scroller lives inside grid-laid-out form fields; without minmax(0,1fr)
+     and min-width:0 the grid chain refuses to shrink below the row's content
+     and the row overflows the dialog instead of scrolling. */
+  .tcarousel-wrap { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); }
+  .tcarousel {
+    min-width: 0; display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory;
+    padding: 3px; margin: -3px; scrollbar-width: none; scroll-behavior: smooth;
+    overscroll-behavior-x: contain;
+  }
+  .tcarousel::-webkit-scrollbar { display: none; }
+  .tcarousel .tcard { flex: 0 0 210px; scroll-snap-align: start; }
+  @media (max-width: 520px) { .tcarousel .tcard { flex-basis: 78%; } }
+  .tcarousel-wrap::before, .tcarousel-wrap::after {
+    content: ""; position: absolute; top: 3px; bottom: 3px; width: 44px; pointer-events: none; z-index: 1;
+    opacity: 0; transition: opacity 120ms ease;
+  }
+  .tcarousel-wrap::before { left: 0; background: linear-gradient(to right, var(--card), transparent); }
+  .tcarousel-wrap::after { right: 0; background: linear-gradient(to left, var(--card), transparent); }
+  .tcarousel-wrap.can-prev::before, .tcarousel-wrap.can-next::after { opacity: 1; }
+  .car-btn {
+    position: absolute; top: 50%; transform: translateY(-50%); z-index: 2;
+    width: 30px; height: 30px; border-radius: 999px; padding: 0;
+    background: var(--card); color: var(--fg); border: 1px solid var(--border);
+    box-shadow: 0 2px 8px oklch(0 0 0 / 0.14); display: grid; place-items: center; cursor: pointer;
+  }
+  .car-btn:hover { background: var(--muted); }
+  .car-btn.prev { left: -13px; } .car-btn.next { right: -13px; }
+  .car-btn[hidden] { display: none; }
+  .car-dots { display: flex; justify-content: center; gap: 6px; height: 8px; }
+  .car-dots i { width: 6px; height: 6px; border-radius: 999px; background: var(--border); display: block; }
+  .car-dots i.on { background: var(--muted-fg); }
+  .tcard {
+    position: relative; display: grid; grid-template-rows: auto 1fr; gap: 0; text-align: left;
+    background: var(--card); color: var(--fg); border: 1px solid var(--border); border-radius: var(--r-md);
+    padding: 0; overflow: hidden; cursor: pointer; font: inherit; outline: none;
+    transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+  }
+  .tcard:hover { border-color: color-mix(in oklch, var(--ring) 70%, var(--border)); }
+  .tcard[aria-checked="true"] {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 1px var(--primary);
+  }
+  .tcard[hidden] { display: none; }
+  .cover { aspect-ratio: 2 / 1; width: 100%; display: block; background: var(--ill-ground); position: relative; overflow: hidden; }
+  .cover svg { width: 100%; height: 100%; display: block; object-fit: cover; }
+  .cover.gen { display: grid; place-items: center; }
+  .cover.gen .mono-init {
+    font-size: 40px; font-weight: 650; letter-spacing: -0.02em; line-height: 1;
+    font-family: var(--font-sans);
+  }
+  .cover.gen::after {
+    content: ""; position: absolute; inset: 0;
+    background: repeating-linear-gradient(135deg, transparent 0 10px, oklch(0 0 0 / 0.025) 10px 11px);
+    pointer-events: none;
+  }
+  .cover.tint-a { background: var(--tint-a); color: var(--tint-a-fg); }
+  .cover.tint-b { background: var(--tint-b); color: var(--tint-b-fg); }
+  .cover.tint-c { background: var(--tint-c); color: var(--tint-c-fg); }
+  .check {
+    position: absolute; top: 8px; right: 8px; width: 22px; height: 22px; border-radius: 999px;
+    background: var(--primary); color: var(--primary-fg); display: none; place-items: center;
+    box-shadow: 0 1px 4px oklch(0 0 0 / 0.25);
+  }
+  .tcard[aria-checked="true"] .check { display: grid; }
+  .tbody { display: grid; gap: 4px; padding: 10px 12px 12px; align-content: start; }
+  .tname { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 14px; font-weight: 600; line-height: 1.25; }
+  .tdesc {
+    font-size: 12.5px; color: var(--muted-fg); line-height: 1.45;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .tdesc b, .tdesc strong { color: var(--fg); font-weight: 600; }
+  .tdesc code { font-size: 0.9em; padding: 0 0.3em; }
+  .tcat { font-size: 11px; color: var(--muted-fg); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+
+  /* compact row variant */
+  .trows { display: grid; gap: 6px; }
+  .trow {
+    display: grid; grid-template-columns: 72px 1fr auto; gap: 12px; align-items: center; text-align: left;
+    background: var(--card); color: var(--fg); border: 1px solid var(--border); border-radius: var(--r-md);
+    padding: 8px 12px 8px 8px; cursor: pointer; font: inherit; outline: none;
+  }
+  .trow[aria-checked="true"] { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+  .trow.current { cursor: default; color: var(--muted-fg); }
+  .trow .cover { border-radius: var(--r-sm); aspect-ratio: 16/9; }
+  .trow .cover.gen .mono-init { font-size: 18px; }
+  .trow .tname { font-size: 13.5px; }
+  .trow .tdesc { -webkit-line-clamp: 1; }
+  .trow .meta { font-size: 12px; color: var(--muted-fg); white-space: nowrap; }
+
+  /* thumbnail in list rows */
+  .thumb { width: 28px; height: 28px; border-radius: var(--r-sm); overflow: hidden; flex: none; border: 1px solid var(--border); }
+  .thumb .cover { aspect-ratio: 1; height: 100%; }
+  .thumb .cover.gen .mono-init { font-size: 11px; }
+  .thumb svg { object-fit: cover; }
+
+  /* ---------- editor mockup ---------- */
+  .editor { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 24px; }
+  @media (max-width: 760px) { .editor { grid-template-columns: 1fr; } }
+  .tabs { display: inline-flex; gap: 2px; background: var(--muted); border-radius: var(--r-md); padding: 3px; }
+  .tab {
+    border: 0; background: transparent; color: var(--muted-fg); font: inherit; font-size: 12.5px; font-weight: 500;
+    padding: 4px 10px; border-radius: var(--r-sm); cursor: pointer;
+  }
+  .tab[aria-selected="true"] { background: var(--card); color: var(--fg); box-shadow: 0 1px 2px oklch(0 0 0 / 0.08); }
+  .counter { font-size: 12px; color: var(--muted-fg); font-variant-numeric: tabular-nums; }
+  .counter.warn { color: var(--create); }
+  .preview-md { border: 1px solid var(--input); border-radius: var(--r-md); padding: 10px 12px; min-height: 88px; font-size: 13.5px; }
+  .preview-md p + p { margin-top: 6px; }
+  .dropzone {
+    border: 1px dashed var(--border); border-radius: var(--r-md); padding: 10px; display: grid;
+    grid-template-columns: 128px 1fr; gap: 12px; align-items: center;
+  }
+  .dropzone .cover { border-radius: var(--r-sm); }
+  .dropzone .cover.gen .mono-init { font-size: 24px; }
+  .dz-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .preview-pane { display: grid; gap: 10px; align-content: start; }
+  .preview-pane .tcard { cursor: default; max-width: 300px; }
+  .preview-pane .tcard:hover { border-color: var(--border); }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12.5px; color: var(--muted-fg); }
+  .kv dt { font-weight: 600; color: var(--fg); }
+  .kv dd { margin: 0; }
+  .toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+  .toggle input { accent-color: var(--primary); }
+
+  /* ---------- org settings header snippet ---------- */
+  .pane { border: 1px solid var(--border); border-radius: var(--r-md); background: var(--card); overflow: hidden; }
+  .pane-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; flex-wrap: wrap; }
+  .pane-head .left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .pane-desc { padding: 0 14px 12px; font-size: 13.5px; color: var(--muted-fg); max-width: 60ch; }
+  .pane-desc b { color: var(--fg); font-weight: 600; }
+  .list { border-top: 1px solid var(--border); }
+  .list-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--border); font-size: 13.5px; }
+  .list-row:first-child { border-top: 0; }
+  .list-row .grow { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .list-row .meta { font-size: 12px; color: var(--muted-fg); white-space: nowrap; }
+  .list-row.sel { background: var(--muted); }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } .tcarousel { scroll-behavior: auto; } }
+</style>
+
+<main class="doc">
+  <header class="doc-head">
+    <div class="eyebrow">Design mockup · project templates</div>
+    <h1>Template Cards</h1>
+    <p class="lede">A template gets a name, a short markdown description and a cover image. Admins edit them in a form; a person creating a project chooses from cards. This page shows how each surface would look and behave, and the decisions behind it.</p>
+    <p class="caption">Rendered in a system font — the app uses Geist. Colours are the app's own tokens, and the page follows your light/dark theme. Everything below is clickable where the real thing would be.</p>
+  </header>
+
+  <!-- ============ 1. today ============ -->
+  <section class="section">
+    <div class="section-head">
+      <h2>What a project creator sees today</h2>
+      <p>The template picker is a plain select of names. Nothing tells the three apart.</p>
+    </div>
+    <div class="grid-2">
+      <div>
+        <div class="stage">
+          <div class="dialog" style="max-width: 420px;">
+            <div class="field">
+              <span class="label">Project template</span>
+              <div class="select"><span>Default (Default)</span><span class="chev">⌄</span></div>
+              <span class="help">Seeds this project's guidelines and worker instructions from the template — editable afterward.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="prose">
+        <p>On the dev project the catalog holds <b>Default</b>, <b>Generic Web App</b> and <b>Python + Next.JS Web App</b> — and all three carry the same boilerplate description, because it was never shown anywhere a person would notice. Specifically:</p>
+        <ul class="small">
+          <li>The picker fetches <code>id, name, is_default</code> only; <code>description</code> is never loaded.</li>
+          <li><code>category</code> exists on the catalog but is write-only — set at create, rendered nowhere.</li>
+          <li>Org copies (<code>org_project_templates</code>) have no <code>category</code> at all.</li>
+          <li>The org's “New custom template” is a <code>window.prompt</code> for the name; no description field exists on that path.</li>
+          <li>Neither table has an image column, and no bucket holds template images.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2. New project ============ -->
+  <section class="section" id="new-project">
+    <div class="section-head">
+      <h2>Mockup A — New project, choosing from cards</h2>
+      <p>The same dialog, widened. Templates come first because they answer “what kind of thing is this?”; the org's default is preselected so someone who doesn't care types a name and moves on. The cards sit in a single row you slide through — three in view and the edge of a fourth — so the dialog is the same height whether the org has three templates or thirty. Try the arrows, a card, or a category chip.</p>
+    </div>
+
+    <div class="stage overlay">
+      <div class="dialog" style="max-width: 760px;" role="dialog" aria-labelledby="np-title">
+        <div>
+          <div class="dialog-title" id="np-title">New project</div>
+          <div class="dialog-desc">Point the factory at a GitHub repository.</div>
+        </div>
+
+        <div class="field">
+          <div class="label-row">
+            <span class="label" id="tpl-label">Start from a template</span>
+            <div class="chips" id="chips" aria-label="Filter by category">
+              <button class="chip" type="button" data-cat="all" aria-pressed="true">All</button>
+              <button class="chip" type="button" data-cat="General" aria-pressed="false">General</button>
+              <button class="chip" type="button" data-cat="Service" aria-pressed="false">Service</button>
+              <button class="chip" type="button" data-cat="Site" aria-pressed="false">Site</button>
+              <button class="chip" type="button" data-cat="Mobile" aria-pressed="false">Mobile</button>
+            </div>
+          </div>
+          <div class="tcarousel-wrap" id="twrap">
+            <button class="car-btn prev" type="button" id="car-prev" aria-label="Previous templates" hidden><svg class="icon s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
+            <div class="tcarousel" role="radiogroup" aria-labelledby="tpl-label" id="tgrid"></div>
+            <button class="car-btn next" type="button" id="car-next" aria-label="Next templates"><svg class="icon s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
+          </div>
+          <div class="car-dots" id="car-dots" aria-hidden="true"></div>
+          <span class="help">Seeds this project's Agent Instructions and worker instructions from the template — editable afterward.</span>
+        </div>
+
+        <div class="field">
+          <label class="label" for="np-name">Name</label>
+          <input class="input" id="np-name" placeholder="My product" />
+        </div>
+
+        <div class="field">
+          <div class="label-row">
+            <span class="label">GitHub repository</span>
+            <button class="btn ghost xs" type="button">↻ Reload</button>
+          </div>
+          <div class="select"><span class="muted">Select a repository</span><span class="chev">⌄</span></div>
+        </div>
+
+        <div class="footer">
+          <button class="btn" type="button">Create project</button>
+        </div>
+      </div>
+    </div>
+
+    <p class="caption"><b>Real vs illustrative.</b> The first three cards are the templates that exist on the dev catalog today, with example descriptions written the way a good short description should read (today they're identical). <em>FastAPI service</em>, <em>Static marketing site</em> and <em>Mobile app</em> are illustrative — they exist only to show how the grid, categories and the no-image cover behave once the catalog grows. The picker lists the <em>org's</em> copies, and an org sets its own default — here that's Python + Next.JS, even though the catalog's default is <em>Default</em>.</p>
+
+    <div class="callouts">
+      <div class="callout"><h3>Default is preselected</h3><p>The choice never blocks. Name gets focus on open; a person can ignore templates entirely and get what they get today.</p></div>
+      <div class="callout"><h3>One row, whatever the count</h3><p>Three cards and the edge of a fourth — the peek says there's more. Arrows step a screenful, the wheel, a trackpad swipe or a drag slide freely, and each card snaps into place. Height is fixed, so Name and Repository never move.</p></div>
+      <div class="callout"><h3>Chips only when useful</h3><p>Category chips appear when there are two or more categories and narrow the row; a filter box appears past six templates. With three General templates it's just the row.</p></div>
+      <div class="callout"><h3>No image still looks designed</h3><p>A template without a cover gets a generated one — initials on a tint derived from the name — so day one, when no template has an image, the row isn't a line of broken icons.</p></div>
+      <div class="callout"><h3>Keyboard is a radio group</h3><p>Cards are <code>role="radio"</code> inside a labelled group: arrow keys move the selection and slide it into view, Space picks, focus ring is the app's. Cover images are decorative (<code>alt=""</code>); the name is the label.</p></div>
+      <div class="callout"><h3>Description clamps at three lines</h3><p>Inline markdown only on a card — bold, italic, code; links render as text (a link inside a radio is a trap). The full text lives on the settings page.</p></div>
+      <div class="callout"><h3>Copy fixed</h3><p>The helper text still says “guidelines”; a project now inherits Agent Instructions plus worker instructions. Same fix in the same change.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ 3. Template details editor ============ -->
+  <section class="section" id="editor">
+    <div class="section-head">
+      <h2>Mockup B — Template details, as the admin edits them</h2>
+      <p>One form, three uses: the platform admin on <code>/admin/project-templates</code>, an org owner/admin on <code>/settings/project-templates</code>, and the org's “New custom template” (replacing the <code>window.prompt</code>). It's a form, not a card view — but the card is previewed live beside it, so what you write is what people pick from. Type in the description or remove the image to see it update.</p>
+    </div>
+
+    <div class="stage overlay">
+      <div class="dialog" style="max-width: 860px;">
+        <div>
+          <div class="dialog-title">Template details</div>
+          <div class="dialog-desc">Name, description and cover — what a project creator sees on the card. Files are edited from the tree as before.</div>
+        </div>
+        <div class="editor">
+          <div style="display:grid; gap:16px;">
+            <div class="field">
+              <label class="label" for="ed-name">Name</label>
+              <input class="input" id="ed-name" value="Python + Next.JS Web App" />
+            </div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+              <div class="field">
+                <label class="label" for="ed-key">Key <span class="muted small">· admin only</span></label>
+                <input class="input mono" id="ed-key" value="default-copy" />
+              </div>
+              <div class="field">
+                <label class="label" for="ed-cat">Category</label>
+                <input class="input" id="ed-cat" value="General" list="cats" />
+                <datalist id="cats"><option>General</option><option>Service</option><option>Site</option><option>Mobile</option></datalist>
+              </div>
+            </div>
+            <div class="field">
+              <div class="label-row">
+                <label class="label" for="ed-desc">Description</label>
+                <div class="tabs" role="tablist">
+                  <button class="tab" role="tab" aria-selected="true" data-tab="write" type="button">Write</button>
+                  <button class="tab" role="tab" aria-selected="false" data-tab="preview" type="button">Preview</button>
+                </div>
+              </div>
+              <textarea class="textarea" id="ed-desc" rows="4" maxlength="2000">**FastAPI** backend, **Next.js** frontend, Postgres. Workers know both stacks: `pytest` for the API, `next build` for the web.</textarea>
+              <div class="preview-md" id="ed-desc-preview" hidden></div>
+              <div class="label-row">
+                <span class="help">Markdown. Keep it short — the card shows about the first three lines.</span>
+                <span class="counter" id="ed-count">0 / 2000</span>
+              </div>
+            </div>
+            <div class="field">
+              <span class="label">Cover image</span>
+              <div class="dropzone" id="dz">
+                <div class="cover" id="dz-cover"></div>
+                <div style="display:grid; gap:6px;">
+                  <div class="dz-actions">
+                    <button class="btn outline sm" type="button" id="dz-upload">Upload image</button>
+                    <button class="btn ghost sm" type="button" id="dz-remove">Remove</button>
+                  </div>
+                  <span class="help">PNG, JPEG, WebP or SVG up to 2 MB. Shown as a 2:1 banner — 800×400 works well; taller images are cropped to the middle.</span>
+                  <span class="help" id="dz-state"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="preview-pane">
+            <span class="eyebrow">How it appears to project creators</span>
+            <div id="ed-preview"></div>
+            <dl class="kv">
+              <dt>Where</dt><dd>New project dialog, Change template, org settings header</dd>
+              <dt>Falls back to</dt><dd>Generated cover from the name's initials when no image is set</dd>
+              <dt>Copies</dt><dd>Copying this template into an org carries description and image; the org can replace either on its copy</dd>
+            </dl>
+          </div>
+        </div>
+        <div class="footer">
+          <button class="btn outline" type="button">Cancel</button>
+          <button class="btn" type="button">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="callouts">
+      <div class="callout"><h3>Reached from the header</h3><p>On both template pages the header's <em>Rename</em> becomes <em>Edit details</em> and opens this. Key shows only for the platform admin; org owners see Name, Category, Description, Cover — category is what the picker's chips group by, so a custom template needs one too.</p></div>
+      <div class="callout"><h3>Live preview does the teaching</h3><p>Rather than a hard cap, the counter and the preview make a 1,500-character description visibly wrong before it's saved. The 2,000 limit stays.</p></div>
+      <div class="callout"><h3>Upload straight from the browser</h3><p>Under storage RLS, like avatars — no API hop. The admin writes to <code>catalog/&lt;template&gt;/cover</code>; an org manager to <code>&lt;org&gt;/&lt;template&gt;/cover</code>.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ 4. Where else ============ -->
+  <section class="section" id="elsewhere">
+    <div class="section-head">
+      <h2>Mockup C — Where else it shows</h2>
+      <p>The org owner's page keeps its normal list; the only additions are a thumbnail beside the name and the description rendered as markdown. <em>Change template</em> on a project reuses the card in a compact row, since that dialog is a narrow vertical list already. (On a phone, New project keeps its row — one card and a peek.)</p>
+    </div>
+    <div class="grid-2">
+      <div style="display:grid; gap:8px;">
+        <span class="eyebrow">Settings → Project templates (org owner/admin)</span>
+        <div class="pane">
+          <div class="pane-head">
+            <div class="left">
+              <span class="thumb"><span class="cover" id="hdr-thumb"></span></span>
+              <strong>Python + Next.JS Web App</strong>
+              <span class="badge outline mono">default-copy</span>
+              <span class="badge default">Default</span>
+              <button class="btn ghost xs" type="button">Edit details</button>
+            </div>
+            <div style="display:flex; gap:6px;">
+              <button class="btn outline xs" type="button">Export</button>
+              <button class="btn outline xs" type="button">Import</button>
+            </div>
+          </div>
+          <div class="pane-desc"><b>FastAPI</b> backend, <b>Next.js</b> frontend, Postgres. Workers know both stacks: <code>pytest</code> for the API, <code>next build</code> for the web.</div>
+          <div class="list">
+            <div class="list-row sel"><span class="thumb"><span class="cover" data-thumb="pynext"></span></span><span class="grow"><strong>Python + Next.JS Web App</strong><span class="badge default">Default</span></span><span class="meta">17 of 17 files</span></div>
+            <div class="list-row"><span class="thumb"><span class="cover" data-thumb="web"></span></span><span class="grow"><strong>Generic Web App</strong></span><span class="meta">17 of 17 files</span></div>
+            <div class="list-row"><span class="thumb"><span class="cover" data-thumb="default"></span></span><span class="grow"><strong>Default</strong><span class="badge secondary">Hidden</span></span><span class="meta">17 of 17 files</span></div>
+          </div>
+        </div>
+        <p class="caption">The header already shows name, key, Default and Export/Import; the thumbnail and rendered description are the only new pixels. Same treatment on the platform admin page.</p>
+      </div>
+      <div style="display:grid; gap:8px;">
+        <span class="eyebrow">Project → Instructions → Change template</span>
+        <div class="trows" role="radiogroup" aria-label="Template" id="trows"></div>
+        <p class="caption">Compact row: 16:9 thumbnail, name, one line of description, and the meta the dialog already shows (<i>current</i>, or the file count). The current template stays listed but unselectable, as today.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5. Decisions ============ -->
+  <section class="section" id="spec">
+    <div class="section-head">
+      <h2>Decisions and spec</h2>
+      <p>What the story would pin down. Everything here follows the app's existing patterns — the avatars bucket for images, <code>MarkdownView</code> for rendering, direct-to-Supabase writes under RLS.</p>
+    </div>
+
+    <div class="table-wrap">
+      <table class="roles">
+        <thead><tr><th>Who</th><th>Where</th><th>Sees</th><th>Can edit</th></tr></thead>
+        <tbody>
+          <tr><td>Platform admin</td><td><code>/admin/project-templates</code></td><td>List with thumbnails, header with rendered description — <span class="no">no card grid</span></td><td>Name, key, category, description, cover — via <em>Edit details</em>; create form gets the same fields</td></tr>
+          <tr><td>Org owner / admin</td><td><code>/settings/project-templates</code></td><td>Same list layout as today, plus thumbnail and description; the <em>Copy from catalog</em> dialog shows the catalog's description too</td><td>Name, category, description, cover on the org's copies (<code>manage_project</code>); “New custom template” becomes a real form</td></tr>
+          <tr><td>Any member creating a project</td><td>New project dialog</td><td><span class="yes">Card row</span> (carousel) of the org's available, unarchived templates; default preselected</td><td>Picks one</td></tr>
+          <tr><td>Any member on a project</td><td>Change template</td><td>Compact rows with thumbnail and one-line description</td><td>Picks one (as today)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <table class="spec">
+      <tr><th>Data</th><td>Both <code>project_templates</code> and <code>org_project_templates</code> gain <code>image_path text</code> (null = generated cover). <code>org_project_templates</code> gains <code>category text not null default ''</code>. <code>description</code> stays as is (≤ 2000) and is now understood as markdown. <code>copy_project_template_into_org</code> carries <code>category</code> and <code>image_path</code>. The API's <code>ProjectTemplateBody</code>/<code>PatchBody</code> accept <code>image_path</code>.</td></tr>
+      <tr><th>Storage</th><td>New <strong>public</strong> bucket <code>template-images</code> (2 MB; png/jpeg/webp/gif/svg). Paths: <code>catalog/&lt;template_id&gt;/cover</code> — insert/update/delete for <code>is_platform_admin()</code>; <code>&lt;org_id&gt;/&lt;org_template_id&gt;/cover</code> — for <code>has_org_capability(org, 'manage_project')</code>. Public read, so a grid of twenty cards is twenty plain <code>&lt;img&gt;</code> tags, no signed-URL round trips. Cache-bust with <code>?v=&lt;updated_at&gt;</code>. Deleting a template deletes its object best-effort. A cover holds no secrets — that's what makes public acceptable here where it isn't for attachments.</td></tr>
+      <tr><th>Generated cover</th><td>Up to two initials from the name (“PN”, “GW”, “D”) on one of a few tints picked by a stable hash of the name, in both themes. Pure CSS — no image is stored, so it never breaks and costs nothing.</td></tr>
+      <tr><th>Markdown</th><td>The description renders through the existing <code>MarkdownView</code>. On cards, an inline-only variant: paragraphs collapse, headings/lists/images render as text, links become plain text; clamped to three lines. Full render on the settings/admin header and in Copy from catalog.</td></tr>
+      <tr><th>Image guidance</th><td>Shown as a 2:1 banner with <code>object-fit: cover</code>; recommend 800×400. Wide-and-short reads as a banner in a row and leaves most of the card to the words. Illustrations or logos in a consistent style read better side by side than photos — the admin form says so in the hint.</td></tr>
+      <tr><th>The row</th><td>One horizontal row, cards 210px wide: three in view plus a peek at the widened dialog width (~760px); on a phone one card and a peek. Native scroll with <code>scroll-snap</code> per card, so wheel, trackpad, touch and drag all work without a library; prev/next buttons step one screenful and hide at the ends; a fade at each edge and page dots say where you are. Selecting a card slides it fully into view. Chips at ≥ 2 categories filter the row; a filter box appears past 6 templates. Height never depends on the count.</td></tr>
+      <tr><th>Empty org</th><td>An org with no available templates hides the section, exactly as today; a member with <code>manage_project</code> sees a one-line pointer to Settings → Project templates instead.</td></tr>
+      <tr><th>Not in this change</th><td>A “start blank” card (the org default is applied server-side, so “no template” isn't a real state today); a dedicated <code>/projects/new</code> page (worth it only if the catalog outgrows a dialog — noted as the escape hatch); reordering templates by drag; per-template colours or icon pickers instead of images.</td></tr>
+    </table>
+
+    <div class="prose">
+      <h3>Assumptions carried into the story</h3>
+      <ul>
+        <li><b>A wider single-step dialog</b>, with the row on top — not a separate page or a two-step wizard.</li>
+        <li><b>Public bucket for covers.</b> A template cover is decorative content, not org data, so it lives in a public bucket like avatars. Keeping org-uploaded covers private would cost a signed URL per card at render (cached, like attachments).</li>
+        <li><b>An org may override the catalog's image and description on its copy</b> — the same way every other part of a copy is editable.</li>
+        <li><b>Description stays at 2,000</b> with a live preview and counter rather than a hard short cap.</li>
+        <li><b>2:1 covers.</b> With a single row, 16:9 would fit too; 2:1 gives the words more of the card.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  // ---- cover illustrations (simple geometry, app-token colours) ----
+  var ILL = {
+    web: '<svg viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect width="320" height="180" fill="var(--ill-ground)"/><rect x="40" y="26" width="240" height="140" rx="8" fill="var(--card)" stroke="var(--ill-line)"/><rect x="40" y="26" width="240" height="22" rx="8" fill="var(--ill-block)"/><circle cx="54" cy="37" r="3" fill="var(--ill-ink)" opacity=".5"/><circle cx="65" cy="37" r="3" fill="var(--ill-ink)" opacity=".5"/><circle cx="76" cy="37" r="3" fill="var(--ill-ink)" opacity=".5"/><rect x="56" y="62" width="90" height="10" rx="3" fill="var(--ill-ink)" opacity=".85"/><rect x="56" y="80" width="130" height="6" rx="3" fill="var(--ill-line)"/><rect x="56" y="92" width="110" height="6" rx="3" fill="var(--ill-line)"/><rect x="56" y="112" width="52" height="16" rx="4" fill="var(--ill-accent)"/><rect x="200" y="62" width="64" height="66" rx="6" fill="var(--ill-block)"/></svg>',
+    pynext: '<svg viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect width="320" height="180" fill="var(--ill-ground)"/><rect x="24" y="30" width="128" height="120" rx="8" fill="var(--ill-ink)"/><text x="40" y="66" font-family="ui-monospace,Menlo,monospace" font-size="16" fill="var(--ill-ground)" opacity=".95">&gt;_ pytest</text><rect x="40" y="82" width="70" height="5" rx="2.5" fill="var(--ill-ground)" opacity=".45"/><rect x="40" y="94" width="92" height="5" rx="2.5" fill="var(--ill-ground)" opacity=".45"/><rect x="40" y="106" width="56" height="5" rx="2.5" fill="var(--ill-ground)" opacity=".45"/><rect x="40" y="124" width="26" height="8" rx="2" fill="var(--ill-warm)"/><line x1="152" y1="90" x2="168" y2="90" stroke="var(--ill-line)" stroke-width="3"/><rect x="168" y="30" width="128" height="120" rx="8" fill="var(--card)" stroke="var(--ill-line)"/><polygon points="196,124 232,56 268,124" fill="none" stroke="var(--ill-ink)" stroke-width="7" stroke-linejoin="round"/><line x1="232" y1="56" x2="268" y2="124" stroke="var(--ill-accent)" stroke-width="7" stroke-linecap="round"/></svg>',
+    fastapi: '<svg viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect width="320" height="180" fill="var(--ill-ground)"/><line x1="90" y1="60" x2="160" y2="120" stroke="var(--ill-line)" stroke-width="3"/><line x1="230" y1="60" x2="160" y2="120" stroke="var(--ill-line)" stroke-width="3"/><line x1="90" y1="60" x2="230" y2="60" stroke="var(--ill-line)" stroke-width="3"/><circle cx="90" cy="60" r="20" fill="var(--card)" stroke="var(--ill-teal)" stroke-width="4"/><circle cx="230" cy="60" r="20" fill="var(--card)" stroke="var(--ill-teal)" stroke-width="4"/><circle cx="160" cy="120" r="24" fill="var(--ill-teal)"/><rect x="146" y="116" width="28" height="8" rx="4" fill="var(--card)"/></svg>',
+    site: '<svg viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect width="320" height="180" fill="var(--ill-ground)"/><rect x="48" y="24" width="224" height="140" rx="6" fill="var(--card)" stroke="var(--ill-line)"/><rect x="72" y="52" width="150" height="14" rx="4" fill="var(--ill-ink)" opacity=".85"/><rect x="72" y="72" width="110" height="14" rx="4" fill="var(--ill-ink)" opacity=".85"/><rect x="72" y="100" width="130" height="6" rx="3" fill="var(--ill-line)"/><rect x="72" y="112" width="96" height="6" rx="3" fill="var(--ill-line)"/><rect x="72" y="132" width="60" height="16" rx="8" fill="var(--ill-warm)"/></svg>',
+    mobile: '<svg viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect width="320" height="180" fill="var(--ill-ground)"/><rect x="124" y="14" width="72" height="152" rx="12" fill="var(--ill-ink)"/><rect x="130" y="24" width="60" height="132" rx="8" fill="var(--card)"/><rect x="138" y="36" width="44" height="26" rx="4" fill="var(--ill-violet)"/><rect x="138" y="70" width="44" height="18" rx="4" fill="var(--ill-block)"/><rect x="138" y="94" width="44" height="18" rx="4" fill="var(--ill-block)"/><rect x="138" y="118" width="44" height="18" rx="4" fill="var(--ill-block)"/><rect x="152" y="146" width="16" height="4" rx="2" fill="var(--ill-line)"/></svg>'
+  };
+
+  var TEMPLATES = [
+    { id: 'default', name: 'Default', cat: 'General', isDefault: false, img: null,
+      desc: "The factory's baked-in starting point — today's defaults, unchanged. Pick this when nothing else fits.", files: '17 of 17 files' },
+    { id: 'web', name: 'Generic Web App', cat: 'General', isDefault: false, img: 'web',
+      desc: 'A browser-facing app with a **frontend and API** in one repo. Instructions cover routing, forms, auth and a component library.', files: '17 of 17 files' },
+    { id: 'pynext', name: 'Python + Next.JS Web App', cat: 'General', isDefault: true, img: 'pynext',
+      desc: '**FastAPI** backend, **Next.js** frontend, Postgres. Workers know both stacks: `pytest` for the API, `next build` for the web.', files: '17 of 17 files' },
+    { id: 'fastapi', name: 'FastAPI service', cat: 'Service', isDefault: false, img: 'fastapi',
+      desc: 'A headless HTTP service — no UI. Instructions weight tests, OpenAPI contracts and migrations.', files: '12 of 17 files' },
+    { id: 'site', name: 'Static marketing site', cat: 'Site', isDefault: false, img: 'site',
+      desc: 'Content pages, no backend. Short instructions: copy, accessibility, Lighthouse.', files: '9 of 17 files' },
+    { id: 'mobile', name: 'Mobile app', cat: 'Mobile', isDefault: false, img: null,
+      desc: 'React Native with Expo. Instructions cover navigation, native modules and store builds.', files: '14 of 17 files' }
+  ];
+
+  function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  // inline-only markdown: bold, italic, code, links-as-text; block syntax flattened
+  function mdInline(s) {
+    var t = esc(s).replace(/^\s*(#{1,6}\s+|[-*+]\s+|\d+\.\s+|>\s*)/gm, '').replace(/\n+/g, ' ');
+    t = t.replace(/`([^`]+)`/g, '<code>$1</code>');
+    t = t.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+    t = t.replace(/(^|[^*])\*([^*]+)\*/g, '$1<i>$2</i>');
+    t = t.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1');
+    t = t.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
+    return t;
+  }
+  function mdBlock(s) {
+    return esc(s).split(/\n{2,}/).map(function (p) { return '<p>' + mdInline(p) + '</p>'; }).join('');
+  }
+  function initials(name) {
+    var words = name.replace(/[^A-Za-z0-9 ]/g, ' ').trim().split(/\s+/).filter(Boolean);
+    if (!words.length) return '?';
+    if (words.length === 1) return words[0].slice(0, 1).toUpperCase();
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+  function tint(name) {
+    var h = 0; for (var i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    return ['tint-a', 'tint-b', 'tint-c'][h % 3];
+  }
+  function coverHTML(t) {
+    if (t.img && ILL[t.img]) return '<div class="cover">' + ILL[t.img] + '</div>';
+    return '<div class="cover gen ' + tint(t.name) + '"><span class="mono-init">' + esc(initials(t.name)) + '</span></div>';
+  }
+  function fillCover(el, t) {
+    if (t.img && ILL[t.img]) { el.className = 'cover'; el.innerHTML = ILL[t.img]; }
+    else { el.className = 'cover gen ' + tint(t.name); el.innerHTML = '<span class="mono-init">' + esc(initials(t.name)) + '</span>'; }
+  }
+  var CHECK = '<span class="check" aria-hidden="true"><svg class="icon s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>';
+
+  function cardHTML(t, checked) {
+    return '<button type="button" class="tcard" role="radio" aria-checked="' + (checked ? 'true' : 'false') + '" tabindex="' + (checked ? '0' : '-1') + '" data-id="' + t.id + '" data-cat="' + t.cat + '">' +
+      coverHTML(t).replace('</div>', CHECK + '</div>') +
+      '<span class="tbody"><span class="tname">' + esc(t.name) + (t.isDefault ? ' <span class="badge default">Default</span>' : '') + '</span>' +
+      '<span class="tdesc">' + mdInline(t.desc) + '</span></span></button>';
+  }
+
+  // ---- Mockup A ----
+  var grid = document.getElementById('tgrid');
+  var wrap = document.getElementById('twrap');
+  var btnPrev = document.getElementById('car-prev'), btnNext = document.getElementById('car-next');
+  var dots = document.getElementById('car-dots');
+  var selectedId = (TEMPLATES.filter(function (t) { return t.isDefault; })[0] || TEMPLATES[0]).id;
+  function renderGrid() {
+    grid.innerHTML = TEMPLATES.map(function (t) { return cardHTML(t, t.id === selectedId); }).join('');
+    applyFilter();
+  }
+  var activeCat = 'all';
+  function applyFilter() {
+    Array.prototype.forEach.call(grid.querySelectorAll('.tcard'), function (c) {
+      c.hidden = activeCat !== 'all' && c.getAttribute('data-cat') !== activeCat;
+    });
+    grid.scrollLeft = 0;
+    updateNav();
+  }
+  function updateNav() {
+    var max = grid.scrollWidth - grid.clientWidth;
+    var canPrev = grid.scrollLeft > 6, canNext = grid.scrollLeft < max - 6;
+    btnPrev.hidden = !canPrev; btnNext.hidden = !canNext;
+    wrap.classList.toggle('can-prev', canPrev); wrap.classList.toggle('can-next', canNext);
+    var pages = max > 2 ? Math.ceil(grid.scrollWidth / grid.clientWidth) : 1;
+    var active = max > 2 ? Math.min(pages - 1, Math.round(grid.scrollLeft / grid.clientWidth)) : 0;
+    if (grid.scrollLeft >= max - 2) active = pages - 1;
+    var html = '';
+    if (pages > 1) for (var i = 0; i < pages; i++) html += '<i class="' + (i === active ? 'on' : '') + '"></i>';
+    dots.innerHTML = html;
+  }
+  function ensureVisible(card) {
+    var cr = card.getBoundingClientRect(), gr = grid.getBoundingClientRect();
+    if (cr.left < gr.left + 3) grid.scrollBy({ left: cr.left - gr.left - 3 });
+    else if (cr.right > gr.right - 3) grid.scrollBy({ left: cr.right - gr.right + 3 });
+  }
+  function select(id) {
+    selectedId = id;
+    Array.prototype.forEach.call(grid.querySelectorAll('.tcard'), function (c) {
+      var on = c.getAttribute('data-id') === id;
+      c.setAttribute('aria-checked', on ? 'true' : 'false');
+      c.tabIndex = on ? 0 : -1;
+      if (on) ensureVisible(c);
+    });
+  }
+  grid.addEventListener('click', function (e) {
+    var c = e.target.closest('.tcard'); if (!c) return; select(c.getAttribute('data-id')); c.focus({ preventScroll: true });
+  });
+  var raf = 0;
+  grid.addEventListener('scroll', function () { if (raf) return; raf = requestAnimationFrame(function () { raf = 0; updateNav(); }); });
+  grid.addEventListener('scrollend', updateNav);
+  window.addEventListener('resize', updateNav);
+  btnPrev.addEventListener('click', function () { grid.scrollBy({ left: -(grid.clientWidth - 40) }); });
+  btnNext.addEventListener('click', function () { grid.scrollBy({ left: grid.clientWidth - 40 }); });
+  grid.addEventListener('keydown', function (e) {
+    var cards = Array.prototype.filter.call(grid.querySelectorAll('.tcard'), function (c) { return !c.hidden; });
+    var i = cards.indexOf(document.activeElement); if (i < 0) return;
+    var next = null;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = cards[(i + 1) % cards.length];
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = cards[(i - 1 + cards.length) % cards.length];
+    if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); select(cards[i].getAttribute('data-id')); return; }
+    if (next) { e.preventDefault(); select(next.getAttribute('data-id')); next.focus({ preventScroll: true }); }
+  });
+  document.getElementById('chips').addEventListener('click', function (e) {
+    var b = e.target.closest('.chip'); if (!b) return;
+    activeCat = b.getAttribute('data-cat');
+    Array.prototype.forEach.call(this.querySelectorAll('.chip'), function (c) { c.setAttribute('aria-pressed', c === b ? 'true' : 'false'); });
+    applyFilter();
+  });
+  renderGrid();
+
+  // ---- Mockup B ----
+  var ed = { name: 'Python + Next.JS Web App', cat: 'General', desc: '', img: 'pynext', isDefault: true };
+  var nameEl = document.getElementById('ed-name'), descEl = document.getElementById('ed-desc'), catEl = document.getElementById('ed-cat');
+  var prev = document.getElementById('ed-preview'), dzCover = document.getElementById('dz-cover'), dzState = document.getElementById('dz-state');
+  var count = document.getElementById('ed-count'), mdPrev = document.getElementById('ed-desc-preview');
+  var hdrThumb = document.getElementById('hdr-thumb');
+  function renderEditor() {
+    ed.name = nameEl.value || 'Untitled template'; ed.desc = descEl.value; ed.cat = catEl.value;
+    prev.innerHTML = cardHTML({ id: 'p', name: ed.name, cat: ed.cat, isDefault: ed.isDefault, img: ed.img, desc: ed.desc }, false).replace('role="radio"', 'role="img" aria-label="Card preview"');
+    fillCover(dzCover, ed);
+    fillCover(hdrThumb, ed);
+    dzState.textContent = ed.img ? 'cover · 800×400 · 41 KB' : 'No image — a generated cover from the name is used.';
+    document.getElementById('dz-remove').disabled = !ed.img;
+    var n = descEl.value.length; count.textContent = n + ' / 2000';
+    count.className = 'counter' + (n > 300 ? ' warn' : '');
+    mdPrev.innerHTML = mdBlock(descEl.value || '*Nothing yet.*');
+  }
+  nameEl.addEventListener('input', renderEditor);
+  descEl.addEventListener('input', renderEditor);
+  catEl.addEventListener('input', renderEditor);
+  document.getElementById('dz-remove').addEventListener('click', function () { ed.img = null; renderEditor(); });
+  document.getElementById('dz-upload').addEventListener('click', function () { ed.img = 'pynext'; renderEditor(); });
+  Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (tab) {
+    tab.addEventListener('click', function () {
+      Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (t) { t.setAttribute('aria-selected', t === tab ? 'true' : 'false'); });
+      var w = tab.getAttribute('data-tab') === 'write';
+      descEl.hidden = !w; mdPrev.hidden = w;
+    });
+  });
+  renderEditor();
+
+  // ---- Mockup C ----
+  Array.prototype.forEach.call(document.querySelectorAll('[data-thumb]'), function (el) {
+    var t = TEMPLATES.filter(function (x) { return x.id === el.getAttribute('data-thumb'); })[0];
+    if (t) fillCover(el, t);
+  });
+  var rows = document.getElementById('trows');
+  var current = 'pynext', chosen = 'web';
+  function renderRows() {
+    rows.innerHTML = TEMPLATES.slice(0, 4).map(function (t) {
+      var isCur = t.id === current, on = t.id === chosen;
+      return '<button type="button" class="trow' + (isCur ? ' current' : '') + '" role="radio" aria-checked="' + (on ? 'true' : 'false') + '"' + (isCur ? ' disabled' : '') + ' data-id="' + t.id + '">' +
+        coverHTML(t) + '<span style="display:grid; gap:2px; min-width:0;"><span class="tname">' + esc(t.name) + (t.isDefault ? ' <span class="badge default">Default</span>' : '') + '</span>' +
+        '<span class="tdesc">' + mdInline(t.desc) + '</span></span><span class="meta">' + (isCur ? 'current' : t.files) + '</span></button>';
+    }).join('');
+  }
+  rows.addEventListener('click', function (e) { var r = e.target.closest('.trow'); if (!r || r.disabled) return; chosen = r.getAttribute('data-id'); renderRows(); });
+  renderRows();
+})();
+</script>

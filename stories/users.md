@@ -35,7 +35,10 @@ a model is refused a session, why every session has died on the machine since
 why "start" never quite starts (requested 2026-08-17, two investigations the
 same day). Build order is the hotfix first (us-116.3), then the model side
 (116.1, 116.2, 116.7), then status and start (116.4, 116.5, 116.6), then the
-fleet alarm (116.8).
+fleet alarm (116.8). Phase 118 (four stories, requested 2026-08-17) follows:
+templates get a description and a cover, and a new project is chosen from a
+row of cards — 118.1 lays the data, bucket and shared form, then 118.2 the
+org side, 118.3 the New project row, 118.4 Change template.
 
 | Order | Story | Title | Status |
 |---|---|---|---|
@@ -51,6 +54,38 @@ fleet alarm (116.8).
 | 10 | [us-116.5](us-116.5-start-means-start.md) | Start means start | Testing |
 | 11 | [us-116.6](us-116.6-a-new-agent-starts-ready.md) | A new agent starts ready | Testing |
 | 12 | [us-116.8](us-116.8-the-fleet-says-when-it-goes-dark.md) | The fleet says when it goes dark, and says a standing fault once | Testing |
+| 13 | [us-118.1](us-118.1-a-template-carries-a-description-and-a-cover.md) | A template carries a description and a cover | New |
+| 14 | [us-118.2](us-118.2-an-orgs-copy-can-change-its-face.md) | An org's copy can change its face | New |
+| 15 | [us-118.3](us-118.3-a-new-project-is-chosen-from-cards.md) | A new project is chosen from cards | New |
+| 16 | [us-118.4](us-118.4-change-template-shows-the-same-card.md) | Change template shows the same card | New |
+
+**Phase 118 — A template shows its face** (requested 2026-08-17; design
+reference [docs/design/template-cards.html](../docs/design/template-cards.html),
+an interactive mockup the manager approved). The New project dialog picks a
+template from a `Select` of names that fetches `id, name, is_default` and
+nothing else — and on the dev catalog *Default*, *Generic Web App* and
+*Python + Next.JS Web App* all carry the identical boilerplate description,
+because a field nobody sees is a field nobody writes. `category` is
+write-only, org copies have no category at all, no table has an image, and
+the org's "New custom template" is a `window.prompt`. **us-118.1** gives both
+template tables an `image_path` (and the org copy a `category`), a public
+`template-images` bucket written under RLS (`catalog/<id>/cover` for the
+platform admin, `<org>/<id>/cover` for a manager), a generated cover —
+initials on a stable tint — for the no-image state so day one is not a row
+of broken icons, an inline-markdown mode for cards, the shared
+`TemplateCard`, and one **Template details** form (Name, Key, Category,
+Description with preview and counter, Cover) with a live card preview beside
+it, wired into the admin page in place of Rename. **us-118.2** puts the same
+form (no Key) on the org's copies, shows the catalog's description and cover
+in *Copy from catalog*, and turns the `window.prompt` into the create form.
+**us-118.3** replaces the New project `Select` with a single scroll-snap row
+of cards — three in view and the edge of a fourth, prev/next, fade and page
+dots, chips only at two or more categories, a filter box only past six, the
+org default preselected, keyboard as a radio group, and the dialog's height
+the same at any count. **us-118.4** re-skins Change template with the row
+variant and puts the thumb on the Overview's *Created from template* line.
+Deliberately not in the phase: a "start blank" card, a `/projects/new` page,
+in-browser image cropping, private covers, an icon-and-colour picker.
 
 **Phase 116 — An agent says what it is missing, and starts when told**
 (requested 2026-08-17; the manager's direction was *reliability over
