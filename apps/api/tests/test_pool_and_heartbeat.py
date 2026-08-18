@@ -44,6 +44,10 @@ class FakeConn:
         self._row = row
         self._fail = fail
         self.commits = 0
+        # us-117.1: `_reset` saves and restores this. Kept here so the older
+        # tests keep working; `PostgresLikeConn` below is the one that models
+        # what the transaction state actually does to DISCARD ALL.
+        self.autocommit = False
 
     def execute(self, sql, params=None):
         flat = " ".join(sql.split())
@@ -244,6 +248,98 @@ def test_pool_reset_discards_session_state():
 
     statements = [s.upper() for s, _ in sink]
     assert "DISCARD ALL" in statements, statements
+
+
+class PostgresLikeConn:
+    """A connection that enforces the one rule the old fake did not.
+
+    us-117.1: `FakeConn` records statements and never models transaction
+    state, so `test_pool_reset_discards_session_state` passed for months while
+    every reset failed in production. Postgres refuses DISCARD ALL inside a
+    transaction block, and psycopg opens one on the first `execute` of a
+    non-autocommit connection — so the test has to know that much to be worth
+    anything.
+    """
+
+    def __init__(self):
+        self.autocommit = False
+        self.in_transaction = False
+        self.statements: list[str] = []
+
+    def execute(self, sql, params=None):  # pragma: no cover — unused here
+        return self._run(sql)
+
+    def _run(self, sql):
+        flat = " ".join(sql.split()).upper()
+        if not self.autocommit:
+            # psycopg starts a transaction implicitly for the first statement.
+            self.in_transaction = True
+        if flat == "DISCARD ALL" and self.in_transaction:
+            raise RuntimeError(
+                "DISCARD ALL cannot run inside a transaction block"
+            )
+        self.statements.append(flat)
+        return self
+
+    def cursor(self):
+        conn = self
+
+        class _Cur:
+            def execute(self, sql, params=None):
+                return conn._run(sql)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        return _Cur()
+
+    def rollback(self):
+        self.in_transaction = False
+
+    def commit(self):
+        self.in_transaction = False
+
+
+def test_pool_reset_runs_discard_all_outside_a_transaction():
+    """us-117.1, prod 2026-08-17: `DISCARD ALL` ran with autocommit off, so
+    psycopg opened a transaction for it and Postgres refused it (25001). The
+    reset re-raises, so the pool discarded EVERY connection on return — a
+    permanent reconnect storm that ate the Supabase connection budget
+    PostgREST shares and took the API down with it."""
+    from app import pool as pool_module
+
+    conn = PostgresLikeConn()
+    pool_module._reset(conn)  # must not raise
+    assert "DISCARD ALL" in conn.statements
+
+
+def test_pool_reset_restores_autocommit():
+    """A leaked autocommit=True would silently commit each later caller's
+    statements one at a time — the pool hands connections back with the
+    autocommit it configured."""
+    from app import pool as pool_module
+
+    conn = PostgresLikeConn()
+    conn.autocommit = False
+    pool_module._reset(conn)
+    assert conn.autocommit is False
+
+
+def test_pool_reset_still_raises_when_the_connection_is_unusable():
+    """The pool relies on this: a connection that cannot be scrubbed must be
+    dropped, never handed to the next caller carrying someone's session
+    state."""
+    from app import pool as pool_module
+
+    class Broken(PostgresLikeConn):
+        def rollback(self):
+            raise RuntimeError("connection is gone")
+
+    with pytest.raises(RuntimeError):
+        pool_module._reset(Broken())
 
 
 def test_pool_kwargs_disable_prepared_statements(monkeypatch, settings_override):

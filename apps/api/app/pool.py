@@ -63,12 +63,34 @@ def _reset(conn: Connection) -> None:
 
     psycopg_pool already rolls back an open transaction; ``DISCARD ALL``
     is what guarantees nothing else survives — see the module docstring.
+
+    **It must run in autocommit** (us-117.1). psycopg is not autocommit by
+    default, so ``execute`` opens a transaction first — and ``DISCARD ALL`` is
+    one of the statements Postgres refuses inside one:
+
+        DISCARD ALL cannot run inside a transaction block   [25001]
+
+    Because the failure re-raises below, the pool then discarded the
+    connection instead of reusing it. So *every* connection was thrown away on
+    return: the pool reconnected constantly, the churn ate the Supabase
+    connection budget PostgREST shares, and the API started answering
+    ConnectTimeout / ReadError / RemoteProtocolError — which surfaced to the
+    manager on 2026-08-17 as a git-remote 500, a false "you cannot run work in
+    this workspace", and a self-repair loop that gave up. One statement in the
+    wrong transaction state, three unrelated-looking outages.
     """
     try:
         conn.rollback()
-        with conn.cursor() as cur:
-            cur.execute("DISCARD ALL")
-        conn.commit()
+        # Restored in the finally: the pool hands connections back with the
+        # autocommit it configured (False), and a leaked True would silently
+        # commit every later caller's work statement by statement.
+        previous = conn.autocommit
+        conn.autocommit = True
+        try:
+            with conn.cursor() as cur:
+                cur.execute("DISCARD ALL")
+        finally:
+            conn.autocommit = previous
     except Exception:  # noqa: BLE001 — a connection that cannot be reset is
         # closed by the pool rather than handed to the next caller.
         logger.debug("pooled connection reset failed; discarding", exc_info=True)

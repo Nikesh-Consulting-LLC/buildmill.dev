@@ -5,6 +5,7 @@ import json
 import pytest
 
 from app.routers import agent_sessions, run_console, runner_socket
+from app.supabase import SupabaseUnreachable
 
 
 @pytest.fixture()
@@ -447,3 +448,44 @@ def test_the_session_refusal_names_the_third_place(client, make_token, wired):
     detail = res.json()["detail"]
     assert "(Deployment)" in detail
     assert "Settings → LLM providers" in detail
+
+
+# ---------------------------------------------------------------------------
+# us-117.1 — a refusal never claims a verdict the check did not reach
+# ---------------------------------------------------------------------------
+
+
+def test_a_capability_of_false_is_still_a_403(client, make_token, wired, monkeypatch):
+    """The genuine refusal is unchanged: no capability, no session."""
+
+    async def _no(settings, token, fn, args):
+        return False
+
+    monkeypatch.setattr(agent_sessions, "rpc", _no)
+    res = _open(client, make_token())
+    assert res.status_code == 403
+    assert "cannot run work in this workspace" in res.json()["detail"].lower()
+
+
+def test_an_unanswered_capability_check_is_a_504_not_a_403(
+    client, make_token, wired, monkeypatch
+):
+    """The gate wrapped this RPC in `except Exception: ok = False`, so any
+    failure became a permissions verdict. On 2026-08-17 Supabase stopped
+    answering and the ACTIVE OWNER of a workspace was told they could not run
+    work in it — and went looking at roles, which were never the problem.
+
+    An unanswered check is 504 through US-79.5's handler, naming the
+    operation; only a real `False` is 403."""
+
+    async def _unreachable(settings, token, fn, args):
+        raise SupabaseUnreachable("RPC has_org_capability", "ConnectTimeout")
+
+    monkeypatch.setattr(agent_sessions, "rpc", _unreachable)
+    res = _open(client, make_token())
+    assert res.status_code == 504, res.status_code
+    detail = res.json()["detail"].lower()
+    assert "did not answer" in detail
+    # The operation rides on the crash report's title, not this sentence —
+    # what matters here is that the manager is not told they lack access.
+    assert "cannot run work" not in detail, "a timeout must not read as a refusal"

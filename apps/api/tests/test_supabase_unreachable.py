@@ -139,3 +139,38 @@ def test_the_answer_is_a_504_in_words(client, reports):
     assert len(reports) == 1
     assert reports[0]["error_type"] == "SupabaseUnreachable"
     assert reports[0]["context"]["operation"] == "RPC release_signoff_blocker"
+
+
+# ---------------------------------------------------------------------------
+# us-117.1 — the two classes that were escaping unnamed
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "exc_class, message",
+    [
+        (httpx.ReadError, "connection dropped mid-read"),
+        (httpx.RemoteProtocolError, "Server disconnected without sending a response."),
+    ],
+    ids=["ReadError", "RemoteProtocolError"],
+)
+def test_a_dropped_connection_is_named_not_raw(
+    exc_class, message, monkeypatch, settings_override
+):
+    """Both were missing from `_TRANSPORT_FAILURES`, and on 2026-08-17 they
+    were 9 of the 13 recorded faults — so one outage produced some reports
+    titled `SupabaseUnreachable: … (ConnectTimeout)` with the operation
+    attached, and others a bare traceback nobody could group with them.
+
+    A connection dropped mid-read is still nobody answering."""
+
+    class _Drop(_Recorder):
+        async def request(self, method, url, **kwargs):
+            raise exc_class(message)
+
+    monkeypatch.setattr(supabase.httpx, "AsyncClient", _Drop)
+    monkeypatch.setattr(supabase, "_RETRY_BACKOFF_SECONDS", 0)
+
+    with pytest.raises(SupabaseUnreachable) as caught:
+        asyncio.run(postgrest_get(settings_override, "tok", "workers", {}))
+    assert exc_class.__name__ in str(caught.value)

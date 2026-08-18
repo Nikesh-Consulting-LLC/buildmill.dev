@@ -45,6 +45,30 @@ _WAIT = (
     "temporarily", "reset by peer", "rate limit",
 )
 
+# us-117.1: an HTTP 5xx from an upstream — including the factory's own git
+# remote. On 2026-08-17 a connection-pool bug made the API answer 500, so
+# `git ls-remote` failed with "The requested URL returned error: 500". That
+# matched nothing above (`_WAIT` names transport words; git's phrasing for a
+# server error is a status code), fell through to the `unrecoverable` default,
+# and the run was abandoned without a single retry — of the most transient
+# class there is.
+#
+# Deliberately specific phrasings rather than a bare "500": the text searched
+# includes the agent's own narration, where a loose three-digit needle would
+# match "500 lines" and buy an unearned wait.
+_HTTP_5XX = (
+    "returned error: 500", "returned error: 502",
+    "returned error: 503", "returned error: 504",
+    "http 500", "http 502", "http 503", "http 504",
+    "internal server error", "bad gateway",
+    "service unavailable", "gateway timeout",
+)
+
+# Not in _RECLONE: a remote that will not answer is not a broken checkout, and
+# recloning cannot fix it. Named so the failure classifies as itself rather
+# than defaulting to unrecoverable.
+_GIT_REMOTE = ("git ls-remote failed",)
+
 # US-63.x: a "wait" failure — a connection/transient error, the class a
 # factory-api restart during a deploy produces (the CLI's model calls go over
 # HTTP to factory-api's own gateway, the same process being restarted) — gets
@@ -84,6 +108,14 @@ def usage_cap_hit(result: ModuleResult) -> bool:
     return any(n in text for n in _USAGE_CAP)
 
 
+def http_5xx_hit(result: ModuleResult) -> bool:
+    """A server-side error from an upstream — transient by definition."""
+    text = f"{result.error or ''}\n{result.stdout or ''}".lower()
+    return any(n in text for n in _HTTP_5XX) or any(
+        n in text for n in _GIT_REMOTE
+    )
+
+
 def turn_limit_hit(result: ModuleResult) -> bool:
     text = f"{result.error or ''}\n{result.stdout or ''}".lower()
     return any(n in text for n in _TURN_LIMIT)
@@ -101,6 +133,14 @@ def classify(result: ModuleResult) -> str:
         return "unrecoverable"
     if usage_cap_hit(result) or turn_limit_hit(result):
         return "unrecoverable"
+    # us-117.1: BEFORE the _RECLONE scan, not after. A server-side 5xx is never
+    # fixed by deleting the workspace, and a message like "git fetch failed: …
+    # returned error: 502" contains a _RECLONE needle — so checked later, the
+    # destructive repair would win. US-54.2 is on record about what that costs:
+    # on 2026-07-30 a reclone fired on the wrong needle and deleted 41 turns of
+    # written code before giving up.
+    if http_5xx_hit(result):
+        return "wait"
     text = f"{result.error or ''}\n{result.stdout or ''}".lower()
     for kw in _RECLONE:
         if kw in text:
