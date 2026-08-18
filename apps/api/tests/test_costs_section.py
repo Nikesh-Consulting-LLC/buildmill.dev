@@ -563,3 +563,116 @@ def test_work_summary_passes_the_same_filters_as_spend(client, make_token, monke
     assert captured["days"] == 7
     assert captured["project_id"] == P1
     assert captured["item_type"] == "bug"
+
+
+# ------------------------------------------- us-119.3: one answer for the page
+
+
+def _fake_four(monkeypatch, calls):
+    """Fake the four reads /costs composes, recording the kwargs each saw."""
+
+    def fake_breakdown(settings, org_id, **kw):
+        calls.append(("breakdown", org_id, kw))
+        return {"group_by": kw.get("group_by"), "days": kw.get("days"),
+                "rows": [{"key": None, "label": "x", "tokens_in": 1, "tokens_out": 1,
+                          "cache_read_tokens": 0, "cache_write_tokens": 0,
+                          "cost_usd": 0.5, "calls": 1, "unparsed_calls": 0}],
+                "totals": {"tokens_in": 1, "tokens_out": 1, "cache_read_tokens": 0,
+                           "cache_write_tokens": 0, "cost_usd": 0.5, "calls": 1,
+                           "unparsed_calls": 0}}
+
+    def fake_trend(settings, org_id, **kw):
+        calls.append(("trend", org_id, kw))
+        return {"days": kw.get("days"), "series": [], "total_cost_usd": 0.5,
+                "previous_cost_usd": None, "previous_calls": 0, "calls": 1,
+                "unparsed_calls": 0}
+
+    def fake_summary(settings, org_id, **kw):
+        calls.append(("summary", org_id, kw))
+        return {"days": kw.get("days"), "work_seconds": 60, "runs": 1,
+                "items_landed": 1, "bugs_landed": 0, "lines_added": 10,
+                "lines_removed": 2}
+
+    def fake_subs(settings, org_id, **kw):
+        calls.append(("subscription", org_id, kw))
+        return 3
+
+    monkeypatch.setattr("app.db.spend_breakdown", fake_breakdown)
+    monkeypatch.setattr("app.db.spend_trend", fake_trend)
+    monkeypatch.setattr("app.db.work_summary", fake_summary)
+    monkeypatch.setattr("app.db.subscription_run_count", fake_subs)
+
+
+def test_costs_refuses_without_the_capability(client, make_token, monkeypatch):
+    monkeypatch.setattr("app.routers.llm.rpc", _fake_rpc(view_costs=False))
+    resp = client.get(
+        f"/api/v1/llm/orgs/{ORG}/costs",
+        headers={"Authorization": f"Bearer {make_token()}"},
+    )
+    assert resp.status_code == 403
+    assert "owners and admins" in resp.json()["detail"]
+
+
+def test_costs_answers_the_four_reads_under_one_set_of_parameters(
+    client, make_token, monkeypatch
+):
+    """AC1: one endpoint, same figures — each key is the corresponding read's
+    body, and every read saw the same window and filters."""
+    monkeypatch.setattr("app.routers.llm.rpc", _fake_rpc(view_costs=True))
+    calls = []
+    _fake_four(monkeypatch, calls)
+    P1 = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+    resp = client.get(
+        f"/api/v1/llm/orgs/{ORG}/costs",
+        params={"group_by": "type", "days": 7, "project_id": P1, "item_type": "bug"},
+        headers={"Authorization": f"Bearer {make_token()}"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert set(body) == {"breakdown", "trend", "summary", "subscription_runs"}
+    assert body["breakdown"]["group_by"] == "type"
+    assert body["breakdown"]["totals"]["cost_usd"] == 0.5
+    assert body["trend"]["days"] == 7
+    assert body["summary"]["items_landed"] == 1
+    assert body["subscription_runs"] == 3
+    # every read: same org, same window, same filters
+    assert [c[0] for c in calls] == ["breakdown", "trend", "summary", "subscription"]
+    for name, org_id, kw in calls:
+        assert org_id == ORG, name
+        assert kw["days"] == 7, name
+        if name != "subscription":
+            assert kw["project_id"] == P1, name
+            assert kw["item_type"] == "bug", name
+            assert kw["worker_id"] is None, name
+    assert calls[0][2]["group_by"] == "type"
+
+
+def test_costs_omits_the_trend_for_a_one_day_window(client, make_token, monkeypatch):
+    """The page draws no curve for Today; the endpoint sends null rather
+    than a one-point series, and never runs the trend query for it."""
+    monkeypatch.setattr("app.routers.llm.rpc", _fake_rpc(view_costs=True))
+    calls = []
+    _fake_four(monkeypatch, calls)
+    resp = client.get(
+        f"/api/v1/llm/orgs/{ORG}/costs",
+        params={"days": 1},
+        headers={"Authorization": f"Bearer {make_token()}"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["trend"] is None
+    assert "trend" not in [c[0] for c in calls]
+
+
+def test_subscription_run_count_uses_the_breakdowns_window(monkeypatch):
+    """The count rides the same `created_at > now() - N days` predicate the
+    breakdown uses, org-scoped, billing = subscription."""
+    conn = FakeConn(lambda q, p: [{"n": 4}])
+    monkeypatch.setattr(db, "_connect", lambda s: conn)
+    assert db.subscription_run_count(object(), ORG, days=7) == 4
+    q, p = conn.queries[0]
+    assert "billing = 'subscription'" in q
+    assert "created_at > now() - interval '7 days'" in q
+    assert p == (ORG,)
+    # a junk org id is a zero, not a query
+    assert db.subscription_run_count(object(), "nope", days=7) == 0
+    assert len(conn.queries) == 1

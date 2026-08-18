@@ -14,8 +14,14 @@
 // exists to drift — and tokens in and out stay separate everywhere: they have
 // different prices, and collapsing them destroys the only information that
 // explains why two runs with the same token count cost differently.
+//
+// us-119.3: the page asks ONCE per slice — `GET …/costs` answers breakdown,
+// trend, summary and the subscription count together — fires it the moment
+// the controls settle (no serial Supabase count in front), keeps the current
+// figures on screen while a refetch is in flight, and sequences requests so a
+// slow answer can never paint over a fast one.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiCall } from "@/lib/api";
 import { createClient } from "@/lib/supabase/client";
@@ -23,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { compactTokens, formatWorkSeconds } from "@/lib/work-seconds";
+import { costsPath, createLatestGate } from "./costs-fetch";
 import {
   COST_DIMENSIONS,
   COST_WINDOWS,
@@ -78,6 +85,15 @@ type WorkSummary = {
   lines_removed: number;
 };
 
+/** us-119.3: everything the page shows, in the one answer `/costs` gives.
+ * `trend` is null for the one-day window (no curve to draw). */
+type CostsSlice = {
+  breakdown: Breakdown;
+  trend: Trend | null;
+  summary: WorkSummary;
+  subscription_runs: number;
+};
+
 /** us-95.3 AC3: why a row can't be pinned on a work item — named, not dropped. */
 const UNATTRIBUTABLE_HINT =
   "Calls with no run behind them (summaries, scoring, the server-side brain), " +
@@ -120,16 +136,34 @@ export default function CostsView({
   const [projectId, setProjectId] = useState<string | null>(initial.projectId);
   const [workerId, setWorkerId] = useState<string | null>(initial.workerId);
   const [itemType, setItemType] = useState<string | null>(initial.itemType);
-  const [data, setData] = useState<Breakdown | null>(null);
-  const [trend, setTrend] = useState<Trend | null>(null);
-  const [summary, setSummary] = useState<WorkSummary | null>(null);
+  // us-119.3: one slice, one request. `answered` is the last good answer and
+  // the path it answered; it stays on screen while the controls have moved
+  // on to a path it does not match (that is `updating` — derived, never
+  // set, so nothing here writes state synchronously inside an effect). Only
+  // before the first answer does the page show a loading line. US-52.4's
+  // subscription count rides the slice: runs billed to a Claude subscription
+  // bypass the gateway, so they appear in NO figure here — a separate line,
+  // never lumped into "could not be measured", which flags metering problems.
+  const [answered, setAnswered] = useState<{ path: string; slice: CostsSlice } | null>(null);
+  const [failed, setFailed] = useState<{ path: string; message: string } | null>(null);
   const [projects, setProjects] = useState<Option[]>([]);
   const [agents, setAgents] = useState<Option[]>([]);
-  // US-52.4: runs billed to a Claude subscription bypass the gateway, so they
-  // appear in NO figure here — a separate line, never lumped into "could not
-  // be measured", which flags metering problems.
-  const [subscriptionRuns, setSubscriptionRuns] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  // Latest-wins across requests (us-119.3 AC4): a ticket per request, the
+  // previous fetch aborted, and any answer that is not the newest dropped.
+  const gate = useRef(createLatestGate());
+  const inflight = useRef<AbortController | null>(null);
+
+  const path = costsPath(orgId, { groupBy, days, projectId, workerId, itemType });
+  const slice = answered?.slice ?? null;
+  const error = failed?.path === path ? failed.message : null;
+  // The controls describe a slice the last answer is not for, and no error
+  // has come back for it either: a request is on its way.
+  const updating = answered !== null && answered.path !== path && error === null;
+
+  const data = slice?.breakdown ?? null;
+  const trend = slice?.trend ?? null;
+  const summary = slice?.summary ?? null;
+  const subscriptionRuns = slice?.subscription_runs ?? 0;
 
   // us-95.4 AC4: the view lives in the URL. Defaults are omitted so the bare
   // /costs stays bare; replaceState keeps back-button history unpolluted.
@@ -157,50 +191,38 @@ export default function CostsView({
   }, [orgId]);
 
   const load = useCallback(async () => {
-    const filterParams = new URLSearchParams({ days: String(days) });
-    if (projectId) filterParams.set("project_id", projectId);
-    if (workerId) filterParams.set("worker_id", workerId);
-    if (itemType) filterParams.set("item_type", itemType);
-
-    const supabase = createClient();
-    const since = new Date(Date.now() - days * 86_400_000).toISOString();
-    const { count: subCount } = await supabase
-      .from("runs")
-      .select("id", { count: "exact", head: true })
-      .eq("org_id", orgId)
-      .eq("billing", "subscription")
-      .gte("created_at", since);
-    setSubscriptionRuns(subCount ?? 0);
-
+    // us-95.4 AC3 / us-102.2 AC2 / us-119.3: one set of controls, ONE
+    // request — band, curve, table and the subscription line all come out
+    // of the same answer, so they cannot diverge and nothing waits on
+    // anything else.
+    const ticket = gate.current.next();
+    inflight.current?.abort();
+    const controller = new AbortController();
+    inflight.current = controller;
+    const requested = path;
     try {
-      // us-95.4 AC3 / us-102.2 AC2: one set of controls governs all three —
-      // the same filter params ride every request, so the band, the curve and
-      // the table can't diverge.
-      const [breakdown, trendData, summaryData] = await Promise.all([
-        apiCall(
-          `/api/v1/llm/orgs/${orgId}/spend?group_by=${groupBy}&${filterParams}`,
-        ) as Promise<Breakdown>,
-        days > 1
-          ? (apiCall(
-              `/api/v1/llm/orgs/${orgId}/spend-trend?${filterParams}`,
-            ) as Promise<Trend>)
-          : Promise.resolve(null),
-        apiCall(
-          `/api/v1/llm/orgs/${orgId}/work-summary?${filterParams}`,
-        ) as Promise<WorkSummary>,
-      ]);
-      setData(breakdown);
-      setTrend(trendData);
-      setSummary(summaryData);
-      setError(null);
+      const next = (await apiCall(requested, {
+        signal: controller.signal,
+      })) as CostsSlice;
+      // A response that is not the newest is dropped, whatever it says.
+      if (!gate.current.isLatest(ticket)) return;
+      setAnswered({ path: requested, slice: next });
+      setFailed(null);
     } catch (e) {
-      setError((e as Error).message);
+      // An aborted request is a request we chose to drop; a stale one's
+      // failure is not this slice's failure either. Only the latest speaks,
+      // and the last good figures stay on screen beside its message.
+      if (!gate.current.isLatest(ticket)) return;
+      setFailed({ path: requested, message: (e as Error).message });
     }
-  }, [orgId, groupBy, days, projectId, workerId, itemType]);
+  }, [path]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Leaving the page drops whatever is in flight.
+  useEffect(() => () => inflight.current?.abort(), []);
 
   // us-95.4 AC5: the empty state names the slice, so a filtered nothing does
   // not read as a metering fault.
@@ -333,6 +355,22 @@ export default function CostsView({
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
+      {/* us-119.3 AC3: while a refetch is in flight the current figures stay
+          on screen, dimmed and labelled, rather than dropping to a loading
+          line — a filter click narrows what is there, it does not blank it.
+          Only before the first answer is there nothing to keep. */}
+      {updating && slice && (
+        <p className="text-xs text-muted-foreground" role="status">
+          updating…
+        </p>
+      )}
+      <div
+        aria-busy={updating || undefined}
+        className={cn(
+          "flex w-full flex-col gap-6",
+          updating && slice && "opacity-60 transition-opacity",
+        )}
+      >
       {/* us-102.2: the six numbers, governed by the controls above them. */}
       <KpiBand summary={summary} totals={data?.totals ?? null} days={days} />
 
@@ -356,7 +394,12 @@ export default function CostsView({
       </div>
 
       {data === null ? (
-        <p className="text-sm text-muted-foreground">Loading spend…</p>
+        // Before the first answer. A first-load error is shown above and
+        // this line steps aside for it rather than promising figures that
+        // are not coming.
+        error ? null : (
+          <p className="text-sm text-muted-foreground">Loading spend…</p>
+        )
       ) : data.rows.length === 0 ? (
         <div className="rounded-md border border-dashed p-8 text-sm text-muted-foreground">
           {sliceWords ? (
@@ -486,6 +529,7 @@ export default function CostsView({
           </table>
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -3717,6 +3717,68 @@ def work_summary(
     }
 
 
+def subscription_run_count(settings: Settings, org_id: str, *, days: int = 30) -> int:
+    """US-52.4 / us-119.3: runs billed to a Claude subscription in the window.
+
+    They bypass the gateway, so they appear in NO spend figure — the Costs
+    page names them as a separate line rather than letting them read as a
+    metering fault. The page used to count them itself with a browser-side
+    Supabase query, serially, before asking for anything else; now the count
+    rides the same `/costs` answer as the breakdown, over the same
+    `created_at > now() - N days` predicate the breakdown uses.
+    """
+    if not (org_id and _valid_uuid(org_id)):
+        return 0
+    try:
+        window = max(1, min(int(days), 366))
+    except (TypeError, ValueError):
+        window = 30
+    with _connect(settings) as conn:
+        row = conn.execute(
+            f"""
+            select count(*) as n from public.runs
+            where org_id = %s and billing = 'subscription'
+              and created_at > now() - interval '{window} days'
+            """,
+            (org_id,),
+        ).fetchone()
+    return int(row["n"]) if row else 0
+
+
+def costs_slice(
+    settings: Settings,
+    org_id: str,
+    *,
+    group_by: str = "project",
+    days: int = 30,
+    project_id: str | None = None,
+    worker_id: str | None = None,
+    item_type: str | None = None,
+) -> dict[str, Any]:
+    """us-119.3: everything the Costs page shows, in one answer.
+
+    The four figures are the four existing reads, verbatim — `breakdown` is
+    `spend_breakdown`'s body, `trend` is `spend_trend`'s (or None for a
+    one-day window, where the page draws no curve), `summary` is
+    `work_summary`'s, `subscription_runs` the US-52.4 count — so putting them
+    in one envelope changes no number. One source of dollars (us-91.11 AC4)
+    is untouched: the page reads tokens and cost off `breakdown.totals`.
+    """
+    try:
+        window = max(1, min(int(days), 366))
+    except (TypeError, ValueError):
+        window = 30
+    common = dict(
+        days=window, project_id=project_id, worker_id=worker_id, item_type=item_type
+    )
+    return {
+        "breakdown": spend_breakdown(settings, org_id, group_by=group_by, **common),
+        "trend": spend_trend(settings, org_id, **common) if window > 1 else None,
+        "summary": work_summary(settings, org_id, **common),
+        "subscription_runs": subscription_run_count(settings, org_id, days=window),
+    }
+
+
 def preset_outcomes(
     settings: Settings, org_id: str, days: int = 90
 ) -> list[dict[str, Any]]:
