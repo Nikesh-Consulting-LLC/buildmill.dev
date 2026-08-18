@@ -59,7 +59,7 @@ org side, 118.3 the New project row, 118.4 Change template.
 | 15 | [us-118.3](us-118.3-a-new-project-is-chosen-from-cards.md) | A new project is chosen from cards | Testing |
 | 16 | [us-118.4](us-118.4-change-template-shows-the-same-card.md) | Change template shows the same card | Testing |
 | 17 | [us-118.5](us-118.5-the-built-in-covers-depict-the-work.md) | The built-in covers depict the work | Testing |
-| 18 | [us-118.6](us-118.6-the-catalog-carries-the-cre-demo-templates.md) | The catalog carries the five CRE demo templates | New |
+| 18 | [us-118.6](us-118.6-the-catalog-carries-the-cre-demo-templates.md) | The catalog carries the five CRE demo templates | Testing |
 
 **Phase 118 — A template shows its face** (requested 2026-08-17; design
 reference [docs/design/template-cards.html](../docs/design/template-cards.html),
