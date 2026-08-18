@@ -123,6 +123,10 @@ export type AgentSeat = {
    *  (the roster), needed to target the Claude Terminal action at this
    *  slot's own OS user/workspace rather than the machine's login. */
   slotId?: string;
+  /** us-117.2: `agent_slots.desired_state` — what the manager last asked for
+   *  ("enabled" / "paused"), which is what the Start/Stop toggle must read.
+   *  Optional: callers other than the roster do not populate it. */
+  desiredState?: string | null;
 };
 
 export type MachineOption = {
@@ -154,6 +158,7 @@ import {
   IDLE_LABELS,
   STATUS_LABELS,
   idleTone,
+  showsStart,
   stateFor,
   statusBadgeClass,
   statusTextClass,
@@ -837,9 +842,18 @@ function MemberList({
       </span>
     );
 
-    // us-116.5: is this agent Stopped (paused) right now — the one fact the
-    // Start/Stop toggle needs, from the same status the State cell renders.
-    const agentStopped = agentState === "stopped";
+    // us-117.2: read INTENT, not status. This was `agentState === "stopped"`,
+    // and `agentState` is one of nine words — so every state that is not
+    // exactly "stopped" rendered a Stop button. An agent that was paused AND
+    // offline / no-model / no-roles / no-grants / queue-held therefore had no
+    // way to be started from the roster at all, which is precisely the set
+    // most likely to need starting. It also inherited `stateFor`'s optimistic
+    // "ready" default, so a stopped agent showed Stop until the status poll
+    // landed — and never flipped if that request was slow or failed.
+    //
+    // `desired_state` is the manager's own last instruction, known from the
+    // first render, independent of presence and configuration.
+    const agentStopped = showsStart(seat?.desiredState);
     const actions = (
       <span className="flex shrink-0 items-center justify-end gap-1">
 {canManage && (
