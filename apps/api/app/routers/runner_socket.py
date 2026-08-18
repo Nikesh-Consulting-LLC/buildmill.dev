@@ -139,7 +139,7 @@ async def push_config_update(settings: Settings, worker_id: str) -> bool:
     calling this, so a connected supervisor stops pulling immediately rather
     than at its next poll.
     """
-    config = db.get_runner_config(settings, str(worker_id))
+    config = await asyncio.to_thread(db.get_runner_config, settings, str(worker_id))
     return await push_to_worker(
         worker_id,
         {"jsonrpc": "2.0", "method": "config.update", "params": {"config": config}},
@@ -266,7 +266,7 @@ async def runner_socket(
 
     params = hello.get("params") or {}
     token = websocket.headers.get("x-worker-token") or params.get("token") or ""
-    worker = db.get_worker_by_token(settings, token)
+    worker = await asyncio.to_thread(db.get_worker_by_token, settings, token)
     if not worker:
         await websocket.send_text(
             _error(hello.get("id"), 4401, "invalid or revoked worker token")
@@ -275,7 +275,7 @@ async def runner_socket(
         return
 
     worker_id = str(worker["id"])
-    session_id = db.open_runner_session(
+    session_id = await asyncio.to_thread(db.open_runner_session,
         settings,
         worker_id=worker_id,
         org_id=str(worker["org_id"]),
@@ -287,7 +287,7 @@ async def runner_socket(
         # offline.
         module_settings=_module_settings(params.get("module_settings")),
     )
-    config = db.get_runner_config(settings, worker_id)
+    config = await asyncio.to_thread(db.get_runner_config, settings, worker_id)
     _LIVE[worker_id] = websocket
     # The hello result carries the session id AND the server-side config (US-10.2).
     await websocket.send_text(
@@ -310,7 +310,7 @@ async def runner_socket(
     finally:
         if _LIVE.get(worker_id) is websocket:
             _LIVE.pop(worker_id, None)
-        db.close_runner_session(settings, session_id)
+        await asyncio.to_thread(db.close_runner_session, settings, session_id)
         logger.info(
             "runner %s disconnected (session %s)", worker.get("name"), session_id
         )
@@ -343,7 +343,7 @@ async def _dispatch(
         return
 
     if method == "heartbeat":
-        db.touch_runner_session(settings, session_id)
+        await asyncio.to_thread(db.touch_runner_session, settings, session_id)
         if req_id is not None:
             await websocket.send_text(_result(req_id, {"ok": True}))
         return
@@ -390,8 +390,9 @@ async def _dispatch(
             # US-60.1: stamp whether this run bills the platform's own key —
             # decided by the agent's own config, the same source `run_job`'s
             # billing record already reads, never by the caller's request.
-            worker_config = db.get_runner_config(settings, str(worker["id"]))
-            key = db.mint_gateway_key(
+            worker_config = await asyncio.to_thread(db.get_runner_config, settings, str(worker["id"]))
+            key = await asyncio.to_thread(
+                db.mint_gateway_key,
                 settings,
                 str(worker["org_id"]),
                 str(worker["id"]),
@@ -457,7 +458,7 @@ async def _dispatch(
         content = (params.get("content") or "").strip()
         if run_id and content:
             try:
-                db.record_run_trace(
+                await asyncio.to_thread(db.record_run_trace,
                     settings,
                     str(run_id),
                     str(worker["id"]),
@@ -492,7 +493,7 @@ async def _dispatch(
         content = (params.get("content") or "").strip()
         if session_id and content:
             try:
-                db.record_agent_session_event(
+                await asyncio.to_thread(db.record_agent_session_event,
                     settings,
                     str(session_id),
                     params.get("kind") or db.DEFAULT_RUN_TRACE_KIND,
@@ -523,7 +524,7 @@ async def _dispatch(
         session_id = params.get("session_id")
         if session_id:
             try:
-                db.finish_agent_session(
+                await asyncio.to_thread(db.finish_agent_session,
                     settings,
                     str(session_id),
                     "failed",
@@ -553,7 +554,7 @@ async def _dispatch(
         # must never cost the runner anything.
         params = msg.get("params") or {}
         try:
-            db.record_runner_incident(
+            await asyncio.to_thread(db.record_runner_incident,
                 settings,
                 str(worker["org_id"]),
                 str(worker["id"]),
@@ -561,7 +562,7 @@ async def _dispatch(
                 (params.get("kind") or "runner-fault")[:40],
                 (params.get("message") or "").replace("\x00", ""),
             )
-            db.notify_org_managers(
+            await asyncio.to_thread(db.notify_org_managers,
                 settings,
                 str(worker["org_id"]),
                 "runner_fault",
@@ -582,9 +583,9 @@ async def _dispatch(
         params = msg.get("params") or {}
         argv = params.get("argv") or []
         cwd = params.get("cwd")
-        config = db.get_runner_config(settings, str(worker["id"]))
+        config = await asyncio.to_thread(db.get_runner_config, settings, str(worker["id"]))
         allow, reason = runner_policy.evaluate(config.get("autonomy_policy") or {}, argv)
-        audit_id = db.record_command_audit(
+        audit_id = await asyncio.to_thread(db.record_command_audit,
             settings,
             str(worker["org_id"]),
             str(worker["id"]),
@@ -605,7 +606,7 @@ async def _dispatch(
         params = msg.get("params") or {}
         audit_id = params.get("audit_id")
         if audit_id:
-            db.finish_command_audit(
+            await asyncio.to_thread(db.finish_command_audit,
                 settings, audit_id, params.get("exit_code"), params.get("output")
             )
         return
@@ -639,7 +640,7 @@ async def _dispatch(
 
     if method == "runner.hello":
         # A duplicate hello (reconnect race) just refreshes presence.
-        db.touch_runner_session(settings, session_id)
+        await asyncio.to_thread(db.touch_runner_session, settings, session_id)
         if req_id is not None:
             await websocket.send_text(_result(req_id, {"session_id": session_id}))
         return
@@ -1022,13 +1023,13 @@ async def update_runner_config(
     """Update a runner's server-side config and push it live to the runner if
     it's connected. Capability-gated (manage_work); service-role write so the
     live `config.update` can fire regardless of the browser's own RLS."""
-    worker = db.get_worker(settings, worker_id)
+    worker = await asyncio.to_thread(db.get_worker, settings, worker_id)
     if not worker:
         raise HTTPException(status_code=404, detail="runner not found")
     await _require_manage_work(str(worker["org_id"]), user, settings)
     await _require_platform_admin_for_platform_fields(body, user, settings)
     _validate_config_body(body)
-    before = db.get_runner_config(settings, worker_id)
+    before = await asyncio.to_thread(db.get_runner_config, settings, worker_id)
     # US-60.1: `platform` billing is the anti-loophole — without this check
     # any org could set claude_billing=platform on a plain `claude` agent
     # and get free platform-funded API access forever. Saving `buildmill` as
@@ -1081,7 +1082,7 @@ async def update_runner_config(
         if model:
             routes[kind] = model
     if routes:
-        providers, _fn_routes = db.get_org_llm_config(
+        providers, _fn_routes = await asyncio.to_thread(db.get_org_llm_config,
             settings, str(worker["org_id"])
         )
         problem = validate_model_provider_pairing(
@@ -1093,7 +1094,7 @@ async def update_runner_config(
         )
         if problem:
             raise HTTPException(status_code=422, detail=problem)
-    config = db.upsert_runner_config(
+    config = await asyncio.to_thread(db.upsert_runner_config,
         settings,
         worker_id,
         str(worker["org_id"]),
@@ -1137,11 +1138,11 @@ async def idle_reason(
 
     "Waiting for work" must only ever mean there is no work. On 2026-07-26 it
     meant a revoked token, for fourteen minutes, on every surface at once."""
-    worker = db.get_worker(settings, worker_id)
+    worker = await asyncio.to_thread(db.get_worker, settings, worker_id)
     if not worker:
         raise HTTPException(status_code=404, detail="runner not found")
     await _require_manage_work(str(worker["org_id"]), user, settings)
-    return db.agent_status(settings, worker_id)
+    return await asyncio.to_thread(db.agent_status, settings, worker_id)
 
 
 @router.post("/{worker_id}/policy-preview")
@@ -1154,7 +1155,7 @@ async def policy_preview(
     """US-13.8: evaluate a command line against the runner's CURRENT
     stored policy — the same runner_policy.evaluate the shell audit path
     uses, so the preview cannot drift from enforcement."""
-    worker = db.get_worker(settings, worker_id)
+    worker = await asyncio.to_thread(db.get_worker, settings, worker_id)
     if not worker:
         raise HTTPException(status_code=404, detail="runner not found")
     await _require_manage_work(str(worker["org_id"]), user, settings)
@@ -1166,7 +1167,7 @@ async def policy_preview(
         argv = shlex.split(body.command)
     except ValueError:
         argv = body.command.split()
-    policy = db.get_runner_config(settings, worker_id).get("autonomy_policy") or {}
+    policy = (await asyncio.to_thread(db.get_runner_config, settings, worker_id)).get("autonomy_policy") or {}
     allow, reason = runner_policy.evaluate(policy, argv)
     if allow:
         decision = "allow"
@@ -1197,11 +1198,11 @@ async def prepare_workspace(
     run, and report what it got. Proves an agent's ability to reach the
     factory remote and get source onto disk — the same round-trip a real
     run depends on, without waiting for one to be dispatched."""
-    worker = db.get_worker(settings, worker_id)
+    worker = await asyncio.to_thread(db.get_worker, settings, worker_id)
     if not worker:
         raise HTTPException(status_code=404, detail="runner not found")
     await _require_manage_work(str(worker["org_id"]), user, settings)
-    project = db.get_project_repo_by_id(
+    project = await asyncio.to_thread(db.get_project_repo_by_id,
         settings, body.project_id, str(worker["org_id"])
     )
     if not project or "/" not in (project.get("repo_full_name") or ""):
@@ -1246,11 +1247,11 @@ async def prepare_workspace_job(
     control socket, and the browser reads it over Realtime. Closing the popup
     cancels nothing.
     """
-    worker = db.get_worker(settings, worker_id)
+    worker = await asyncio.to_thread(db.get_worker, settings, worker_id)
     if not worker:
         raise HTTPException(status_code=404, detail="runner not found")
     await _require_manage_work(str(worker["org_id"]), user, settings)
-    project = db.get_project_repo_by_id(
+    project = await asyncio.to_thread(db.get_project_repo_by_id,
         settings, body.project_id, str(worker["org_id"])
     )
     if not project or "/" not in (project.get("repo_full_name") or ""):
@@ -1326,7 +1327,7 @@ async def run_runner_command(
 ):
     """Manager-initiated command on a connected runner (US-10.7) — e.g. a manual
     repair. Goes through the same audit path on the runner side."""
-    worker = db.get_worker(settings, worker_id)
+    worker = await asyncio.to_thread(db.get_worker, settings, worker_id)
     if not worker:
         raise HTTPException(status_code=404, detail="runner not found")
     await _require_manage_work(str(worker["org_id"]), user, settings)
