@@ -372,8 +372,8 @@ def settle_stranded_release_deploys(settings: Settings) -> list[dict[str, Any]]:
     """US-120.1: re-read every `deploying` release from its own deploy run.
 
     The reaper and the pipeline settle the release on the paths they own;
-    this is the belt to those braces, run at startup and on the 60-second
-    liveness loop. It exists because a release can be stranded by a path
+    this is the belt to those braces, run from sweeps.lease_sweep_tick — at
+    startup and every 30 s. It exists because a release can be stranded by a path
     that never reaches either — the reaper skipped at startup because the
     database was unreachable, a settle swallowed by a DB hiccup, a second
     API process sharing the database, or the old code — and because

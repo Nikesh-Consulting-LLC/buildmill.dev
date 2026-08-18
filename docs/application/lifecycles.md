@@ -166,7 +166,7 @@ it moves `releases.status` off `deploying` — `succeeded` → `uat-deployed`, a
 `uat-deploy-failed` with the writer's reason on `releases.failure_reason`: the pipeline's four
 terminal branches, the startup reaper, and `request_cancel`'s no-live-task branch. The update is
 guarded to `status = 'deploying'`, so whoever moved the release first wins and a late writer is
-a no-op. `deploy.settle_stranded_release_deploys` (startup, and the 60-second liveness loop)
+a no-op. `deploy.settle_stranded_release_deploys` (from `sweeps.lease_sweep_tick` — at startup and every 30 s)
 re-reads any release still at `deploying` from its run — terminal or missing run → settled to
 match; a `queued`/`running` run older than the deployment's timeout + 5 min that this process
 does not hold is failed and settled; a young or live one is left alone. Before US-120.1 the
