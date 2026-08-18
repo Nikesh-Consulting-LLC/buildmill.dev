@@ -36,6 +36,16 @@ export const BUILTIN_COVERS = [
   { name: "service", label: "Service" },
   { name: "site", label: "Site" },
   { name: "mobile-app", label: "Mobile app" },
+  // us-118.5: the kinds of project the factory actually builds.
+  { name: "python-react", label: "Python + React app" },
+  { name: "database", label: "Database project" },
+  { name: "report-conversion", label: "Report conversion" },
+  { name: "power-bi", label: "Power BI dashboards" },
+  { name: "corporate-website", label: "Corporate website" },
+  { name: "conversational-agents", label: "Conversational agents" },
+  { name: "sharepoint", label: "SharePoint project" },
+  { name: "salesforce", label: "Salesforce integration" },
+  { name: "yardi-reports", label: "Yardi reports" },
 ] as const;
 
 export type BuiltinCoverName = (typeof BUILTIN_COVERS)[number]["name"];

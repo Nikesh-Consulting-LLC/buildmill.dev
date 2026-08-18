@@ -58,6 +58,8 @@ org side, 118.3 the New project row, 118.4 Change template.
 | 14 | [us-118.2](us-118.2-an-orgs-copy-can-change-its-face.md) | An org's copy can change its face | Testing |
 | 15 | [us-118.3](us-118.3-a-new-project-is-chosen-from-cards.md) | A new project is chosen from cards | Testing |
 | 16 | [us-118.4](us-118.4-change-template-shows-the-same-card.md) | Change template shows the same card | Testing |
+| 17 | [us-118.5](us-118.5-the-built-in-covers-depict-the-work.md) | The built-in covers depict the work | Testing |
+| 18 | [us-118.6](us-118.6-the-catalog-carries-the-cre-demo-templates.md) | The catalog carries the five CRE demo templates | New |
 
 **Phase 118 — A template shows its face** (requested 2026-08-17; design
 reference [docs/design/template-cards.html](../docs/design/template-cards.html),
@@ -84,6 +86,13 @@ dots, chips only at two or more categories, a filter box only past six, the
 org default preselected, keyboard as a radio group, and the dialog's height
 the same at any count. **us-118.4** re-skins Change template with the row
 variant and puts the thumb on the Overview's *Created from template* line.
+**us-118.5** (added 2026-08-18) grows the built-in cover set from six to fifteen —
+Python + React, database, report conversion, Power BI, corporate website,
+conversational agents, SharePoint, Salesforce, Yardi — with a label under
+each thumbnail in the picker. **us-118.6** (added 2026-08-18) seeds the
+catalog with five templates for the CRE demos in `docs/demos/cre/` — each a
+copy of Default whose AGENTS.md and ten per-task files speak dbt, TMDL, rent
+rolls, waterfalls or evals — with five more built-in covers to match.
 Deliberately not in the phase: a "start blank" card, a `/projects/new` page,
 in-browser image cropping, private covers, an icon-and-colour picker.
 

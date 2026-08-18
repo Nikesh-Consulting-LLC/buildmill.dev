@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import {
   BUILTIN_COVERS,
   builtinCoverPath,
@@ -62,6 +63,19 @@ test("a built-in cover is served from the app, never from Storage", () => {
 
 test("every shipped built-in name is a legal image_path", () => {
   for (const c of BUILTIN_COVERS) assert.equal(isBuiltinCover(builtinCoverPath(c.name)), true);
+});
+
+test("every registered built-in cover ships as public/template-covers/<name>.svg", () => {
+  // us-118.5: a name in the registry with no file behind it is a card with a
+  // broken image — on every row that picked it. Pin the two together.
+  const dir = new URL("../../public/template-covers/", import.meta.url);
+  for (const c of BUILTIN_COVERS) {
+    assert.equal(
+      existsSync(new URL(`${c.name}.svg`, dir)),
+      true,
+      `missing public/template-covers/${c.name}.svg`,
+    );
+  }
 });
 
 test("an uploaded cover is the bucket's public URL, cache-busted by updated_at", () => {
