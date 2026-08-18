@@ -84,6 +84,9 @@ def test_pause_run_lands_paused_and_releases_the_claim(monkeypatch):
     def script(q, p):
         if q.startswith("select id, org_id, issue_id, kind, worker_id, resume_attempts"):
             return FakeCursor(_running_row())
+        if q.startswith("update public.runs"):
+            # us-119.1 AC2: the update returns the row it landed on.
+            return FakeCursor({"id": RUN_ID})
         return FakeCursor()
 
     conn = ScriptConn(script)
@@ -107,7 +110,46 @@ def test_pause_run_lands_paused_and_releases_the_claim(monkeypatch):
     assert "claimed_at = null, claim_expires_at = null, last_heartbeat_at = null" in update_q
     # worker_id is never in the SET list — it stays exactly what it was.
     assert "worker_id = null" not in update_q
+    # us-119.1 AC2: the write is guarded like every other run transition —
+    # the read above and this update are two statements, and a cancel or a
+    # completed submit can land between them.
+    assert "where id = %s and status = 'running'" in update_q
     assert update_p == ("turn_limit", "log", "sess-1", RUN_ID)
+
+
+def test_pause_run_that_loses_the_race_lands_nothing(monkeypatch):
+    """us-119.1 AC2: the run was `running` when read and is not by the time
+    the update runs (a manager cancelled it, a submit completed it). The
+    guarded update matches no row; `pause_run` reports the loss and writes no
+    event — instead of overwriting a terminal status with `paused`."""
+    monkeypatch.setattr(
+        db, "get_runner_config", lambda s, wid: {"autonomy_policy": {}}
+    )
+
+    def script(q, p):
+        if q.startswith("select id, org_id, issue_id, kind, worker_id, resume_attempts"):
+            return FakeCursor(_running_row())
+        return FakeCursor()  # the update returns no row: someone got there first
+
+    conn = ScriptConn(script)
+    conn.rolled_back = False
+    conn.rollback = lambda: setattr(conn, "rolled_back", True)
+    _install(monkeypatch, conn)
+
+    accepted, landed, attempts, cap = db.pause_run(
+        object(),
+        RUN_ID,
+        reason="turn_limit",
+        claude_session_id="sess-1",
+        stdout="log",
+        error="hit its turn ceiling",
+    )
+
+    assert (accepted, landed) == (False, "")
+    assert (attempts, cap) == (0, db.DEFAULT_MAX_RESUME_ATTEMPTS)
+    assert conn.rolled_back
+    assert not any(q.startswith("insert into public.issue_events") for q, _ in conn.calls)
+    assert not conn.committed
 
 
 def test_pause_run_exhausted_falls_through_without_calling_complete_run(monkeypatch):

@@ -38,7 +38,11 @@ same day). Build order is the hotfix first (us-116.3), then the model side
 fleet alarm (116.8). Phase 118 (four stories, requested 2026-08-17) follows:
 templates get a description and a cover, and a new project is chosen from a
 row of cards — 118.1 lays the data, bucket and shared form, then 118.2 the
-org side, 118.3 the New project row, 118.4 Change template.
+org side, 118.3 the New project row, 118.4 Change template. Phase 119 (three
+stories, requested 2026-08-18) is why Costs takes four to ten seconds to show
+three sub-millisecond aggregates: 119.1 takes the runner-polling paths' database
+calls off the event loop, 119.2 makes a poll cost one query, 119.3 has the page
+ask once.
 
 | Order | Story | Title | Status |
 |---|---|---|---|
@@ -60,6 +64,38 @@ org side, 118.3 the New project row, 118.4 Change template.
 | 16 | [us-118.4](us-118.4-change-template-shows-the-same-card.md) | Change template shows the same card | Testing |
 | 17 | [us-118.5](us-118.5-the-built-in-covers-depict-the-work.md) | The built-in covers depict the work | Testing |
 | 18 | [us-118.6](us-118.6-the-catalog-carries-the-cre-demo-templates.md) | The catalog carries the five CRE demo templates | Testing |
+| 19 | [us-119.1](us-119.1-a-database-call-never-holds-the-event-loop.md) | A database call never holds the event loop | Testing |
+| 20 | [us-119.2](us-119.2-a-poll-costs-one-query.md) | A poll costs one query | Testing |
+| 21 | [us-119.3](us-119.3-costs-loads-in-one-round-trip.md) | Costs loads in one round trip | Testing |
+
+**Phase 119 — The API answers while the runners poll** (requested
+2026-08-18). The Costs page reads three aggregates over 153 `llm_usage` rows;
+each executes in under a millisecond, and each API call takes 1.5–1.9 s at the
+median (p95 9.4 s) — of which ~150 ms is the database. `api_request_log` says
+where the rest goes: `db.py` is synchronous psycopg and 178 of its call sites
+run directly inside `async def` handlers, on uvicorn's event loop; the
+runner-facing paths (`worker.py` 54, `runner_socket.py` 30) do it ~80,000
+times a day, and every other request in the process waits behind them
+(`/auth/me`, which touches no database, is a steady 170 ms — the floor). The
+box is an `n2d-standard-4` with three idle cores, and `--workers` is not the
+answer: the runner socket registry is process-local. **us-119.1** moves those
+paths' calls to `asyncio.to_thread`, sizes the executor and the pool for I/O,
+audits claim/resume-claim/submit/heartbeat for any check-then-act that the
+blocked loop had been serialising by accident, and pins it with an AST guard
+in Essential. **us-119.2** takes the reconciler and the release-prep reaper
+off the per-poll path onto a 30 s single-flight, time-boxed sweep — and
+deliberately defers the two other per-request costs it measured (the checkout
+ping on every lease, the fresh TLS handshake per PostgREST call) because each
+opens an edge case us-117.1 just documented. **us-119.3** gives Costs one
+endpoint that answers breakdown, trend, summary and the subscription count
+together, fires it without the serial Supabase count in front, keeps the
+figures on screen while a filter refetches, and sequences requests so a slow
+response never paints over a fast one. Each story's UAT is a query on
+`api_request_log` the day after release. Deliberately not in the phase:
+`uvicorn --workers`, the ~90 direct calls in the manager-facing routers (a
+follow-up extends the guard's list), `/agents/idle-reasons` at p50 43 s,
+push-over-the-socket instead of polling, the idle-aware ping and shared HTTP
+client, and a server-side initial fetch for Costs.
 
 **Phase 118 — A template shows its face** (requested 2026-08-17; design
 reference [docs/design/template-cards.html](../docs/design/template-cards.html),

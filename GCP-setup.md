@@ -156,9 +156,12 @@ never travel through git or CI.
 
 ### Swap
 
-The VM (`e2-small`, 2GB RAM) had no swap and often runs at <1GB free alongside the nexdb
-services. A 2GB swapfile (`/swapfile`) was added so `next build` doesn't risk the OOM
-killer taking down another app's process. Check with `free -h`.
+The VM is an `n2d-standard-4` (4 vCPU, 16 GB RAM, AMD Milan) as of 2026-08-18; it began
+life as an `e2-small` (2 GB), which had no swap and often ran at <1GB free alongside the
+nexdb services. A 2GB swapfile (`/swapfile`) was added then so `next build` doesn't risk
+the OOM killer taking down another app's process, and it is still there. Check with
+`free -h`. Note that `factory-api` is one uvicorn process — one event loop on one core —
+so the extra cores only help work that leaves the loop (us-119.1).
 
 ## CI/CD — auto-deploy on push to `prod`
 

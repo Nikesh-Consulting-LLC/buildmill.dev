@@ -248,7 +248,9 @@ def test_the_reaped_release_satisfies_retrys_guards(db, settings, ctx):
 
 
 def test_the_sweep_is_idempotent(db, settings, ctx):
-    """It runs at startup, every 60 seconds, and on every pool listing."""
+    """It runs every 30 seconds from `sweeps.py` (us-119.2; before that at
+    startup, every 60 seconds and on every pool listing) — so it must be
+    safe to run again with nothing left to reap."""
     _prep(db, ctx)
 
     first = app_db.reap_expired_release_preps(settings)

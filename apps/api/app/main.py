@@ -8,6 +8,7 @@ import asyncio
 import logging
 import pathlib
 import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
 import websockets.http11
@@ -29,7 +30,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 # assigning here covers uvicorn's already-imported parser too.
 websockets.http11.MAX_LINE_LENGTH = 65536
 
-from . import agent_provision, db, deploy, factory_mcp, reconcile
+from . import agent_provision, db, deploy, factory_mcp, sweeps
 from . import pool  # US-87.6: connection pool lifecycle
 from . import suites as suites_pipeline
 from . import app_issues as app_issues_module
@@ -76,6 +77,19 @@ logger = logging.getLogger("uvicorn.error")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # us-119.1: the executor every `asyncio.to_thread` in this process runs
+    # on. asyncio's default is min(32, cpu + 4) threads — eight on the prod
+    # box — sized for CPU-bound work. Every database call the runner-facing
+    # handlers make is now a network wait on one of these threads, and eight
+    # of them in flight would make the ninth request queue exactly as it used
+    # to queue on the blocked loop. Sized by a setting; see config.py for why
+    # it sits above the connection pool rather than equal to it.
+    asyncio.get_running_loop().set_default_executor(
+        ThreadPoolExecutor(
+            max_workers=get_settings().db_executor_threads,
+            thread_name_prefix="factory-db",
+        )
+    )
     # US-1.32: runs orphaned by a crash/redeploy of this process must never
     # stay 'running' (they'd hold the single-flight lock forever).
     try:
@@ -108,40 +122,21 @@ async def lifespan(app: FastAPI):
             logger.warning("Reaped %d orphaned agent server job(s)", reaped)
     except Exception as e:
         logger.warning("Agent-server job reaper skipped: %s", e)
-    # US-103.1: a release prep whose supervisor died with the runner process
-    # holds the project's only in-flight release slot forever. The restart
-    # that orphaned it is very often this one.
-    try:
-        for r in db.reap_expired_release_preps(get_settings()):
-            logger.warning(
-                "Reaped abandoned release prep for %s (held by %s for %s min)",
-                r["version"],
-                r["worker"],
-                r["held_minutes"],
-            )
-    except Exception as e:
-        logger.warning("Release-prep reaper skipped: %s", e)
-    # US-3.4: expired claims WITH pushed work auto-submit instead of
-    # recycling — a pushed-and-forgotten item lands in review.
-    try:
-        handled = await reconcile.reconcile_pushed_expired_claims(get_settings())
-        if handled:
-            logger.warning("Auto-submitted %d pushed run(s) with expired claims", handled)
-    except Exception as e:
-        logger.warning("Push hand-back reconciler skipped: %s", e)
-    # US-13.6: the lease sweeps above also run on a timer — an expired
-    # claim must surface even when no worker is polling the pool (the
-    # lazy sweep) and the process hasn't restarted (the startup sweep).
+    # us-119.2: the three lease sweeps — expired claims back to the pool
+    # (US-3.2, with US-31.2's stale-heartbeat sweep inside), expired claims
+    # WITH pushed work auto-submitted (US-3.4), abandoned release preps
+    # failed (US-103.1) — run from one 30 s task in sweeps.py, first tick at
+    # once. They used to run here at startup, again inside the 60 s liveness
+    # loop below, and a third time before every runner poll; the poll copies
+    # are gone (a poll only lists now) and the startup + timer copies are
+    # this one task.
+    lease_sweep_task = asyncio.create_task(sweeps.run_lease_sweep(get_settings))
+    # US-13.6: the rest of the periodic housekeeping — presence, fleet
+    # alarm, agent-server health and repair, idle sessions — every 60 s.
     async def _liveness_sweep() -> None:
         while True:
             await asyncio.sleep(60)
             try:
-                swept = await asyncio.to_thread(db.requeue_expired_claims, get_settings())
-                if swept:
-                    logger.warning(
-                        "Requeued %d expired claim(s) from the sweep", swept
-                    )
-                await reconcile.reconcile_pushed_expired_claims(get_settings())
                 # us-116.4: the presence reaper migration 099 promised. A
                 # session whose heartbeat is older than the window is closed
                 # so the row agrees with the `live_runner_sessions` view and
@@ -167,20 +162,6 @@ async def lifespan(app: FastAPI):
                         "Fleet-dark sweep: %d org(s) went dark, %d came back",
                         dark.get("opened", 0),
                         dark.get("closed", 0),
-                    )
-                # US-103.1: release prep's own lease sweep, same loop, same
-                # cadence discipline. Its lease is two hours, so this fires
-                # long after the agent died — us-103.3's Stop is what covers
-                # the window, not a faster tick here.
-                for r in await asyncio.to_thread(
-                    db.reap_expired_release_preps, get_settings()
-                ):
-                    logger.warning(
-                        "Reaped abandoned release prep for %s (held by %s "
-                        "for %s min)",
-                        r["version"],
-                        r["worker"],
-                        r["held_minutes"],
                     )
                 # US-26.7: agent-server health rides this loop rather than
                 # bringing its own scheduler — each host is probed roughly
@@ -239,6 +220,7 @@ async def lifespan(app: FastAPI):
             yield
     finally:
         sweep_task.cancel()
+        lease_sweep_task.cancel()
         # US-87.6: a clean stop keeps the tail of the buffered request log
         # and hands every pooled connection back to Postgres rather than
         # leaving the pooler to time them out. A hard kill is allowed to

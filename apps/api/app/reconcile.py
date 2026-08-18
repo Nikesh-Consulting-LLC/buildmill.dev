@@ -8,6 +8,7 @@ diff, move to review); a claim that expires without pushes re-queues
 via db.requeue_expired_claims as before.
 """
 
+import asyncio
 import logging
 from typing import Any
 
@@ -40,8 +41,8 @@ async def reconcile_pushed_expired_claims(settings: Settings) -> int:
     from .routers.worker import Submit, perform_submit  # late: avoids cycle
 
     handled = 0
-    for run in _expired_pushed_runs(settings):
-        worker = db.get_worker_row(settings, str(run["worker_id"]))
+    for run in await asyncio.to_thread(_expired_pushed_runs, settings):
+        worker = await asyncio.to_thread(db.get_worker_row, settings, str(run["worker_id"]))
         if not worker:
             continue
         # US-7.3: the run stored its resolved branch when its context was
@@ -65,6 +66,6 @@ async def reconcile_pushed_expired_claims(settings: Settings) -> int:
                 run["id"],
                 e.detail,
             )
-            if db.force_requeue_run(settings, str(run["id"])):
+            if await asyncio.to_thread(db.force_requeue_run, settings, str(run["id"])):
                 handled += 1
     return handled

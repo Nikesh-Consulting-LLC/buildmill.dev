@@ -1343,6 +1343,19 @@
     "mutating": true
   },
   {
+    "method": "GET",
+    "path": "/api/v1/llm/orgs/{org_id}/costs",
+    "tag": "llm",
+    "auth": "user_jwt",
+    "public": false,
+    "op": "org_costs",
+    "params": {
+      "org_id": "string"
+    },
+    "body": false,
+    "mutating": false
+  },
+  {
     "method": "PUT",
     "path": "/api/v1/llm/orgs/{org_id}/model-prices",
     "tag": "llm",
